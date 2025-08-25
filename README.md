@@ -5,8 +5,6 @@ Vibes Coding is a chat extension with an assistant designed to help you while pr
 
 
 ![Vibes Coding SS 1](media/vibes-coding-ss-1.png) <!-- Menambahkan ss pertama -->
-![Vibes Coding Image 1](media/vibes-coding-image-1.gif) <!-- Menambahkan image pertama -->
-![Vibes Coding Image 2](media/vibes-coding-image-2.gif) <!-- Menambahkan image kedua -->
         
 
 
