@@ -4,6 +4,7 @@ markdown
 Vibes Coding is a chat extension with an assistant designed to help you while programming
 
 
+![Vibes Coding Logo](media/vibes-coding-logo.png) <!-- Menambahkan ss pertama -->
 ![Vibes Coding SS 1](media/vibes-coding-ss-1.png) <!-- Menambahkan ss pertama -->
         
 
