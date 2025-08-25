@@ -41,7 +41,7 @@ Effortlessly extend your code by leveraging the AI's understanding of your comme
 1. **Open the Chat**: Click on the Vibes Coding icon in the sidebar to open the chat window. 
 2. **Back to Extension**: Click on the Vibes Coding icon, and login. 
 3. **Start Chatting**: Type your questions or messages, and Vibes Coding will respond. 
-5. **Get Assistance**: Ask coding-related questions.
+4. **Get Assistance**: Ask coding-related questions.
 
 
 ## Contributing 
