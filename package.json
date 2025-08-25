@@ -1,0 +1,112 @@
+{
+  "name": "vibes-coding",
+  "displayName": "Vibes Coding",
+  "description": "Your AI Coding Companion - Chat, Code, Create!",
+  "version": "1.0.0",
+  "publisher": "Vibes Coding",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/asepindrak/vibes-coding-extension.git"
+  },
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "icon": "media/icon.png",
+  "categories": [
+    "AI",
+    "Chat"
+  ],
+  "keywords": [
+    "pacar",
+    "ai",
+    "chat",
+    "girlfriend",
+    "companion",
+    "companionship",
+    "autocomplete",
+    "code analysis",
+    "code completion",
+    "code explanation",
+    "code recommendation",
+    "coding assistant",
+    "gpt",
+    "chatgpt",
+    "java",
+    "javascript",
+    "node",
+    "node.js",
+    "openai",
+    "python",
+    "refactor",
+    "select code",
+    "typescript"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "vibes-coding-sidebar",
+          "title": "Vibes Coding",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "vibes-coding-sidebar": [
+        {
+          "type": "webview",
+          "id": "vibes-coding-sidebar",
+          "name": "Vibes Coding",
+          "icon": "media/icon.svg",
+          "contextualTitle": "PacarAI"
+        }
+      ]
+    },
+    "activationEvents": [
+      "onView:vibes-coding-sidebar"
+    ],
+    "commands": [
+      {
+        "command": "vibes-coding.helloWorld",
+        "title": "Hello World"
+      },
+      {
+        "command": "vibes-coding.applyCode",
+        "title": "Apply Code from Vibes Coding"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "vibes-coding.triggerCompletion",
+        "key": "shift+enter",
+        "when": "editorTextFocus"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.9",
+    "@types/node": "20.x",
+    "@types/vscode": "^1.95.0",
+    "@typescript-eslint/eslint-plugin": "^8.10.0",
+    "@typescript-eslint/parser": "^8.7.0",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1",
+    "eslint": "^9.13.0",
+    "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "@pixiv/three-vrm": "^3.1.5",
+    "simple-audio": "^1.0.1",
+    "three": "^0.170.0"
+  }
+}

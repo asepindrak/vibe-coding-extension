@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Vibes Coding Chat</title>
+        <!-- Include style and script from media/prism.css, media/prism.js -->
+        <link rel="stylesheet" href="%PRISM_PATH%"> <!-- Link to the Prism CSS for syntax highlighting -->
+        <link rel="stylesheet" href="%STYLES_PATH%">
+    </head>
+
+    <body>
+
+        <div id="content" class="content"></div>
+        <div id="message" class="message"></div>
+        <div id="messageInputContainer" class="p-4 bg-black shadow-md fixed-bottom">
+            <div class="flex items-center">
+                <textarea id="messageInput" placeholder="Ask Vibes Coding"
+                    class="flex-grow p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 h-6 bg-black text-white">
+                </textarea>
+                <button id="sendMessageButton"
+                    class="ml-2 h-12 p-2 flex items-center justify-center bg-blue-500 hover:bg-blue-600 text-white rounded">
+                    <div id="button-send" class="button-send">
+                        <svg class="h-4 w-4 ml-1" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                        </svg>
+                    </div>
+                    <svg id="loader" class="loader hidden" viewBox="0 0 24 24">
+                        <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="4" />
+                    </svg>
+                </button>
+            </div>
+            <div class="flex">
+                <div id="div-code-selected" class="flex mt-2">
+                </div>
+                <div id="generating" class="mt-2 ml-2 border border-1 p-2"></div>
+            </div>
+        </div>
+        <script type="module">
+            var messageArray = []
+            var talkDuration = 0
+            var talkMessage = ""
+            document.addEventListener('DOMContentLoaded', function () {
+                const token = localStorage.getItem('token')
+                const userId = localStorage.getItem('userId')
+                if (token && userId) {
+                    fetchHistory()
+                } else {
+                    showLoginForm()
+                }
+                const sendMessageButton = document.getElementById('sendMessageButton')
+                sendMessageButton.addEventListener('click', handleSendMessage)
+
+                const messageInput = document.getElementById('messageInput')
+                messageInput.value = messageInput.value.trim()
+
+                messageInput.addEventListener('keydown', handleKeyDown)
+
+                window.addEventListener('message', async event => {
+                    const messageEvent = event.data
+
+                    if (messageEvent.command == 'updateFileInfo') {
+                        if (messageEvent.filePath) {
+
+
+                            document.getElementById('div-code-selected').innerHTML = `
+                            <div id="fileOpen"
+                                class="flex file-open p-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <span id="filePath"></span><span class="fs-6" id="selectedLine"></span>
+                                <span id="svg-eye"></span>
+                            </div>`
+
+                            document.getElementById('filePath').textContent = messageEvent.filePath
+                            document.getElementById('selectedLine').textContent = ': ' + messageEvent.selectedLine + ' Current file'
+                            document.getElementById('svg-eye').innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" id="eye" fill="white" class="icon">
+                                <path
+                                    d="M21.92,11.6C19.9,6.91,16.1,4,12,4S4.1,6.91,2.08,11.6a1,1,0,0,0,0,.8C4.1,17.09,7.9,20,12,20s7.9-2.91,9.92-7.6A1,1,0,0,0,21.92,11.6ZM12,18c-3.17,0-6.17-2.29-7.9-6C5.83,8.29,8.83,6,12,6s6.17,2.29,7.9,6C18.17,15.71,15.17,18,12,18ZM12,8a4,4,0,1,0,4,4A4,4,0,0,0,12,8Zm0,6a2,2,0,1,1,2-2A2,2,0,0,1,12,14Z">
+                                </path>
+                            </svg>`
+                        } else {
+                            document.getElementById('div-code-selected').innerHTML = ""
+                            document.getElementById('filePath').textContent = ""
+                            document.getElementById('selectedLine').textContent = ""
+                            document.getElementById('svg-eye').innerHTML = ""
+                        }
+                        return
+                    }
+
+                    const messageText = event.data // Menerima pesan dari extension
+                    let coding = messageText.text || "" // Menggunakan operator logika OR untuk inisialisasi
+                    let allCode = messageText.allCode || "" // Menggunakan operator logika OR untuk inisialisasi
+                    const allCodeStorageKey = 'allCodeStorage' // Define a key for storing all code in local storage
+                    const codingStorageKey = 'codingStorage' // Define a key for storing all code in local storage
+                    const storedAllCode = localStorage.getItem(allCodeStorageKey)
+                    const storedCoding = localStorage.getItem(codingStorageKey)
+
+                    if (storedAllCode === allCode) {
+                        allCode = "" // Reset allCode jika sama dengan yang disimpan
+                    }
+                    if (storedCoding === coding) {
+                        coding = "" // Reset allCode jika sama dengan yang disimpan
+                    }
+
+                    // Save all code to local storage only if it's not empty
+                    if (allCode) {
+                        localStorage.setItem(allCodeStorageKey, allCode)
+                        console.log("All code saved to local storage.")
+
+
+                    } else {
+                        console.log("No allCode to save.")
+                    }
+
+                    // Save all code to local storage only if it's not empty
+                    if (coding) {
+                        localStorage.setItem(codingStorageKey, coding)
+                        console.log("Coding saved to local storage.")
+                    } else {
+                        console.log("No coding to save.")
+                    }
+
+
+                    const messageInput = document.getElementById('messageInput')
+                    // Menghapus spasi di awal dan akhir pada load
+
+                    let message = messageInput.value.trim()
+                    if (coding) {
+                        message = "[labelInstruction]Instruction: [labelInstruction]" + message + "[selection]" + coding + "[selection]"
+                    }
+                    if (allCode) {
+                        message = "[fullcode]" + allCode + "[fullcode]" + message
+                    }
+                    console.log("send message to API")
+                    if (!message) return
+                    sendMessageToApi(message)
+                })
+            })
+
+            function handleKeyDown(event) {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault()
+                    handleSendMessage()
+                } else {
+                    this.style.height = 'auto' // Reset tinggi agar bisa menghitung tinggi yang baru
+                    this.style.height = Math.min(this.scrollHeight, 300) + 'px' // Set tinggi maksimal 300px
+                }
+            }
+
+            async function handleSendMessage() {
+                document.getElementById('generating').innerHTML = "Generating..."
+                const sendMessageButton = document.getElementById('button-send')
+                const loader = document.getElementById('loader')
+
+                // Ganti tombol dengan loader
+                sendMessageButton.classList.add('hidden') // Sembunyikan tombol
+                loader.classList.remove('hidden') // Tampilkan loader
+                console.log("send message to Vibes Coding")
+                // Proses pengiriman pesan
+                vscode.postMessage({ command: 'getSelectedText' })
+
+            }
+
+            async function sendMessageToApi(message) {
+                let newMessageArray = [...messageArray, { role: 'user', message: message }]
+                const userId = localStorage.getItem('userId')
+                const token = localStorage.getItem('token')
+
+                let uniqueId = Date.now() + Math.random()
+                displayMessagesAssistant({ role: 'user', message: message, uniqueId })
+
+                const data = {
+                    userId,
+                    token,
+                    message
+                }
+
+                try {
+                    const response = await fetch('http://103.250.10.249:5678/webhook/50c94bd4-9ef1-4dbe-ac03-dda6fd966797', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(data)
+                    })
+
+                    if (!response.ok) {
+                        throw new Error('Failed to send message')
+                    }
+
+                    // Ambil respons JSON langsung
+                    const responseData = await response.json()
+                    // Ambil pesan dari properti "message"
+                    const assistantMessage = responseData.message || 'Error: No message received'
+
+                    // Tampilkan pesan di chat
+                    displayMessagesAssistant({ role: 'assistant', message: assistantMessage, uniqueId })
+
+                    // Tambahkan ke array pesan
+                    messageArray = [...messageArray, { role: 'assistant', message: assistantMessage }]
+
+                    // Reset input dan UI
+                    messageInput.value = ''
+                    const sendMessageButton = document.getElementById('button-send')
+                    const loader = document.getElementById('loader')
+                    loader.classList.add('hidden') // Sembunyikan loader
+                    sendMessageButton.classList.remove('hidden') // Tampilkan tombol kembali
+                    document.getElementById('generating').innerHTML = ''
+                } catch (error) {
+                    console.error('Error sending message:', error)
+                }
+            }
+
+            function showLoginForm() {
+                const messageInputContainer = document.getElementById('messageInputContainer')
+                messageInputContainer.style.display = 'none'
+                const content = document.getElementById('content')
+                content.innerHTML = `
+                    <center>
+                        <div class="login-wrapper mt-5">
+                            <div class="login-container">
+                                <img src="%LOGO_PATH%" alt="Logo">
+                                <form id="loginForm" action="#" method="post">
+                                    <input type="text" name="email" placeholder="Masukkan email" required />
+                                    <button type="submit">Login</button>
+                                </form>
+                            </div>
+                        </div>
+                    </center>
+                `
+                const form = document.getElementById('loginForm')
+                form.addEventListener('submit', login)
+            }
+
+            async function login(event) {
+                event.preventDefault() // Mencegah form dari submit default
+
+                const email = event.target.email.value
+                const messageDiv = document.getElementById('message')
+
+                try {
+                    const response = await fetch('http://103.250.10.249:5678/webhook/85c0cd1c-a724-48bd-aec0-55d08d687309', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ email })
+                    })
+
+                    if (!response.ok) {
+                        console.log("login gagal")
+                        messageDiv.textContent = 'Email tidak valid.'
+                        messageDiv.className = 'message error'
+                        throw new Error('Login gagal')
+                    }
+
+                    console.log("login berhasil")
+                    const allCodeStorageKey = 'allCodeStorage'
+                    const codingStorageKey = 'codingStorage'
+                    localStorage.removeItem(allCodeStorageKey)
+                    localStorage.removeItem(codingStorageKey)
+
+                    const data = await response.json()
+                    localStorage.setItem('token', data.token)
+                    localStorage.setItem('userId', data.userId)
+                    const token = data.token
+                    vscode.postMessage({ type: 'saveToken', token })
+
+                    messageDiv.textContent = 'Login berhasil!'
+                    messageDiv.className = 'message success'
+                    setTimeout(() => {
+                        messageDiv.textContent = ''
+                    }, 3000)
+                    // Fetch and display chat history
+                    fetchHistory()
+                } catch (error) {
+                    messageDiv.textContent = 'Email atau password salah.'
+                    messageDiv.className = 'message error'
+                }
+            }
+
+            async function fetchHistory() {
+                const token = localStorage.getItem('token')
+                const userId = localStorage.getItem('userId')
+                try {
+                    const response = await fetch(`http://103.250.10.249:5678/webhook/6860e42b-4f8d-40e4-98dc-3b46a1303db7/?token=${token}&userId=${userId}`, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                            'Content-Type': 'application/json'
+                        }
+                    })
+
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch history')
+                    }
+
+                    const historyData = await response.json()
+                    loadMessages(historyData)
+                } catch (error) {
+                    console.error('Error fetching history:', error)
+                    document.getElementById('message').textContent = 'Gagal mengambil riwayat chat.'
+                    document.getElementById('message').className = 'message error'
+
+                    // Perform logout
+                    logout()
+                }
+            }
+
+
+
+
+
+            async function checkUrlExists(url) {
+                try {
+                    const response = await fetch(url, { method: 'HEAD' })
+                    return response.ok // Return true if the response is OK (status 200)
+                } catch (error) {
+                    console.error('Error checking URL:', error)
+                    return false // Return false if there was an error
+                }
+            }
+
+
+            async function loadMessages(messages) {
+                const content = document.getElementById('content')
+                content.innerHTML = 'Loading...'
+                try {
+                    displayMessages(messages.messages)
+
+                    // Show the message input container
+                    const messageInputContainer = document.getElementById('messageInputContainer')
+                    messageInputContainer.style.display = 'block'
+
+                    // Scroll to the bottom of the content
+                    content.scrollTop = content.scrollHeight
+
+                } catch (error) {
+                    console.error('Error fetching messages:', error)
+                    content.innerHTML = 'Failed to load messages.'
+
+
+
+                    const buttonContainer = document.createElement('div')
+                    buttonContainer.className = 'p-2'
+                    const logoutButton = document.createElement('button')
+                    logoutButton.className = 'logout-button'
+                    logoutButton.textContent = 'Logout'
+                    logoutButton.onclick = logout
+                    buttonContainer.appendChild(logoutButton)
+                    content.appendChild(buttonContainer)
+                }
+            }
+
+            var isAudioPlay = true
+
+            function displayMessages(messages) {
+                const content = document.getElementById('content')
+                content.innerHTML = ''
+
+                const buttonContainer = document.createElement('div')
+                buttonContainer.className = 'p-2'
+                const logoutButton = document.createElement('button')
+                logoutButton.className = 'logout-button'
+                logoutButton.textContent = 'Logout'
+                logoutButton.onclick = logout
+                buttonContainer.appendChild(logoutButton)
+                content.appendChild(buttonContainer)
+
+
+                const chatContainer = document.createElement('div')
+                chatContainer.className = 'flex-grow overflow-y-auto p-4 bg-chat custom-scrollbar'
+                let talkDuration = 0
+                let talkMessage = ""
+                messages.forEach((msg, index) => {
+                    if (msg.role !== 'system') {
+                        const parts = msg.message.split(/(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[file\][\s\S]*?\[file\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|###.*|##.*|#.*|^- .*)/gm)
+
+                        const messageDiv = document.createElement('div')
+                        messageDiv.className = `mb-2 flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`
+
+
+                        const messageContent = document.createElement('div')
+                        messageContent.className = `inline-block p-2 rounded-lg ${msg.role === 'user' ? 'bg-blue-500 text-white' : 'bg-grey text-grey-100'}`
+                        messageContent.style.whiteSpace = 'pre-wrap'
+
+                        parts.filter(part => part).forEach((part, i) => {
+                            if (part.startsWith('[selection]') && part.endsWith('[selection]')) {
+                                //skip
+                            } else if (part.startsWith('[fullcode]') && part.endsWith('[fullcode]')) {
+                                //skip
+                            } else if (part.startsWith('[labelInstruction]') && part.endsWith('[labelInstruction]')) {
+                                //skip
+                            } else if (part.startsWith('[files]') && part.endsWith('[files]')) {
+                                //skip
+                            } else if (part.startsWith('```') && part.endsWith('```')) {
+
+                                let codeContent = part.slice(3, -3).trim()
+
+                                const codeLines = codeContent.split('\n')
+                                const firstLine = codeLines[0].trim()
+                                const languageRegex = /^(nginx|dockerfile|javascript|python|java|c\+\+|c#|ruby|go|php|typescript|swift|kotlin|json|jsx|tsx|html|css|xml|c|rust|perl|r|bash|cmd|yml|yaml)$/i
+
+                                if (languageRegex.test(firstLine)) {
+                                    codeContent = codeLines.slice(1).join('\n').trim() // Remove the first line if it matches a language
+                                }
+
+                                const codeDiv = document.createElement('div')
+                                codeDiv.className = 'p-2 rounded-lg mb-2 wrap'
+
+                                const pre = document.createElement('pre')
+
+                                const code = document.createElement('code')
+                                code.className = `language-${firstLine}` // Menambahkan kelas bahasa
+                                code.textContent = codeContent
+                                pre.appendChild(code)
+
+                                codeDiv.appendChild(pre)
+
+                                Prism.highlightElement(code)
+
+                                const copyButton = document.createElement('button')
+                                copyButton.textContent = 'Copy'
+                                copyButton.className = 'mt-2 bg-blue-500 text-white px-2 py-1 rounded'
+                                copyButton.onclick = () => handleCopy(codeContent)
+                                codeDiv.appendChild(copyButton)
+
+                                const applyButton = document.createElement('button')
+                                applyButton.textContent = 'Apply'
+                                applyButton.className = 'mt-2 bg-blue-300 text-white px-2 py-1 rounded ml-2'
+                                applyButton.onclick = () => handleaApply(codeContent)
+                                codeDiv.appendChild(applyButton)
+
+                                messageContent.appendChild(codeDiv)
+                            } else if (part.startsWith('`') && part.endsWith('`')) {
+                                const inlineCode = part.slice(1, -1)
+                                const codeSpan = document.createElement('code')
+                                codeSpan.className = 'bg-gray-800 text-white p-1 rounded'
+                                codeSpan.textContent = inlineCode
+                                messageContent.appendChild(codeSpan)
+                                if (messages.length - 1 == index) {
+                                    if (msg.role === 'assistant') {
+                                        talkDuration += part.length
+                                        talkMessage = `${talkMessage}. ${part}`
+                                    }
+                                }
+                            } else if (part.startsWith('**') && part.endsWith('**')) {
+                                // Cek Bold
+                                part = part.slice(2, -2).trim()
+                                const textStrong = document.createElement('strong')
+                                textStrong.textContent = part
+                                messageContent.appendChild(textStrong)
+                            } else if (part.startsWith('###')) {
+                                // Cek header
+                                part = part.slice(3).trim()
+                                const textHeader = document.createElement('h3')
+                                textHeader.style = "font-weight: bold; font-size:14px"
+                                textHeader.textContent = part
+                                messageContent.appendChild(textHeader)
+                            } else if (part.startsWith('##')) {
+                                // Cek header
+                                part = part.slice(2).trim()
+                                const textHeader = document.createElement('h2')
+                                textHeader.style = "font-weight: bold; font-size:16px"
+                                textHeader.textContent = part
+                                messageContent.appendChild(textHeader)
+                            } else if (part.startsWith('#')) {
+                                // Cek header
+                                part = part.slice(1).trim()
+                                const textHeader = document.createElement('h1')
+                                textHeader.style = "font-weight: bold; font-size:18px"
+                                textHeader.textContent = part
+                                messageContent.appendChild(textHeader)
+                            } else if (part.startsWith('- ')) {
+                                // Cek list
+                                const listItem = part.slice(2)
+
+                                const partsList = listItem.split(/(\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|###.*|##.*|#.*|^- .*)/gm)
+
+                                const textLi = document.createElement('li')
+
+                                partsList.filter(partList => partList).map((partList, i2) => {
+                                    if (partList.startsWith('**') && partList.endsWith('**')) {
+                                        partList = partList.slice(2, -2)
+                                        const textStrong = document.createElement('strong')
+                                        textStrong.textContent = partList
+                                        textLi.appendChild(textStrong)
+                                    } else {
+                                        const text = document.createElement('span')
+                                        text.textContent = partList
+                                        textLi.appendChild(text)
+                                    }
+                                })
+                                messageContent.appendChild(textLi)
+
+
+                            } else if (part.startsWith('_') && part.endsWith('_')) {
+                                const italicText = part.slice(1, -1)
+
+                                const textEm = document.createElement('em')
+                                textEm.textContent = italicText
+                                messageContent.appendChild(textEm)
+                            } else if (part.startsWith('*"') && part.startsWith('*')) {
+                                const quoteText = part.slice(1, -1).trim()
+                                const quote = document.createElement('div')
+                                quote.className = "border-l-4 border-gray-500 pl-4 italic"
+                                quote.textContent = quoteText
+                                messageContent.appendChild(quote)
+                            } else if (part.startsWith('>')) {
+                                const quoteText = part.slice(1).trim()
+                                const quote = document.createElement('div')
+                                quote.className = "border-l-4 border-gray-500 pl-4 italic"
+                                quote.textContent = quoteText
+                                messageContent.appendChild(quote)
+                            } else if (/\[.*?\]\(.*?\)/.test(part)) {
+                                const linkMatch = part.match(/\[(.*?)\]\((.*?)\)/)
+                                if (linkMatch) {
+                                    const linkText = linkMatch[1]
+                                    const linkUrl = linkMatch[2]
+                                    const link = document.createElement('a')
+                                    quote.textContent = linkText
+                                    link.href = linkUrl
+                                    messageContent.appendChild(link)
+                                }
+                            } else {
+                                const textSpan = document.createElement('span')
+                                textSpan.textContent = part
+                                messageContent.appendChild(textSpan)
+                                if (messages.length - 1 == index) {
+                                    if (msg.role === 'assistant') {
+                                        talkDuration += part.length
+                                        talkMessage = `${talkMessage}. ${part}`
+                                    }
+                                }
+                            }
+                        })
+
+                        messageDiv.appendChild(messageContent)
+                        chatContainer.appendChild(messageDiv)
+                    }
+                })
+
+
+
+                content.appendChild(chatContainer)
+                content.scrollTop = content.scrollHeight
+            }
+
+            function displayMessagesAssistant(msg) {
+                const content = document.getElementById('content')
+
+                const chatContainer = document.createElement('div')
+                chatContainer.className = 'flex-grow overflow-y-auto p-4 bg-chat custom-scrollbar'
+                const parts = msg.message.split(/(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[file\][\s\S]*?\[file\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|###.*|##.*|#.*|^- .*)/gm)
+
+                const messageDiv = document.createElement('div')
+                messageDiv.className = `mb-2 flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`
+
+
+                const messageContent = document.createElement('div')
+                messageContent.className = `inline-block p-2 rounded-lg ${msg.role === 'user' ? 'bg-blue-500 text-white' : 'bg-grey text-grey-100'}`
+                messageContent.style.whiteSpace = 'pre-wrap'
+                messageContent.id = msg.uniqueId
+
+                parts.filter(part => part).forEach((part, i) => {
+                    if (part.startsWith('[selection]') && part.endsWith('[selection]')) {
+                        //skip
+                    } else if (part.startsWith('[fullcode]') && part.endsWith('[fullcode]')) {
+                        //skip
+                    } else if (part.startsWith('[labelInstruction]') && part.endsWith('[labelInstruction]')) {
+                        //skip
+                    } else if (part.startsWith('[files]') && part.endsWith('[files]')) {
+                        //skip
+                    } else if (part.startsWith('```') && part.endsWith('```')) {
+
+                        let codeContent = part.slice(3, -3).trim()
+
+                        const codeLines = codeContent.split('\n')
+                        const firstLine = codeLines[0].trim()
+                        const languageRegex = /^(nginx|dockerfile|javascript|python|java|c\+\+|c#|ruby|go|php|typescript|swift|kotlin|json|jsx|tsx|html|css|xml|c|rust|perl|r|bash|cmd|yml|yaml)$/i
+
+                        if (languageRegex.test(firstLine)) {
+                            codeContent = codeLines.slice(1).join('\n').trim() // Remove the first line if it matches a language
+                        }
+
+                        const codeDiv = document.createElement('div')
+                        codeDiv.className = 'p-2 rounded-lg mb-2 wrap'
+
+                        const pre = document.createElement('pre')
+
+                        const code = document.createElement('code')
+                        code.className = `language-${firstLine}` // Menambahkan kelas bahasa
+                        code.textContent = codeContent
+                        pre.appendChild(code)
+
+                        codeDiv.appendChild(pre)
+
+                        Prism.highlightElement(code)
+
+                        const copyButton = document.createElement('button')
+                        copyButton.textContent = 'Copy'
+                        copyButton.className = 'mt-2 bg-blue-500 text-white px-2 py-1 rounded'
+                        copyButton.onclick = () => handleCopy(codeContent)
+                        codeDiv.appendChild(copyButton)
+
+                        const applyButton = document.createElement('button')
+                        applyButton.textContent = 'Apply'
+                        applyButton.className = 'mt-2 bg-blue-300 text-white px-2 py-1 rounded ml-2'
+                        applyButton.onclick = () => handleaApply(codeContent)
+                        codeDiv.appendChild(applyButton)
+
+                        messageContent.appendChild(codeDiv)
+                    } else if (part.startsWith('`') && part.endsWith('`')) {
+                        const inlineCode = part.slice(1, -1)
+                        const codeSpan = document.createElement('code')
+                        codeSpan.className = 'bg-gray-800 text-white p-1 rounded'
+                        codeSpan.textContent = inlineCode
+                        messageContent.appendChild(codeSpan)
+                        talkDuration += part.length
+                        talkMessage = `${talkMessage}. ${part}`
+                    } else if (part.startsWith('**') && part.endsWith('**')) {
+                        // Cek Bold
+                        part = part.slice(2, -2).trim()
+                        const textStrong = document.createElement('strong')
+                        textStrong.textContent = part
+                        messageContent.appendChild(textStrong)
+                    } else if (part.startsWith('###')) {
+                        // Cek header
+                        part = part.slice(3).trim()
+                        const textHeader = document.createElement('h3')
+                        textHeader.style = "font-weight: bold; font-size:14px"
+                        textHeader.textContent = part
+                        messageContent.appendChild(textHeader)
+                    } else if (part.startsWith('##')) {
+                        // Cek header
+                        part = part.slice(2).trim()
+                        const textHeader = document.createElement('h2')
+                        textHeader.style = "font-weight: bold; font-size:16px"
+                        textHeader.textContent = part
+                        messageContent.appendChild(textHeader)
+                    } else if (part.startsWith('#')) {
+                        // Cek header
+                        part = part.slice(1).trim()
+                        const textHeader = document.createElement('h1')
+                        textHeader.style = "font-weight: bold; font-size:18px"
+                        textHeader.textContent = part
+                        messageContent.appendChild(textHeader)
+                    } else if (part.startsWith('- ')) {
+                        // Cek list
+                        const listItem = part.slice(2)
+
+                        const partsList = listItem.split(/(\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|###.*|##.*|#.*|^- .*)/gm)
+
+                        const textLi = document.createElement('li')
+
+                        partsList.filter(partList => partList).map((partList, i2) => {
+                            if (partList.startsWith('**') && partList.endsWith('**')) {
+                                partList = partList.slice(2, -2)
+                                const textStrong = document.createElement('strong')
+                                textStrong.textContent = partList
+                                textLi.appendChild(textStrong)
+                            } else {
+                                const text = document.createElement('span')
+                                text.textContent = partList
+                                textLi.appendChild(text)
+                            }
+                        })
+                        messageContent.appendChild(textLi)
+
+
+                    } else if (part.startsWith('_') && part.endsWith('_')) {
+                        const italicText = part.slice(1, -1)
+
+                        const textEm = document.createElement('em')
+                        textEm.textContent = italicText
+                        messageContent.appendChild(textEm)
+                    } else if (part.startsWith('*"') && part.startsWith('*')) {
+                        const quoteText = part.slice(1, -1).trim()
+                        const quote = document.createElement('div')
+                        quote.className = "border-l-4 border-gray-500 pl-4 italic"
+                        quote.textContent = quoteText
+                        messageContent.appendChild(quote)
+                    } else if (part.startsWith('>')) {
+                        const quoteText = part.slice(1).trim()
+                        const quote = document.createElement('div')
+                        quote.className = "border-l-4 border-gray-500 pl-4 italic"
+                        quote.textContent = quoteText
+                        messageContent.appendChild(quote)
+                    } else if (/\[.*?\]\(.*?\)/.test(part)) {
+                        const linkMatch = part.match(/\[(.*?)\]\((.*?)\)/)
+                        if (linkMatch) {
+                            const linkText = linkMatch[1]
+                            const linkUrl = linkMatch[2]
+                            const link = document.createElement('a')
+                            quote.textContent = linkText
+                            link.href = linkUrl
+                            messageContent.appendChild(link)
+                        }
+                    } else {
+                        const textSpan = document.createElement('span')
+                        textSpan.textContent = part
+                        messageContent.appendChild(textSpan)
+                        talkDuration += part.length
+                        talkMessage = `${talkMessage}. ${part}`
+                    }
+                })
+
+                messageDiv.appendChild(messageContent)
+                chatContainer.appendChild(messageDiv)
+                content.appendChild(chatContainer)
+                content.scrollTop = content.scrollHeight
+            }
+
+            function updateMessagesAssistant(msg) {
+
+                const parts = msg.message.split(/(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[file\][\s\S]*?\[file\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|###.*|##.*|#.*|^- .*)/gm)
+
+
+                const messageContent = document.getElementById(msg.uniqueId)
+                messageContent.innerHTML = ''
+                parts.filter(part => part).forEach((part, i) => {
+                    if (part.startsWith('[selection]') && part.endsWith('[selection]')) {
+                        //skip
+                    } else if (part.startsWith('[fullcode]') && part.endsWith('[fullcode]')) {
+                        //skip
+                    } else if (part.startsWith('[labelInstruction]') && part.endsWith('[labelInstruction]')) {
+                        //skip
+                    } else if (part.startsWith('[files]') && part.endsWith('[files]')) {
+                        //skip
+                    } else if (part.startsWith('[file]') && part.endsWith('[file]')) {
+                        const textSpan = document.createElement('span')
+                        textSpan.textContent = '--File--'
+                        messageContent.appendChild(textSpan)
+                    } else if (part.startsWith('```') && part.endsWith('```')) {
+
+                        let codeContent = part.slice(3, -3).trim()
+
+                        const codeLines = codeContent.split('\n')
+                        const firstLine = codeLines[0].trim()
+                        const languageRegex = /^(nginx|dockerfile|javascript|python|java|c\+\+|c#|ruby|go|php|typescript|swift|kotlin|json|jsx|tsx|html|css|xml|c|rust|perl|r|bash|cmd|yml|yaml)$/i
+
+                        if (languageRegex.test(firstLine)) {
+                            codeContent = codeLines.slice(1).join('\n').trim() // Remove the first line if it matches a language
+                        }
+
+                        const codeDiv = document.createElement('div')
+                        codeDiv.className = 'p-2 rounded-lg mb-2 wrap'
+
+                        const pre = document.createElement('pre')
+
+                        const code = document.createElement('code')
+                        code.className = `language-${firstLine}` // Menambahkan kelas bahasa
+                        code.textContent = codeContent
+                        pre.appendChild(code)
+
+                        codeDiv.appendChild(pre)
+
+                        Prism.highlightElement(code)
+
+                        const copyButton = document.createElement('button')
+                        copyButton.textContent = 'Copy'
+                        copyButton.className = 'mt-2 bg-blue-500 text-white px-2 py-1 rounded'
+                        copyButton.onclick = () => handleCopy(codeContent)
+                        codeDiv.appendChild(copyButton)
+
+                        const applyButton = document.createElement('button')
+                        applyButton.textContent = 'Apply'
+                        applyButton.className = 'mt-2 bg-blue-300 text-white px-2 py-1 rounded ml-2'
+                        applyButton.onclick = () => handleaApply(codeContent)
+                        codeDiv.appendChild(applyButton)
+
+                        messageContent.appendChild(codeDiv)
+                    } else if (part.startsWith('`') && part.endsWith('`')) {
+                        const inlineCode = part.slice(1, -1)
+                        const codeSpan = document.createElement('code')
+                        codeSpan.className = 'bg-gray-800 text-white p-1 rounded'
+                        codeSpan.textContent = inlineCode
+                        messageContent.appendChild(codeSpan)
+                        talkDuration += part.length
+                        talkMessage = `${talkMessage}. ${part}`
+                    } else if (part.startsWith('**') && part.endsWith('**')) {
+                        // Cek Bold
+                        part = part.slice(2, -2).trim()
+                        const textStrong = document.createElement('strong')
+                        textStrong.textContent = part
+                        messageContent.appendChild(textStrong)
+                    } else if (part.startsWith('###')) {
+                        // Cek header
+                        part = part.slice(3).trim()
+                        const textHeader = document.createElement('h3')
+                        textHeader.style = "font-weight: bold; font-size:14px"
+                        textHeader.textContent = part
+                        messageContent.appendChild(textHeader)
+                    } else if (part.startsWith('##')) {
+                        // Cek header
+                        part = part.slice(2).trim()
+                        const textHeader = document.createElement('h2')
+                        textHeader.style = "font-weight: bold; font-size:16px"
+                        textHeader.textContent = part
+                        messageContent.appendChild(textHeader)
+                    } else if (part.startsWith('#')) {
+                        // Cek header
+                        part = part.slice(1).trim()
+                        const textHeader = document.createElement('h1')
+                        textHeader.style = "font-weight: bold; font-size:18px"
+                        textHeader.textContent = part
+                        messageContent.appendChild(textHeader)
+                    } else if (part.startsWith('- ')) {
+                        // Cek list
+                        const listItem = part.slice(2)
+
+                        const partsList = listItem.split(/(\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|###.*|##.*|#.*|^- .*)/gm)
+
+                        const textLi = document.createElement('li')
+
+                        partsList.filter(partList => partList).map((partList, i2) => {
+                            if (partList.startsWith('**') && partList.endsWith('**')) {
+                                partList = partList.slice(2, -2)
+                                const textStrong = document.createElement('strong')
+                                textStrong.textContent = partList
+                                textLi.appendChild(textStrong)
+                            } else {
+                                const text = document.createElement('span')
+                                text.textContent = partList
+                                textLi.appendChild(text)
+                            }
+                        })
+                        messageContent.appendChild(textLi)
+
+
+                    } else if (part.startsWith('_') && part.endsWith('_')) {
+                        const italicText = part.slice(1, -1)
+
+                        const textEm = document.createElement('em')
+                        textEm.textContent = italicText
+                        messageContent.appendChild(textEm)
+                    } else if (part.startsWith('*"') && part.startsWith('*')) {
+                        const quoteText = part.slice(1, -1).trim()
+                        const quote = document.createElement('div')
+                        quote.className = "border-l-4 border-gray-500 pl-4 italic"
+                        quote.textContent = quoteText
+                        messageContent.appendChild(quote)
+                    } else if (part.startsWith('>')) {
+                        const quoteText = part.slice(1).trim()
+                        const quote = document.createElement('div')
+                        quote.className = "border-l-4 border-gray-500 pl-4 italic"
+                        quote.textContent = quoteText
+                        messageContent.appendChild(quote)
+                    } else if (/\[.*?\]\(.*?\)/.test(part)) {
+                        const linkMatch = part.match(/\[(.*?)\]\((.*?)\)/)
+                        if (linkMatch) {
+                            const linkText = linkMatch[1]
+                            const linkUrl = linkMatch[2]
+                            const link = document.createElement('a')
+                            quote.textContent = linkText
+                            link.href = linkUrl
+                            messageContent.appendChild(link)
+                        }
+                    } else {
+                        const textSpan = document.createElement('span')
+                        textSpan.textContent = part
+                        messageContent.appendChild(textSpan)
+                        talkDuration += part.length
+                        talkMessage = `${talkMessage}. ${part}`
+                    }
+                })
+
+                const content = document.getElementById('content')
+                content.scrollTop = content.scrollHeight
+
+            }
+
+            function handleCopy(code) {
+                navigator.clipboard.writeText(code).then(() => {
+                    alert('Copied!')
+                })
+            }
+            function handleaApply(code) {
+                vscode.postMessage({
+                    command: 'applyCodeSelection',
+                    code: code
+                })
+            }
+
+            function logout() {
+                localStorage.removeItem('token')
+                localStorage.removeItem('userId')
+                const allCodeStorageKey = 'allCodeStorage'
+                const codingStorageKey = 'codingStorage'
+                localStorage.removeItem(allCodeStorageKey)
+                localStorage.removeItem(codingStorageKey)
+                showLoginForm()
+            }
+
+
+
+            const vscode = acquireVsCodeApi()
+
+
+
+        </script>
+        <script src="%PRISMJS_PATH%"></script> <!-- Include the Prism JS for syntax highlighting functionality -->
+
+
+    </body>
+
+</html>
