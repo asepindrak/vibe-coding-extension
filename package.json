@@ -19,10 +19,8 @@
     "Chat"
   ],
   "keywords": [
-    "pacar",
     "ai",
     "chat",
-    "girlfriend",
     "companion",
     "companionship",
     "autocomplete",
@@ -60,7 +58,7 @@
           "id": "vibes-coding-sidebar",
           "name": "Vibes Coding",
           "icon": "media/icon.svg",
-          "contextualTitle": "PacarAI"
+          "contextualTitle": "Vibes Coding"
         }
       ]
     },
