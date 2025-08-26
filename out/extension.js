@@ -42,7 +42,167 @@ const SidebarProvider_1 = require("./SidebarProvider");
 const path = __importStar(require("path"));
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            timeout = null; // Clear timeout
+            func(...args); // Execute the function
+        };
+        if (timeout) {
+            clearTimeout(timeout); // Clear the previous timeout
+        }
+        timeout = setTimeout(later, wait); // Set new timeout
+    };
+}
+async function fetchSuggestions(context, editor) {
+    const currentLine = editor.selection.active.line;
+    const lineText = editor.document.lineAt(currentLine).text;
+    // Remove comments and prepare the input for the API
+    const cleanedInput = removeCommentTags(lineText.trim());
+    if (cleanedInput) {
+        const allCode = editor.document.getText();
+        const token = context.globalState.get('token'); // Get your token
+        const filePath = editor.document.fileName;
+        const fileName = path.basename(filePath); // Dapatkan nama file saja
+        // Buat StatusBarItem untuk loading
+        const loadingStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+        loadingStatusBarItem.text = "🔄 Code Sugestion from Vibe Coding...";
+        loadingStatusBarItem.show();
+        console.log("Fetching suggestions for:", cleanedInput);
+        const body = {
+            userId: 'vscode-user',
+            token: token,
+            message: `The full code is:\n${allCode}\n\n` +
+                `The user is currently typing this line: "${cleanedInput}".\n` +
+                `Continue this line naturally. Do NOT repeat existing text, and do NOT add braces, semicolons, or syntax that already exists later in the file.`
+        };
+        try {
+            const response = await fetch('http://103.250.10.249:5678/webhook/01fe259e-4cf2-438f-9d99-69ea451e55f7', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(body),
+            });
+            if (!response.ok) {
+                const errorMessage = await response.text();
+                throw new Error(`Error ${response.status}: ${errorMessage}`);
+            }
+            const suggestions = await response.json();
+            presentSuggestions(suggestions.message);
+        }
+        catch (error) {
+            console.error('Error while fetching suggestions:', error);
+        }
+        finally {
+            // Sembunyikan StatusBarItem loading setelah selesai
+            loadingStatusBarItem.hide();
+        }
+    }
+}
+let lastSuggestion = null;
+async function presentSuggestions(suggestion) {
+    console.log("Presenting suggestion:", suggestion);
+    if (suggestion && suggestion.trim().length > 0) {
+        lastSuggestion = suggestion;
+        // Beri jeda kecil agar state update
+        await new Promise(resolve => setTimeout(resolve, 50));
+        // Trigger autocomplete
+        await vscode.commands.executeCommand('editor.action.triggerSuggest');
+    }
+    else {
+        vscode.window.showInformationMessage("No suggestions available.");
+    }
+}
 function activate(context) {
+    vscode.languages.registerCompletionItemProvider({ scheme: 'file', language: "php" }, {
+        provideCompletionItems(document, position, token, context) {
+            // Jika tidak ada suggestion, return null (jangan error)
+            if (!lastSuggestion || lastSuggestion.trim() === '') {
+                return undefined;
+            }
+            // Ambil posisi kursor
+            const linePrefix = document.lineAt(position).text.substr(0, position.character);
+            // Buat completion item
+            const item = new vscode.CompletionItem(lastSuggestion, vscode.CompletionItemKind.Snippet);
+            item.insertText = new vscode.SnippetString(lastSuggestion);
+            item.detail = 'AI Suggestion from Vibe Coding';
+            item.sortText = '\u0000'; // Karakter null — paling awal dalam urutan Unicode
+            item.filterText = lastSuggestion; // Opsional: kontrol pencarian
+            item.command = {
+                command: 'vibe-coding.clearSuggestion',
+                title: ''
+            };
+            return [item];
+        }
+    }, '' // Trigger manual
+    );
+    vscode.languages.registerCompletionItemProvider({ scheme: 'file', language: "javascript" }, {
+        provideCompletionItems(document, position, token, context) {
+            // Jika tidak ada suggestion, return null (jangan error)
+            if (!lastSuggestion || lastSuggestion.trim() === '') {
+                return undefined;
+            }
+            // Ambil posisi kursor
+            const linePrefix = document.lineAt(position).text.substr(0, position.character);
+            // Buat completion item
+            const item = new vscode.CompletionItem(lastSuggestion, vscode.CompletionItemKind.Snippet);
+            item.insertText = new vscode.SnippetString(lastSuggestion);
+            item.detail = 'AI Suggestion from Vibe Coding';
+            item.command = {
+                command: 'vibe-coding.clearSuggestion',
+                title: ''
+            };
+            return [item];
+        }
+    }, '' // Trigger manual
+    );
+    vscode.languages.registerCompletionItemProvider({ scheme: 'file', language: "typescript" }, {
+        provideCompletionItems(document, position, token, context) {
+            // Jika tidak ada suggestion, return null (jangan error)
+            if (!lastSuggestion || lastSuggestion.trim() === '') {
+                return undefined;
+            }
+            // Ambil posisi kursor
+            const linePrefix = document.lineAt(position).text.substr(0, position.character);
+            // Buat completion item
+            const item = new vscode.CompletionItem(lastSuggestion, vscode.CompletionItemKind.Snippet);
+            item.insertText = new vscode.SnippetString(lastSuggestion);
+            item.detail = 'AI Suggestion from Vibe Coding';
+            item.command = {
+                command: 'vibe-coding.clearSuggestion',
+                title: ''
+            };
+            return [item];
+        }
+    }, '' // Trigger manual
+    );
+    vscode.languages.registerCompletionItemProvider({ scheme: 'file', language: "python" }, {
+        provideCompletionItems(document, position, token, context) {
+            // Jika tidak ada suggestion, return null (jangan error)
+            if (!lastSuggestion || lastSuggestion.trim() === '') {
+                return undefined;
+            }
+            // Ambil posisi kursor
+            const linePrefix = document.lineAt(position).text.substr(0, position.character);
+            // Buat completion item
+            const item = new vscode.CompletionItem(lastSuggestion, vscode.CompletionItemKind.Snippet);
+            item.insertText = new vscode.SnippetString(lastSuggestion);
+            item.detail = 'AI Suggestion from Vibe Coding';
+            item.command = {
+                command: 'vibe-coding.clearSuggestion',
+                title: ''
+            };
+            return [item];
+        }
+    }, '' // Trigger manual
+    );
+    // Command untuk menghapus suggestion setelah dipilih
+    context.subscriptions.push(vscode.commands.registerCommand('vibe-coding.clearSuggestion', () => {
+        lastSuggestion = null;
+    }));
     // Use the console to output diagnostic information (console.log) and errors (console.error)
     // This line of code will only be executed once when your extension is activated
     console.log('Congratulations, your extension "vibe-coding" is now active!');
@@ -77,6 +237,9 @@ function activate(context) {
     });
     // Initial trigger to update the webview
     vscode.commands.executeCommand('vibe-coding.updateWebview');
+    context.subscriptions.push(vscode.commands.registerCommand('vibe-coding.testSuggestion', () => {
+        presentSuggestions("$nomor_kantor = mysqli_real_escape_string($conn, trim($_POST['nomor_kantor']));");
+    }));
     context.subscriptions.push(vscode.commands.registerCommand('vibe-coding.applyCodeSelection', (code) => {
         const editor = vscode.window.activeTextEditor;
         console.log("apply code from chat");
@@ -90,6 +253,15 @@ function activate(context) {
             }, (err) => {
                 console.error('Failed to apply code:', err);
             });
+        }
+    }));
+    const fetchSuggestionsDebounced = debounce((editor) => {
+        fetchSuggestions(context, editor);
+    }, 3000); // Adjust the debounce time as needed
+    context.subscriptions.push(vscode.workspace.onDidChangeTextDocument((event) => {
+        const editor = vscode.window.activeTextEditor;
+        if (editor && event.document === editor.document) {
+            fetchSuggestionsDebounced(editor); // fetch hanya saat user mengedit teks
         }
     }));
     context.subscriptions.push(vscode.commands.registerCommand('vibe-coding.triggerCompletion', () => {
@@ -132,63 +304,71 @@ function removeCommentTags(code) {
 async function triggerCodeCompletion(context, comment, allCode) {
     const allCodeData = "```" + allCode + "```";
     // Logika untuk generate suggestion berdasarkan lineContent
-    const token = context.globalState.get('token'); // Ambil token dari globalState
-    const body = {
-        code: `this is the full code from editor ${allCodeData}. continue the code from instruction comment: "${comment}". Provide only the code without triple backtick and programming language, with comments for additional lines.`,
-    };
-    // Buat StatusBarItem untuk loading
-    const loadingStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-    loadingStatusBarItem.text = "🔄 Memuat kode dari Vibe Coding...";
-    loadingStatusBarItem.show();
-    try {
-        const response = await fetch('https://chat.vibe-coding.my.id/api/code', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(body)
-        });
-        // Cek apakah response berhasil
-        if (!response.ok) {
-            const errorMessage = await response.text();
-            throw new Error(`Error ${response.status}: ${errorMessage}`);
-        }
-        // Jika berhasil, ambil data
-        const coding = await response.json();
-        // Menambahkan hasil sementara ke editor
-        const editor = vscode.window.activeTextEditor;
-        if (editor) {
-            const currentLine = editor.selection.active.line;
-            // Tampilkan pesan instruksi
-            const instructionMessage = "Pilih untuk menerima kode dari Vibe Coding...";
-            vscode.window.showInformationMessage(instructionMessage, { modal: true }, "Terima Kode", "Tolak Kode").then(selection => {
-                if (selection === "Terima Kode") {
-                    // Jika pengguna memilih 'Terima Kode'
-                    editor.edit(editBuilder => {
-                        // Hapus pesan instruksi jika ada
-                        const instructionStartPosition = new vscode.Position(currentLine, 0);
-                        const instructionEndPosition = new vscode.Position(currentLine + 1, 0);
-                        editBuilder.delete(new vscode.Range(instructionStartPosition, instructionEndPosition));
-                        // Sisipkan hasil code completion
-                        editBuilder.insert(new vscode.Position(currentLine, 0), `${coding}\n`);
-                    });
-                }
-                else if (selection === "Tolak Kode") {
-                    // Jika pengguna memilih 'Tolak Kode', lakukan sesuatu jika perlu
-                    console.log("Kode ditolak.");
-                }
+    const token = context.globalState.get('token');
+    const editor = vscode.window.activeTextEditor;
+    if (editor) {
+        const body = {
+            userId: 'vscode-user', // Ganti dengan ID pengguna yang sesuai,
+            token: token,
+            message: `The full code is:\n${allCode}\n\n` +
+                `The user is currently typing this line: "${comment}".\n` +
+                `Continue this line naturally. Do NOT repeat existing text, and do NOT add braces, semicolons, or syntax that already exists later in the file.`,
+        };
+        // Buat StatusBarItem untuk loading
+        const loadingStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+        loadingStatusBarItem.text = "🔄 Vibe Coding loading...";
+        loadingStatusBarItem.show();
+        try {
+            const response = await fetch('http://103.250.10.249:5678/webhook/01fe259e-4cf2-438f-9d99-69ea451e55f7', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(body)
             });
+            // Cek apakah response berhasil
+            if (!response.ok) {
+                const errorMessage = await response.text();
+                throw new Error(`Error ${response.status}: ${errorMessage}`);
+            }
+            // Jika berhasil, ambil data
+            const coding = await response.json();
+            // Menambahkan hasil sementara ke editor
+            const editor = vscode.window.activeTextEditor;
+            if (editor) {
+                const currentLine = editor.selection.active.line;
+                // Tampilkan pesan instruksi
+                const instructionMessage = "Accept code from Vibe Coding...";
+                vscode.window.showInformationMessage(instructionMessage, { modal: true }, "Accept Code", "Decline").then(selection => {
+                    if (selection === "Accept Code") {
+                        // Jika pengguna memilih 'Terima Kode'
+                        editor.edit(editBuilder => {
+                            // Hapus pesan instruksi jika ada
+                            const instructionStartPosition = new vscode.Position(currentLine, 0);
+                            const instructionEndPosition = new vscode.Position(currentLine + 1, 0);
+                            editBuilder.delete(new vscode.Range(instructionStartPosition, instructionEndPosition));
+                            // Sisipkan hasil code completion
+                            editBuilder.insert(new vscode.Position(currentLine, 0), `${coding.message}\n`);
+                        });
+                    }
+                    else if (selection === "Decline") {
+                        // Jika pengguna memilih 'Tolak Kode', lakukan sesuatu jika perlu
+                        console.log("Kode ditolak.");
+                    }
+                });
+            }
         }
-    }
-    catch (error) {
-        console.error(error);
-    }
-    finally {
-        // Sembunyikan StatusBarItem loading setelah selesai
-        loadingStatusBarItem.hide();
+        catch (error) {
+            console.error(error);
+        }
+        finally {
+            // Sembunyikan StatusBarItem loading setelah selesai
+            loadingStatusBarItem.hide();
+        }
     }
 }
+//implementasi disini
 // This method is called when your extension is deactivated
 function deactivate() { }
 //# sourceMappingURL=extension.js.map

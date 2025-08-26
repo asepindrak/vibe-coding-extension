@@ -2,7 +2,7 @@
   "name": "vibe-coding",
   "displayName": "Vibe Coding",
   "description": "Your AI Coding Companion - Chat, Code, Create!",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "publisher": "PacarAI",
   "repository": {
     "type": "git",
@@ -69,6 +69,10 @@
       {
         "command": "vibe-coding.helloWorld",
         "title": "Hello World"
+      },
+      {
+        "command": "vibe-coding.testSuggestion",
+        "title": "Test Suggestion"
       },
       {
         "command": "vibe-coding.applyCode",
