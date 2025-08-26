@@ -57,6 +57,9 @@ This extension is licensed under the MIT License. See the LICENSE file for detai
 
 
 ## Release Notes
+### 1.0.1
+- **fix**: update button styles and text in login and logout functionality
+
 ### 1.0.0
 - **Initial Release**: Vibes Coding.
 
