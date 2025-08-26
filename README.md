@@ -1,12 +1,12 @@
 markdown
-# Vibes Coding - Your Coding Companion
+# Vibe Coding - Your Coding Companion
 
-Vibes Coding is a chat extension with an assistant designed to help you while programming
+Vibe Coding is a chat extension with an assistant designed to help you while programming
 
 
-![Vibes Coding Logo](media/vibes-coding-logo.png)
-![Vibes Coding SS 1](media/vibes-coding-ss-1.png)
-![Vibes Coding SS 2](media/vibes-coding-ss-2.png)
+![Vibe Coding Logo](media/vibe-coding-logo.png)
+![Vibe Coding SS 1](media/vibe-coding-ss-1.png)
+![Vibe Coding SS 2](media/vibe-coding-ss-2.png)
         
 
 
@@ -16,10 +16,10 @@ Vibes Coding is a chat extension with an assistant designed to help you while pr
 Get help with coding problems, syntax errors, and best practices. 
 
 **Interactive Chat**  
-Communicate with Vibes Coding in real-time. Ask questions and receive instant responses. 
+Communicate with Vibe Coding in real-time. Ask questions and receive instant responses. 
 
 **Select Code to AI**  
-Easily select code snippets and ask Vibes Coding for explanations, debugging help, or improvements directly.
+Easily select code snippets and ask Vibe Coding for explanations, debugging help, or improvements directly.
 
 **Continue the Code Based on the Provided Comment with Shift+Enter Key**  
 Effortlessly extend your code by leveraging the AI's understanding of your comments to generate relevant and context-aware code snippets that follow your intended logic and requirements.
@@ -33,22 +33,22 @@ Effortlessly extend your code by leveraging the AI's understanding of your comme
 ## Installation 
 
 1. **Install the Extension**: Open Visual Studio Code, go to the Extensions view by clicking the Extensions icon in the Activity Bar on the side of the window, or select `View` -> `Extensions`. 
-2. **Search for Vibes Coding**: Type `Vibes Coding` in the search box. 
-3. **Install**: Click the `Install` button on the Vibes Coding extension from the Marketplace. 
-4. **Activate**: Once installed, activate the extension by clicking on the Vibes Coding icon in the sidebar.
+2. **Search for Vibe Coding**: Type `Vibe Coding` in the search box. 
+3. **Install**: Click the `Install` button on the Vibe Coding extension from the Marketplace. 
+4. **Activate**: Once installed, activate the extension by clicking on the Vibe Coding icon in the sidebar.
 
 
 ## Usage 
 
-1. **Open the Chat**: Click on the Vibes Coding icon in the sidebar to open the chat window. 
-2. **Back to Extension**: Click on the Vibes Coding icon, and login. 
-3. **Start Chatting**: Type your questions or messages, and Vibes Coding will respond. 
+1. **Open the Chat**: Click on the Vibe Coding icon in the sidebar to open the chat window. 
+2. **Back to Extension**: Click on the Vibe Coding icon, and login. 
+3. **Start Chatting**: Type your questions or messages, and Vibe Coding will respond. 
 4. **Get Assistance**: Ask coding-related questions.
 
 
 ## Contributing 
 
-We welcome contributions! Please feel free to submit pull requests or issues on our [GitHub repository](https://github.com/asepindrak/vibes-coding-extension). 
+We welcome contributions! Please feel free to submit pull requests or issues on our [GitHub repository](https://github.com/asepindrak/vibe-coding-extension). 
 
 
 ## License 
@@ -61,6 +61,6 @@ This extension is licensed under the MIT License. See the LICENSE file for detai
 - **fix**: update button styles and text in login and logout functionality
 
 ### 1.0.0
-- **Initial Release**: Vibes Coding.
+- **Initial Release**: Vibe Coding.
 
 ---

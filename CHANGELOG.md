@@ -47,7 +47,7 @@
 
 ### 1.2.9
 - **Fix**: Change Code Accept to Popup Message
-- **Feature**: Show loading while Vibes Coding generate code
+- **Feature**: Show loading while Vibe Coding generate code
 
 ### 1.2.7
 - **Fix**: Change Code Suggestion key to Shift+Enter key.
@@ -79,4 +79,4 @@
 - **Style**: Redesigned login form UI.
 
 ### 1.0.0
-- **Initial Release**: Vibes Coding.
+- **Initial Release**: Vibe Coding.

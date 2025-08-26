@@ -4,7 +4,7 @@
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Vibes Coding Chat</title>
+        <title>Vibe Coding Chat</title>
         <!-- Include style and script from media/prism.css, media/prism.js -->
         <link rel="stylesheet" href="%PRISM_PATH%"> <!-- Link to the Prism CSS for syntax highlighting -->
         <link rel="stylesheet" href="%STYLES_PATH%">
@@ -16,7 +16,7 @@
         <div id="message" class="message"></div>
         <div id="messageInputContainer" class="p-4 bg-black shadow-md fixed-bottom">
             <div class="flex items-center">
-                <textarea id="messageInput" placeholder="Ask Vibes Coding"
+                <textarea id="messageInput" placeholder="Ask Vibe Coding"
                     class="flex-grow p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 h-6 bg-black text-white">
                 </textarea>
                 <button id="sendMessageButton"
@@ -155,7 +155,7 @@
                 // Ganti tombol dengan loader
                 sendMessageButton.classList.add('hidden') // Sembunyikan tombol
                 loader.classList.remove('hidden') // Tampilkan loader
-                console.log("send message to Vibes Coding")
+                console.log("send message to Vibe Coding")
                 // Proses pengiriman pesan
                 vscode.postMessage({ command: 'getSelectedText' })
 

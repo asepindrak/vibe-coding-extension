@@ -10,19 +10,19 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Use the console to output diagnostic information (console.log) and errors (console.error)
 	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "vibes-coding" is now active!');
+	console.log('Congratulations, your extension "vibe-coding" is now active!');
 	// Register the Sidebar Panel
 	const sidebarProvider = new SidebarProvider(context.extensionUri, context);
 	context.subscriptions.push(
 		vscode.window.registerWebviewViewProvider(
-			"vibes-coding-sidebar",
+			"vibe-coding-sidebar",
 			sidebarProvider
 		)
 	);
 
 	// Register a command to update the webview with the current file and line information
 	context.subscriptions.push(
-		vscode.commands.registerCommand('vibes-coding.updateWebview', () => {
+		vscode.commands.registerCommand('vibe-coding.updateWebview', () => {
 			const editor = vscode.window.activeTextEditor;
 			if (editor) {
 				const filePath = editor.document.fileName;
@@ -44,18 +44,18 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Trigger the updateWebview command when the active editor changes or the selection changes
 	vscode.window.onDidChangeActiveTextEditor(() => {
-		vscode.commands.executeCommand('vibes-coding.updateWebview');
+		vscode.commands.executeCommand('vibe-coding.updateWebview');
 	});
 	vscode.window.onDidChangeTextEditorSelection(() => {
-		vscode.commands.executeCommand('vibes-coding.updateWebview');
+		vscode.commands.executeCommand('vibe-coding.updateWebview');
 	});
 
 	// Initial trigger to update the webview
-	vscode.commands.executeCommand('vibes-coding.updateWebview');
+	vscode.commands.executeCommand('vibe-coding.updateWebview');
 
 
 	context.subscriptions.push(
-		vscode.commands.registerCommand('vibes-coding.applyCodeSelection', (code) => {
+		vscode.commands.registerCommand('vibe-coding.applyCodeSelection', (code) => {
 			const editor = vscode.window.activeTextEditor;
 			console.log("apply code from chat");
 			if (editor) {
@@ -74,7 +74,7 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 
 	context.subscriptions.push(
-		vscode.commands.registerCommand('vibes-coding.triggerCompletion', () => {
+		vscode.commands.registerCommand('vibe-coding.triggerCompletion', () => {
 			const editor = vscode.window.activeTextEditor;
 			if (editor) {
 				const currentLine = editor.selection.active.line;
@@ -131,11 +131,11 @@ async function triggerCodeCompletion(context: vscode.ExtensionContext, comment: 
 
 	// Buat StatusBarItem untuk loading
 	const loadingStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-	loadingStatusBarItem.text = "🔄 Memuat kode dari Vibes Coding...";
+	loadingStatusBarItem.text = "🔄 Memuat kode dari Vibe Coding...";
 	loadingStatusBarItem.show();
 
 	try {
-		const response = await fetch('https://chat.vibes-coding.my.id/api/code', {
+		const response = await fetch('https://chat.vibe-coding.my.id/api/code', {
 			method: 'POST',
 			headers: {
 				'Authorization': `Bearer ${token}`,
@@ -159,7 +159,7 @@ async function triggerCodeCompletion(context: vscode.ExtensionContext, comment: 
 			const currentLine = editor.selection.active.line;
 
 			// Tampilkan pesan instruksi
-			const instructionMessage = "Pilih untuk menerima kode dari Vibes Coding...";
+			const instructionMessage = "Pilih untuk menerima kode dari Vibe Coding...";
 
 			vscode.window.showInformationMessage(instructionMessage, { modal: true }, "Terima Kode", "Tolak Kode").then(selection => {
 				if (selection === "Terima Kode") {

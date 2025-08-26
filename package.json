@@ -1,12 +1,12 @@
 {
-  "name": "vibes-coding",
-  "displayName": "Vibes Coding",
+  "name": "vibe-coding",
+  "displayName": "Vibe Coding",
   "description": "Your AI Coding Companion - Chat, Code, Create!",
   "version": "1.0.1",
   "publisher": "PacarAI",
   "repository": {
     "type": "git",
-    "url": "https://github.com/asepindrak/vibes-coding-extension.git"
+    "url": "https://github.com/asepindrak/vibe-coding-extension.git"
   },
   "engines": {
     "vscode": "^1.95.0"
@@ -45,39 +45,39 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "vibes-coding-sidebar",
-          "title": "Vibes Coding",
+          "id": "vibe-coding-sidebar",
+          "title": "Vibe Coding",
           "icon": "media/icon.svg"
         }
       ]
     },
     "views": {
-      "vibes-coding-sidebar": [
+      "vibe-coding-sidebar": [
         {
           "type": "webview",
-          "id": "vibes-coding-sidebar",
-          "name": "Vibes Coding",
+          "id": "vibe-coding-sidebar",
+          "name": "Vibe Coding",
           "icon": "media/icon.svg",
-          "contextualTitle": "Vibes Coding"
+          "contextualTitle": "Vibe Coding"
         }
       ]
     },
     "activationEvents": [
-      "onView:vibes-coding-sidebar"
+      "onView:vibe-coding-sidebar"
     ],
     "commands": [
       {
-        "command": "vibes-coding.helloWorld",
+        "command": "vibe-coding.helloWorld",
         "title": "Hello World"
       },
       {
-        "command": "vibes-coding.applyCode",
-        "title": "Apply Code from Vibes Coding"
+        "command": "vibe-coding.applyCode",
+        "title": "Apply Code from Vibe Coding"
       }
     ],
     "keybindings": [
       {
-        "command": "vibes-coding.triggerCompletion",
+        "command": "vibe-coding.triggerCompletion",
         "key": "shift+enter",
         "when": "editorTextFocus"
       }
