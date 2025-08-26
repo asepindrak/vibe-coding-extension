@@ -238,8 +238,8 @@
       "type": "@n8n/n8n-nodes-langchain.memoryManager",
       "typeVersion": 1.1,
       "position": [
-        480,
-        1552
+        448,
+        1856
       ],
       "id": "d1c504dc-5a35-409e-98a8-d46caeebe9bf",
       "name": "Chat Memory Manager2"
@@ -249,8 +249,8 @@
       "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
       "typeVersion": 1.3,
       "position": [
-        560,
-        1824
+        528,
+        2128
       ],
       "id": "51ba4504-2dcf-4af5-85c5-8a17ae34babe",
       "name": "Simple Memory2"
@@ -262,8 +262,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        240,
-        1552
+        208,
+        1856
       ],
       "id": "b8c97d07-2dba-4720-a815-bd889d71c687",
       "name": "Code4"
@@ -273,8 +273,8 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        32,
-        1552
+        0,
+        1856
       ],
       "id": "e31af50c-613c-44bb-a777-97420dbeb165",
       "name": "When clicking ‘Execute workflow’"
@@ -467,6 +467,133 @@
       ],
       "id": "37b44117-92d3-4a93-8316-80190d1961df",
       "name": "Code5"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "176b32ab-5005-4302-a649-b2d0c9072784",
+              "name": "userId",
+              "value": "={{ $json.body.userId }}",
+              "type": "string"
+            },
+            {
+              "id": "7b4a70c6-0552-4bba-bf0b-1a8e119c9663",
+              "name": "token",
+              "value": "={{ $json.body.token }}",
+              "type": "string"
+            },
+            {
+              "id": "f2a33904-3d9a-4d0e-9e50-ace2e0e14f35",
+              "name": "message",
+              "value": "={{ $json.body.message }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        288,
+        1312
+      ],
+      "id": "3600d4d9-7cb5-4ecd-968e-5df6421ec213",
+      "name": "Edit Fields6"
+    },
+    {
+      "parameters": {
+        "jsCode": "var userId = $input.first().json.userId\nvar sessionId = $input.first().json.token\nvar Message = $input.first().json.message\nvar data = {\n  userId,\n  sessionId,\n  Message\n}\nreturn data;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        1312
+      ],
+      "id": "568ca92d-f644-48ea-bbff-097c5a0c0624",
+      "name": "Code6"
+    },
+    {
+      "parameters": {
+        "jsCode": "var sessionId = $('Code6').first().json.sessionId\nvar userId = $('Code6').first().json.userId\n\nvar dataUser = {\n  userId,\n  sessionId\n}\n\nvar newMessages = []\n\nnewMessages.push({\n  role: \"system\",\n  content:\n    \"You are an AI assistant that generates code completions directly after the user's current input. \" +\n    \"Consider the entire file to avoid duplicating existing syntax or adding braces/semicolons already present. \" +\n    \"Do NOT repeat any part of the existing line or cursor prefix. \" +\n    \"Only return the next characters to insert, with no triple backticks, no language tags, and no explanation.\"\n});\n\n\nnewMessages.push({ role: \"user\", content: $input.first().json.Message });\n\nvar data = {\n  data: dataUser,\n  openai: { \n    json: {\n      model: \"gpt-4o-mini\",\n      messages: newMessages,\n      max_tokens: 5000  // misal 100 token (sekitar 70–80 kata)\n    }\n  }\n}\n\nreturn data;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        768,
+        1312
+      ],
+      "id": "78ec7b37-3fcd-4e46-abb2-b8d7063e8bd0",
+      "name": "Code7"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.openai.json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        992,
+        1312
+      ],
+      "id": "7eef383c-2abc-43ba-aa1c-980d189f125e",
+      "name": "OpenAI Chat1",
+      "credentials": {
+        "openAiApi": {
+          "id": "3fZqwOF47IelEJ1h",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "68bf801d-5258-442e-bd46-2a3d2036dc11",
+              "name": "message",
+              "value": "={{ $('OpenAI Chat1').item.json.choices[0].message.content }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1296,
+        1312
+      ],
+      "id": "fabd4f58-477a-4181-9499-d72adc677177",
+      "name": "Edit Fields7"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "01fe259e-4cf2-438f-9d99-69ea451e55f7",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        16,
+        1312
+      ],
+      "id": "65bdc4ef-e644-43ab-957c-6421ce31da02",
+      "name": "Code Completions",
+      "webhookId": "01fe259e-4cf2-438f-9d99-69ea451e55f7"
     }
   ],
   "pinData": {},
@@ -733,13 +860,68 @@
       "main": [
         []
       ]
+    },
+    "Edit Fields6": {
+      "main": [
+        [
+          {
+            "node": "Code6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code6": {
+      "main": [
+        [
+          {
+            "node": "Code7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code7": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Chat1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat1": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Completions": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": true,
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "b9f6cad7-9fe4-4b90-a31d-46343b129bed",
+  "versionId": "70605fc5-2e45-4b7e-b7ab-48ba3b2185c5",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "e970340f9145c882432efeb13652cea8a93675f1e016e602b85e2aa1202a1753"
