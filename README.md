@@ -27,7 +27,7 @@ Effortlessly extend your code by leveraging the AI's understanding of your comme
 
 ## Upcoming Features 
 
-- **Code Completion**: Suggests code elements like variable and function names based on the current context. 
+- **Vibe Coding**: Generate admin dashboards from model schemas — including tables, forms, validation, authentication, menus, and more — all automatically generated through an AI-powered chat.
 
 
 ## Installation 
