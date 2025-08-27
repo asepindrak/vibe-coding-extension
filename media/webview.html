@@ -193,7 +193,10 @@
                     const responseData = await response.json()
                     // Ambil pesan dari properti "message"
                     const assistantMessage = responseData.message || 'Error: No message received'
-
+                    if (assistantMessage.includes("[writeFileVico]")) {
+                        console.log("ada perintah write file")
+                        vscode.postMessage({ type: 'writeFile', assistantMessage })
+                    }
                     // Tampilkan pesan di chat
                     displayMessagesAssistant({ role: 'assistant', message: assistantMessage, uniqueId })
 
@@ -207,6 +210,8 @@
                     loader.classList.add('hidden') // Sembunyikan loader
                     sendMessageButton.classList.remove('hidden') // Tampilkan tombol kembali
                     document.getElementById('generating').innerHTML = ''
+
+
                 } catch (error) {
                     console.error('Error sending message:', error)
                 }
@@ -388,7 +393,16 @@
                         parts.filter(part => part).forEach((part, i) => {
                             if (part.startsWith('[selection]') && part.endsWith('[selection]')) {
                                 //skip
-                            } else if (part.startsWith('[fullcode]') && part.endsWith('[fullcode]')) {
+                            }
+                            // else if (part.startsWith('[writeFileVico]') && part.endsWith('[writeFileVico]')) {
+                            //     let codeContent = part.slice(15, -15).trim()
+                            //     // kirim ke extension
+                            //     window.acquireVsCodeApi().postMessage({
+                            //         command: 'writeFile',
+                            //         text: codeContent
+                            //     })
+                            // } 
+                            else if (part.startsWith('[fullcode]') && part.endsWith('[fullcode]')) {
                                 //skip
                             } else if (part.startsWith('[labelInstruction]') && part.endsWith('[labelInstruction]')) {
                                 //skip

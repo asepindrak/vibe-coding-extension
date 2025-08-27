@@ -87,11 +87,15 @@ class SidebarProvider {
             }
         });
         webviewView.webview.html = this.getHtmlForWebview(webviewView.webview);
-        webviewView.webview.onDidReceiveMessage(message => {
+        webviewView.webview.onDidReceiveMessage(async (message) => {
             switch (message.type) {
                 case 'saveToken':
                     // Simpan token di globalState
                     this.context.globalState.update('token', message.token);
+                    return;
+                case 'writeFile':
+                    this.context.globalState.update('writeContent', message.assistantMessage);
+                    await vscode.commands.executeCommand('vibe-coding.writeFile');
                     return;
             }
         }, undefined, this.context.subscriptions);

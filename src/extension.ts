@@ -3,6 +3,7 @@
 import * as vscode from 'vscode';
 import { SidebarProvider } from './SidebarProvider';
 import * as path from 'path';
+import logger from 'vico-logger';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -91,8 +92,81 @@ async function presentSuggestions(suggestion: string) {
 	}
 }
 
+async function writeFileVico(context: vscode.ExtensionContext, editor: vscode.TextEditor) {
+	logger.info("writeFileVico called");
+
+	const writeContent = context.globalState.get<string>('writeContent');
+	if (!writeContent) {
+		vscode.window.showWarningMessage('Tidak ada konten untuk ditulis. Belum ada respons dari assistant.');
+		return;
+	}
+
+	if (!vscode.workspace.workspaceFolders) {
+		vscode.window.showErrorMessage('Tidak ada folder workspace terbuka!');
+		return;
+	}
+
+	const projectRoot = vscode.workspace.workspaceFolders[0].uri;
+
+	try {
+		// 1. Extract blok [writeFileVico] ... (jika ada pembungkus)
+		const blockMatch = writeContent.match(/\[writeFileVico\]([\s\S]*)/);
+		const contentBlock = blockMatch ? blockMatch[1].trim() : writeContent.trim();
+
+		// 2. Parse `name` dari baris pertama
+		const nameMatch = contentBlock.match(/name:\s*(.+)/);
+		const folderName = nameMatch ? nameMatch[1].trim() : 'generated';
+		const modelDir = vscode.Uri.joinPath(projectRoot, 'src', 'models', folderName);
+
+		// 3. Buat folder jika belum ada
+		await vscode.workspace.fs.createDirectory(modelDir);
+		logger.info(`Folder ditargetkan: ${modelDir.path}`);
+
+		// 4. Split berdasarkan baris yang diawali: schema:, form:, dll
+		const sections = contentBlock.split(/\n(?=(?:schema|form|table|detail|action):)/);
+
+		const files: Array<{ filename: string; content: string }> = [];
+
+		for (const section of sections) {
+			const headerMatch = section.match(/^(schema|form|table|detail|action):\s*(.+)$/m);
+			if (!headerMatch) continue;
+
+			const [, type, filename] = headerMatch;
+			const codeMatch = section.match(/```(?:ts|tsx|js|jsx)\n([\s\S]*?)\n```/);
+			const codeContent = codeMatch ? codeMatch[1] : '// Konten kosong atau parsing gagal';
+
+			files.push({
+				filename: filename.trim(),
+				content: codeContent
+			});
+		}
+
+		// 5. Tulis setiap file
+		for (const file of files) {
+			const fileUri = vscode.Uri.joinPath(modelDir, file.filename);
+			const data = Buffer.from(file.content, 'utf8');
+			await vscode.workspace.fs.writeFile(fileUri, data);
+			logger.info(`File dibuat: ${fileUri.path}`);
+			vscode.window.showInformationMessage(`✅ File dibuat: ${file.filename}`);
+		}
+
+		vscode.window.showInformationMessage(`🎉 Semua file berhasil dibuat di: models/${folderName}`);
+	} catch (err: any) {
+		logger.error('Gagal menulis file:', err);
+		vscode.window.showErrorMessage('Gagal menulis file: ' + (err.message || err.toString()));
+	}
+}
+
 
 export function activate(context: vscode.ExtensionContext) {
+
+	// Disini kita daftarin command
+	let disposable = vscode.commands.registerCommand('vibe-coding.writeFile', async () => {
+		logger.info("writeFile command triggered");
+		await writeFileVico(context, vscode.window.activeTextEditor!);
+	});
+
+	context.subscriptions.push(disposable);
 
 	vscode.languages.registerCompletionItemProvider(
 		{ scheme: 'file', language: "php" },

@@ -6,6 +6,9 @@
 
 ### Added
 
+### 1.2.0
+- **feat**: Generate Full CRUD Pages from Model Schema
+
 ### 1.1.2
 - **fix**: code completions with ctrl+shift+.
 
