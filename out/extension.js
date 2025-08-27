@@ -255,13 +255,13 @@ function activate(context) {
             });
         }
     }));
-    const fetchSuggestionsDebounced = debounce((editor) => {
-        fetchSuggestions(context, editor);
-    }, 3000); // Adjust the debounce time as needed
-    context.subscriptions.push(vscode.workspace.onDidChangeTextDocument((event) => {
+    context.subscriptions.push(vscode.commands.registerCommand('vibe-coding.fetchSuggestions', () => {
         const editor = vscode.window.activeTextEditor;
-        if (editor && event.document === editor.document) {
-            fetchSuggestionsDebounced(editor); // fetch hanya saat user mengedit teks
+        if (editor) {
+            fetchSuggestions(context, editor);
+        }
+        else {
+            vscode.window.showInformationMessage("No active text editor found.");
         }
     }));
     context.subscriptions.push(vscode.commands.registerCommand('vibe-coding.triggerCompletion', () => {

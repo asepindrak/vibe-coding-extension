@@ -2,7 +2,7 @@
   "name": "vibe-coding",
   "displayName": "Vibe Coding",
   "description": "Your AI Coding Companion - Chat, Code, Create!",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "publisher": "PacarAI",
   "repository": {
     "type": "git",
@@ -75,6 +75,10 @@
         "title": "Test Suggestion"
       },
       {
+        "command": "vibe-coding.fetchSuggestions",
+        "title": "Fetch Code Suggestions"
+      },
+      {
         "command": "vibe-coding.applyCode",
         "title": "Apply Code from Vibe Coding"
       }
@@ -83,6 +87,11 @@
       {
         "command": "vibe-coding.triggerCompletion",
         "key": "shift+enter",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "vibe-coding.fetchSuggestions",
+        "key": "ctrl+shift+.",
         "when": "editorTextFocus"
       }
     ]

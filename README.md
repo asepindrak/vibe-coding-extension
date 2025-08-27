@@ -25,6 +25,10 @@ Easily select code snippets and ask Vibe Coding for explanations, debugging help
 Effortlessly extend your code by leveraging the AI's understanding of your comments to generate relevant and context-aware code snippets that follow your intended logic and requirements.
 - Press Shift+Enter key after comment in your code
 
+**Code sugestions / Code completions**  
+Context-aware code snippets that follow your intended logic and requirements.
+- Press Shift+Enter+. key after your code
+
 ## Upcoming Features 
 
 - **Vibe Coding**: Generate admin dashboards from model schemas — including tables, forms, validation, authentication, menus, and more — all automatically generated through an AI-powered chat.
@@ -57,6 +61,9 @@ This extension is licensed under the MIT License. See the LICENSE file for detai
 
 
 ## Release Notes
+### 1.1.2
+- **fix**: code completions with ctrl+shift+.
+
 ### 1.1.0
 - **feat**: code completions
 

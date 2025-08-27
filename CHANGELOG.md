@@ -2,9 +2,12 @@
 
 ## [Unreleased]
 
-## [1.1.0] - 2025-08-26
+## [1.1.2] - 2025-08-27
 
 ### Added
+
+### 1.1.2
+- **fix**: code completions with ctrl+shift+.
 
 ### 1.1.0
 - **feat**: code completions

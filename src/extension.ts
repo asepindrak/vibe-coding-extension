@@ -281,19 +281,17 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 
 
-
-	const fetchSuggestionsDebounced = debounce((editor: vscode.TextEditor) => {
-		fetchSuggestions(context, editor);
-	}, 3000); // Adjust the debounce time as needed
-
 	context.subscriptions.push(
-		vscode.workspace.onDidChangeTextDocument((event) => {
+		vscode.commands.registerCommand('vibe-coding.fetchSuggestions', () => {
 			const editor = vscode.window.activeTextEditor;
-			if (editor && event.document === editor.document) {
-				fetchSuggestionsDebounced(editor); // fetch hanya saat user mengedit teks
+			if (editor) {
+				fetchSuggestions(context, editor);
+			} else {
+				vscode.window.showInformationMessage("No active text editor found.");
 			}
 		})
 	);
+
 
 
 	context.subscriptions.push(
