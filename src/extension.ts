@@ -116,19 +116,28 @@ async function writeFileVico(context: vscode.ExtensionContext, editor: vscode.Te
 		// 2. Parse `name` dari baris pertama
 		const nameMatch = contentBlock.match(/name:\s*(.+)/);
 		const folderName = nameMatch ? nameMatch[1].trim() : 'generated';
-		const modelDir = vscode.Uri.joinPath(projectRoot, 'src', 'models', folderName);
+		const actionDir = vscode.Uri.joinPath(projectRoot, 'src', 'actions');
+		const pageDir = vscode.Uri.joinPath(projectRoot, 'src', 'page', folderName);
+		const typesDir = vscode.Uri.joinPath(projectRoot, 'src', 'types');
+		const validationsDir = vscode.Uri.joinPath(projectRoot, 'src', 'validations');
 
 		// 3. Buat folder jika belum ada
-		await vscode.workspace.fs.createDirectory(modelDir);
-		logger.info(`Folder ditargetkan: ${modelDir.path}`);
+		await vscode.workspace.fs.createDirectory(actionDir);
+		await vscode.workspace.fs.createDirectory(pageDir);
+		await vscode.workspace.fs.createDirectory(typesDir);
+		await vscode.workspace.fs.createDirectory(validationsDir);
+		logger.info(`Folder ditargetkan: ${actionDir.path}`);
+		logger.info(`Folder ditargetkan: ${pageDir.path}`);
+		logger.info(`Folder ditargetkan: ${typesDir.path}`);
+		logger.info(`Folder ditargetkan: ${validationsDir.path}`);
 
 		// 4. Split berdasarkan baris yang diawali: schema:, form:, dll
-		const sections = contentBlock.split(/\n(?=(?:schema|form|table|detail|action):)/);
+		const sections = contentBlock.split(/\n(?=(?:schema|form|table|detail|action|type):)/);
 
-		const files: Array<{ filename: string; content: string }> = [];
+		const files: Array<{ type: string; filename: string; content: string }> = [];
 
 		for (const section of sections) {
-			const headerMatch = section.match(/^(schema|form|table|detail|action):\s*(.+)$/m);
+			const headerMatch = section.match(/^(schema|form|table|detail|action|type):\s*(.+)$/m);
 			if (!headerMatch) continue;
 
 			const [, type, filename] = headerMatch;
@@ -136,6 +145,7 @@ async function writeFileVico(context: vscode.ExtensionContext, editor: vscode.Te
 			const codeContent = codeMatch ? codeMatch[1] : '// Konten kosong atau parsing gagal';
 
 			files.push({
+				type,
 				filename: filename.trim(),
 				content: codeContent
 			});
@@ -143,7 +153,15 @@ async function writeFileVico(context: vscode.ExtensionContext, editor: vscode.Te
 
 		// 5. Tulis setiap file
 		for (const file of files) {
-			const fileUri = vscode.Uri.joinPath(modelDir, file.filename);
+			console.log(file);
+			let fileUri = vscode.Uri.joinPath(actionDir, file.filename);
+			if (file.type === 'form' || file.type === 'table' || file.type === 'detail') {
+				fileUri = vscode.Uri.joinPath(pageDir, file.filename);
+			} else if (file.type === 'type') {
+				fileUri = vscode.Uri.joinPath(typesDir, file.filename);
+			} else if (file.type === 'schema') {
+				fileUri = vscode.Uri.joinPath(validationsDir, file.filename);
+			}
 			const data = Buffer.from(file.content, 'utf8');
 			await vscode.workspace.fs.writeFile(fileUri, data);
 			logger.info(`File dibuat: ${fileUri.path}`);

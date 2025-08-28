@@ -22,7 +22,7 @@ html {
 
 .login-container {
     justify-content: center;
-    background: #202020;
+    background: #ffffff;
     padding: 2rem;
     border-radius: 8px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
@@ -40,9 +40,9 @@ html {
     width: 100%;
     padding: 0.75rem;
     margin-bottom: 1rem;
-    border: 1px solid #5a5a5a;
-    background-color: #1f1f1f;
-    color: #eee;
+    border: 1px solid #207ace;
+    background-color: #ffffff;
+    color: #252525;
     border-radius: 4px;
     box-sizing: border-box;
 }
@@ -265,6 +265,10 @@ code {
 
 .text-white {
     color: white;
+}
+
+.text-black {
+    color: #000;
 }
 
 .bg-gray-300 {

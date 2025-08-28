@@ -38,6 +38,7 @@
             </div>
         </div>
         <script type="module">
+            var isLoading = false
             var messageArray = []
             var talkDuration = 0
             var talkMessage = ""
@@ -162,6 +163,7 @@
             }
 
             async function sendMessageToApi(message) {
+                if (isLoading) return
                 let newMessageArray = [...messageArray, { role: 'user', message: message }]
                 const userId = localStorage.getItem('userId')
                 const token = localStorage.getItem('token')
@@ -176,6 +178,7 @@
                 }
 
                 try {
+                    isLoading = true
                     const response = await fetch('http://103.250.10.249:5678/webhook/50c94bd4-9ef1-4dbe-ac03-dda6fd966797', {
                         method: 'POST',
                         headers: {
@@ -186,6 +189,7 @@
                     })
 
                     if (!response.ok) {
+                        isLoading = false
                         throw new Error('Failed to send message')
                     }
 
@@ -210,10 +214,15 @@
                     loader.classList.add('hidden') // Sembunyikan loader
                     sendMessageButton.classList.remove('hidden') // Tampilkan tombol kembali
                     document.getElementById('generating').innerHTML = ''
+                    setTimeout(() => {
+                        isLoading = false
+                    }, 1000) // Delay untuk memastikan pesan sudah ditambahkan sebelum scroll    
+
 
 
                 } catch (error) {
                     console.error('Error sending message:', error)
+                    isLoading = false
                 }
             }
 
@@ -223,11 +232,11 @@
                 const content = document.getElementById('content')
                 content.innerHTML = `
                     <center>
-                        <div class="login-wrapper mt-5">
-                            <div class="login-container">
+                        <div class="login-wrapper mt-5 bg-white">
+                            <div class="login-container bg-white">
                                 <img src="%LOGO_PATH%" alt="Logo">
                                 <form id="loginForm" action="#" method="post">
-                                    <input type="text" name="email" placeholder="Enter username" required />
+                                    <input type="text" name="email" placeholder="Enter username" class="bg-white text-black" required />
                                     <button type="submit">➜]</button>
                                 </form>     
                             </div>
@@ -243,8 +252,19 @@
 
                 const email = event.target.email.value
                 const messageDiv = document.getElementById('message')
+                const loginForm = document.getElementById('loginForm')
 
                 try {
+                    if (isLoading) return
+                    loginForm.innerHTML = `
+                        <input type="text" name="email" placeholder="Enter username" value="${email}" required />
+                        <button type="submit" disabled>
+                            <svg class="loader-button" viewBox="0 0 24 24" width="16" height="16"> <!-- Adjust width and height -->
+                                <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
+                            </svg>
+                        </button>
+                    `
+                    isLoading = true
                     const response = await fetch('http://103.250.10.249:5678/webhook/85c0cd1c-a724-48bd-aec0-55d08d687309', {
                         method: 'POST',
                         headers: {
@@ -257,6 +277,11 @@
                         console.log("login gagal")
                         messageDiv.textContent = 'Email tidak valid.'
                         messageDiv.className = 'message error'
+                        isLoading = false
+                        loginForm.innerHTML = `
+                            <input type="text" name="email" placeholder="Enter username" value="${email}" required />
+                            <button type="submit">➜]</button>
+                        `
                         throw new Error('Login gagal')
                     }
 
@@ -274,14 +299,26 @@
 
                     messageDiv.textContent = 'Login berhasil!'
                     messageDiv.className = 'message success'
+                    isLoading = false
                     setTimeout(() => {
-                        messageDiv.textContent = ''
+                        loginForm.innerHTML = `
+                            <input type="text" name="email" placeholder="Enter username" value="${email}" required />
+                            <button type="submit">➜]</button>
+                        `
                     }, 3000)
+
+
+                    messageDiv.textContent = ''
                     // Fetch and display chat history
                     fetchHistory()
                 } catch (error) {
                     messageDiv.textContent = 'Email atau password salah.'
                     messageDiv.className = 'message error'
+                    isLoading = false
+                    loginForm.innerHTML = `
+                            <input type="text" name="email" placeholder="Enter username" value="${email}" required />
+                            <button type="submit">➜]</button>
+                        `
                 }
             }
 
