@@ -2,9 +2,12 @@
 
 ## [Unreleased]
 
-## [1.1.2] - 2025-08-27
+## [1.2.2] - 2025-08-28
 
 ### Added
+
+### 1.2.2
+- **fix**: Confirm overwrite when generating file
 
 ### 1.2.1
 - **fix**: fix: New training code base & redesign
