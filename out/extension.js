@@ -182,15 +182,31 @@ async function writeFileVico(context, editor) {
                 fileUri = vscode.Uri.joinPath(validationsDir, file.filename);
             }
             const data = Buffer.from(file.content, 'utf8');
+            try {
+                // Check if the file already exists
+                await vscode.workspace.fs.stat(fileUri);
+                // If it exists, prompt the user for confirmation to overwrite
+                const confirmOverwrite = await vscode.window.showWarningMessage(`File ${file.filename} already exists. Do you want to overwrite it?`, { modal: true }, 'Yes', 'No');
+                if (confirmOverwrite !== 'Yes') {
+                    // User chose not to overwrite, continue to the next file
+                    console.log(`Skipping file: ${file.filename}`);
+                    vscode.window.showInformationMessage(`Skipping file: ${file.filename}`);
+                    continue; // Continue to the next iteration
+                }
+            }
+            catch (error) {
+                // File does not exist, we can proceed to write
+            }
+            // Now you can safely write to the file, it's either non-existent or the user confirmed overwrite
             await vscode.workspace.fs.writeFile(fileUri, data);
-            vico_logger_1.default.info(`File dibuat: ${fileUri.path}`);
-            vscode.window.showInformationMessage(`✅ File dibuat: ${file.filename}`);
+            vico_logger_1.default.info(`File created: ${fileUri.path}`);
+            vscode.window.showInformationMessage(`✅ File created: ${file.filename}`);
         }
-        vscode.window.showInformationMessage(`🎉 Semua file berhasil dibuat di: models/${folderName}`);
+        vscode.window.showInformationMessage(`🎉 All files succesfully created: models/${folderName}`);
     }
     catch (err) {
-        vico_logger_1.default.error('Gagal menulis file:', err);
-        vscode.window.showErrorMessage('Gagal menulis file: ' + (err.message || err.toString()));
+        vico_logger_1.default.error('Failed to write file:', err);
+        vscode.window.showErrorMessage('Failed to write file: ' + (err.message || err.toString()));
     }
 }
 function activate(context) {
