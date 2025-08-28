@@ -85,6 +85,9 @@ This extension is licensed under the MIT License. See the LICENSE file for detai
 
 ## Release Notes
 
+### 1.2.1
+- **fix**: fix: New training code base & redesign
+
 ### 1.2.0
 - **feat**: Generate Full CRUD Pages from Model Schema
 

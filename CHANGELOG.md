@@ -6,6 +6,9 @@
 
 ### Added
 
+### 1.2.1
+- **fix**: fix: New training code base & redesign
+
 ### 1.2.0
 - **feat**: Generate Full CRUD Pages from Model Schema
 
