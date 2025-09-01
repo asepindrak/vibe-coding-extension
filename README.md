@@ -32,6 +32,10 @@ Automatically generate complete frontend components (Form, List, Detail, Schema,
 - Once complete, it generates ready-to-use TypeScript and React files.
 - Files are saved directly into your project under `src/models/<model-name>/`.
 
+**Teach AI Current Code 🔄**  
+This feature allows you to train the AI with a sampled subset of the code in your workspace. By doing so, the AI gains a better understanding of the context, structure, and logic of your code. This helps the AI provide more accurate and relevant suggestions, explanations, and completions tailored to your specific project.
+Note: Only a sampled subset of files is used, not the full project.
+
 > ✅ Files generated:
 > - `model.schema.ts` (Zod validation)
 > - `ModelForm.tsx` (React form)
@@ -84,6 +88,9 @@ This extension is licensed under the MIT License. See the LICENSE file for detai
 ---
 
 ## Release Notes
+
+### 1.3.0
+- **feat**: Teach AI Current Code 🔄
 
 ### 1.2.2
 - **fix**: Confirm overwrite when generating file

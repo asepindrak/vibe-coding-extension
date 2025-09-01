@@ -2,9 +2,12 @@
 
 ## [Unreleased]
 
-## [1.2.2] - 2025-08-28
+## [1.3.0] - 2025-09-02
 
 ### Added
+
+### 1.3.0
+- **feat**: Teach AI Current Code 🔄
 
 ### 1.2.2
 - **fix**: Confirm overwrite when generating file
