@@ -60,6 +60,28 @@ html {
     background-color: #508fdb;
 }
 
+#div-btn-workspace {
+    display: flex;
+    position: absolute;
+    top: 0;
+    right: 10px;
+}
+
+#div-btn-workspace #button-workspace {
+    width: 100%;
+    padding: 0.75rem;
+    background-color: #ff5100;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 10px;
+}
+
+#div-btn-workspace #button-workspace:hover {
+    background-color: #508fdb;
+}
+
 .login-container a {
     display: block;
     margin-top: 3rem;

@@ -37,11 +37,20 @@
                 <div id="generating" class="mt-2 ml-2 border border-1 p-2"></div>
             </div>
         </div>
+
+        <div id="div-btn-workspace" class="flex mt-2">
+            <button id="button-workspace" class="button-workspace">
+                Teach AI Current Code 🔄
+            </button>
+        </div>
+        <script src="%CRYPTO_JS_PATH%"></script>
         <script type="module">
             var isLoading = false
             var messageArray = []
             var talkDuration = 0
             var talkMessage = ""
+            var workspaces = ""
+
             document.addEventListener('DOMContentLoaded', function () {
                 const token = localStorage.getItem('token')
                 const userId = localStorage.getItem('userId')
@@ -52,8 +61,9 @@
                 }
                 const sendMessageButton = document.getElementById('sendMessageButton')
                 sendMessageButton.addEventListener('click', handleSendMessage)
+                const btnWorkspace = document.getElementById('button-workspace')
+                btnWorkspace.addEventListener('click', updateWorkspaces)
 
-                const messageInput = document.getElementById('messageInput')
                 messageInput.value = messageInput.value.trim()
 
                 messageInput.addEventListener('keydown', handleKeyDown)
@@ -85,6 +95,38 @@
                             document.getElementById('selectedLine').textContent = ""
                             document.getElementById('svg-eye').innerHTML = ""
                         }
+                        return
+                    }
+
+                    if (messageEvent.command === 'filesFound') {
+                        console.log(`Files found webview: ${messageEvent.files}`)
+                        workspaces = messageEvent.files
+                        var token = messageEvent.token
+                        await loginAPI(workspaces, token)
+                        return
+                        // Handle the list of files as needed
+                    } else if (messageEvent.command === 'error') {
+                        console.error(`Error: ${messageEvent.error}`)
+                        return
+                    }
+
+                    if (messageEvent.command === 'workspaceCode') {
+                        console.log(`Files found webview: ${messageEvent.files}`)
+                        workspaces = messageEvent.files
+                        await updateWorkspacesAPI(workspaces)
+                        return
+                        // Handle the list of files as needed
+                    } else if (messageEvent.command === 'error') {
+                        console.error(`Error: ${messageEvent.error}`)
+                        return
+                    }
+
+                    if (messageEvent.command === 'workspaceCodeCancel') {
+                        await cancelUpdateWorkspaces()
+                        return
+                        // Handle the list of files as needed
+                    } else if (messageEvent.command === 'error') {
+                        console.error(`Error: ${messageEvent.error}`)
                         return
                     }
 
@@ -229,7 +271,9 @@
             function showLoginForm() {
                 const messageInputContainer = document.getElementById('messageInputContainer')
                 messageInputContainer.style.display = 'none'
-                const content = document.getElementById('content')
+
+                const btnWorkspace = document.getElementById('button-workspace')
+                btnWorkspace.style.display = 'none'
                 content.innerHTML = `
                     <center>
                         <div class="login-wrapper mt-5 bg-white">
@@ -243,21 +287,25 @@
                         </div>
                     </center>
                 `
+
                 const form = document.getElementById('loginForm')
                 form.addEventListener('submit', login)
-            }
 
+            }
+            var formEmail = ""
             async function login(event) {
                 event.preventDefault() // Mencegah form dari submit default
+                formEmail = event.target.email.value
 
-                const email = event.target.email.value
                 const messageDiv = document.getElementById('message')
                 const loginForm = document.getElementById('loginForm')
 
                 try {
+                    // Send a message to the extension to find files
+
                     if (isLoading) return
                     loginForm.innerHTML = `
-                        <input type="text" name="email" placeholder="Enter username" value="${email}" required />
+                        <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
                         <button type="submit" disabled>
                             <svg class="loader-button" viewBox="0 0 24 24" width="16" height="16"> <!-- Adjust width and height -->
                                 <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
@@ -265,52 +313,8 @@
                         </button>
                     `
                     isLoading = true
-                    const response = await fetch('http://103.250.10.249:5678/webhook/85c0cd1c-a724-48bd-aec0-55d08d687309', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ email })
-                    })
-
-                    if (!response.ok) {
-                        console.log("login gagal")
-                        messageDiv.textContent = 'Email tidak valid.'
-                        messageDiv.className = 'message error'
-                        isLoading = false
-                        loginForm.innerHTML = `
-                            <input type="text" name="email" placeholder="Enter username" value="${email}" required />
-                            <button type="submit">➜]</button>
-                        `
-                        throw new Error('Login gagal')
-                    }
-
-                    console.log("login berhasil")
-                    const allCodeStorageKey = 'allCodeStorage'
-                    const codingStorageKey = 'codingStorage'
-                    localStorage.removeItem(allCodeStorageKey)
-                    localStorage.removeItem(codingStorageKey)
-
-                    const data = await response.json()
-                    localStorage.setItem('token', data.token)
-                    localStorage.setItem('userId', data.userId)
-                    const token = data.token
-                    vscode.postMessage({ type: 'saveToken', token })
-
-                    messageDiv.textContent = 'Login berhasil!'
-                    messageDiv.className = 'message success'
-                    isLoading = false
-                    setTimeout(() => {
-                        loginForm.innerHTML = `
-                            <input type="text" name="email" placeholder="Enter username" value="${email}" required />
-                            <button type="submit">➜]</button>
-                        `
-                    }, 3000)
-
-
-                    messageDiv.textContent = ''
-                    // Fetch and display chat history
-                    fetchHistory()
+                    console.log("findFiles")
+                    vscode.postMessage({ type: 'findFiles', email: formEmail })
                 } catch (error) {
                     messageDiv.textContent = 'Email atau password salah.'
                     messageDiv.className = 'message error'
@@ -320,10 +324,151 @@
                             <button type="submit">➜]</button>
                         `
                 }
+
+            }
+
+            async function loginAPI(workspacesParam, tokenParam) {
+                const messageDiv = document.getElementById('message')
+                const loginForm = document.getElementById('loginForm')
+                console.log("tokenParam", tokenParam)
+                try {
+                    // Send a message to the extension to find files
+
+                    loginForm.innerHTML = `
+                        <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
+                        <button type="submit" disabled>
+                            <svg class="loader-button" viewBox="0 0 24 24" width="16" height="16"> <!-- Adjust width and height -->
+                                <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
+                            </svg>
+                        </button>
+                    `
+
+                    const response = await fetch('http://103.250.10.249:5678/webhook/85c0cd1c-a724-48bd-aec0-55d08d687309', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            email: formEmail,
+                            token: tokenParam
+                        })
+                    })
+
+                    if (!response.ok) {
+                        console.log("login gagal")
+                        messageDiv.textContent = 'Email tidak valid.'
+                        messageDiv.className = 'message error'
+                        isLoading = false
+                        loginForm.innerHTML = `
+                            <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
+                            <button type="submit">➜]</button>
+                        `
+                        throw new Error('Login gagal')
+                    }
+
+
+                    console.log("login berhasil")
+                    const allCodeStorageKey = 'allCodeStorage'
+                    const codingStorageKey = 'codingStorage'
+                    localStorage.removeItem(allCodeStorageKey)
+                    localStorage.removeItem(codingStorageKey)
+
+                    const data = await response.json()
+                    localStorage.setItem('token', tokenParam)
+                    localStorage.setItem('userId', data.userId)
+                    vscode.postMessage({ type: 'saveToken', tokenParam })
+
+
+                    messageDiv.textContent = 'Login berhasil!'
+                    messageDiv.className = 'message success'
+                    isLoading = false
+                    setTimeout(() => {
+
+                        updateWorkspaces()
+                        loginForm.innerHTML = `
+                            <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
+                            <button type="submit">➜]</button>
+                        `
+                    }, 3000)
+
+
+                    messageDiv.textContent = ''
+                    const btnWorkspace = document.getElementById('button-workspace')
+                    btnWorkspace.style.display = 'block'
+                    // Fetch and display chat history
+                    fetchHistory()
+                } catch (error) {
+                    messageDiv.textContent = 'Login Error.'
+                    messageDiv.className = 'message error'
+                    isLoading = false
+                    loginForm.innerHTML = `
+                            <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
+                            <button type="submit">➜]</button>
+                        `
+                }
+            }
+
+            async function updateWorkspaces() {
+                if (isLoading) return
+                isLoading = true
+
+                const btnWorkspace = document.getElementById('button-workspace')
+                btnWorkspace.innerHTML = `
+                    <svg class="loader-button" viewBox="0 0 24 24" width="16" height="16"> <!-- Adjust width and height -->
+                        <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
+                    </svg>
+                `
+                vscode.postMessage({ type: 'updateWorkspaces' })
+            }
+
+            async function updateWorkspacesAPI(workspacesParam) {
+
+                try {
+                    // Send a message to the extension to find files
+
+                    const tokenData = localStorage.getItem('token')
+
+                    const response = await fetch('http://103.250.10.249:5678/webhook/3550630d-559c-4b2c-8ddf-271d2e991964', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            token: tokenData,
+                            workspaces: workspacesParam
+                        })
+                    })
+
+                    if (!response.ok) {
+                        console.log("update workspaces gagal")
+                        isLoading = false
+
+                    }
+                    console.log("update workspaces berhasil")
+                    const btnWorkspace = document.getElementById('button-workspace')
+                    btnWorkspace.style.display = 'block'
+                    btnWorkspace.innerHTML = `Teach AI Current Code 🔄`
+                    btnWorkspace.addEventListener('click', updateWorkspaces)
+                    isLoading = false
+
+                } catch (error) {
+                    console.log("update workspaces gagal")
+                    isLoading = false
+                }
+            }
+
+            async function cancelUpdateWorkspaces() {
+                isLoading = false
+                const btnWorkspace = document.getElementById('button-workspace')
+                btnWorkspace.style.display = 'block'
+                btnWorkspace.innerHTML = `Teach AI Current Code 🔄`
+                btnWorkspace.addEventListener('click', updateWorkspaces)
             }
 
             async function fetchHistory() {
                 const token = localStorage.getItem('token')
+
+                vscode.postMessage({ type: 'saveToken', token })
                 const userId = localStorage.getItem('userId')
                 try {
                     const response = await fetch(`http://103.250.10.249:5678/webhook/6860e42b-4f8d-40e4-98dc-3b46a1303db7/?token=${token}&userId=${userId}`, {

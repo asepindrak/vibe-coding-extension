@@ -418,7 +418,7 @@ async function triggerCodeCompletion(context, comment, allCode) {
         loadingStatusBarItem.text = "🔄 Vibe Coding loading...";
         loadingStatusBarItem.show();
         try {
-            const response = await fetch('http://103.250.10.249:5678/webhook/01fe259e-4cf2-438f-9d99-69ea451e55f7', {
+            const response = await fetch('http://103.250.10.249:5678/webhook-test/01fe259e-4cf2-438f-9d99-69ea451e55f7', {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
