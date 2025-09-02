@@ -6,6 +6,14 @@
 
 ### Added
 
+### 1.3.1
+- Add token validation logic and update sidebar HTML content
+- Implemented token validation in the SidebarProvider class.
+- Combined userId with workspacePath to generate a unique token.
+- Added logic to check if the provided token matches the generated token.
+- Updated global state with the new token upon validation.
+- Enhanced HTML content replacement to include logo navigation path.
+
 ### 1.3.0
 - **feat**: Teach AI Current Code 🔄
 
