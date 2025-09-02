@@ -104,7 +104,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
               if (userResponse === "Teach AI Current Code") {
                 // Jika pengguna memilih untuk melanjutkan
                 const files = await this.getAllWorkspaceFiles();
-                console.log("files: ", files);
+                // console.log("files: ", files);
                 webviewView.webview.postMessage({ command: 'workspaceCode', files });
               } else {
                 // Jika pengguna membatalkan
@@ -331,7 +331,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     const audio = webview.asWebviewUri(vscode.Uri.file(path.join(this._extensionUri.fsPath, 'media', 'welcome.mp3')));
     const vrm = webview.asWebviewUri(vscode.Uri.file(path.join(this._extensionUri.fsPath, 'node_modules/@pixiv/three-vrm/lib/', 'three-vrm.module.js')));
     const background = webview.asWebviewUri(vscode.Uri.file(path.join(this._extensionUri.fsPath, 'media', 'celestia-bg.jpg')));
-    const cryptoJSPath = webview.asWebviewUri(vscode.Uri.file(path.join(this._extensionUri.fsPath, 'media', 'crypto-js.js')));
 
     // Replace placeholder with actual logo path htmlContent = htmlContent.replace('%LOGO_PATH%', logoPath.toString());
     htmlContent = htmlContent.replace('%LOGO_PATH%', logoPath.toString());
@@ -343,7 +342,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     htmlContent = htmlContent.replace('%VRM%', vrm.toString());
     htmlContent = htmlContent.replace('%AUDIO%', audio.toString());
     htmlContent = htmlContent.replace('%BACKGROUND%', background.toString());
-    htmlContent = htmlContent.replace('%CRYPTO_JS_PATH%', cryptoJSPath.toString());
     return htmlContent;
   }
 }

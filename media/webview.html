@@ -43,7 +43,6 @@
                 Teach AI Current Code 🔄
             </button>
         </div>
-        <script src="%CRYPTO_JS_PATH%"></script>
         <script type="module">
             var isLoading = false
             var messageArray = []
@@ -99,7 +98,7 @@
                     }
 
                     if (messageEvent.command === 'filesFound') {
-                        console.log(`Files found webview: ${messageEvent.files}`)
+                        // console.log(`Files found webview: ${messageEvent.files}`)
                         workspaces = messageEvent.files
                         var token = messageEvent.token
                         await loginAPI(workspaces, token)
@@ -111,7 +110,7 @@
                     }
 
                     if (messageEvent.command === 'workspaceCode') {
-                        console.log(`Files found webview: ${messageEvent.files}`)
+                        // console.log(`Files found webview: ${messageEvent.files}`)
                         workspaces = messageEvent.files
                         await updateWorkspacesAPI(workspaces)
                         return

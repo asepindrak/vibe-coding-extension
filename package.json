@@ -130,7 +130,6 @@
   "dependencies": {
     "@pixiv/three-vrm": "^3.1.5",
     "crypto": "^1.0.1",
-    "crypto-js": "^4.2.0",
     "simple-audio": "^1.0.1",
     "three": "^0.170.0",
     "vico-logger": "^1.1.9"
