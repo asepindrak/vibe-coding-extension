@@ -268,6 +268,11 @@ code {
     /* 8px */
 }
 
+.p-8 {
+    padding: 0.8rem;
+    /* 8px */
+}
+
 .rounded-lg {
     border-radius: 0.5rem;
     /* 8px */
@@ -538,6 +543,7 @@ button:active {
 }
 
 .content {
+    margin-top: 60px;
     width: auto;
     /* Allow the message to take its natural width */
     max-width: 100%;
@@ -551,6 +557,21 @@ button:active {
     word-wrap: break-word;
     /* Adjust height as needed */
     /* Prevents the content from exceeding the width of the screen */
+}
+
+.logo {
+    position: fixed;
+    top: 0;
+    left: 30%;
+    z-index: 1000;
+    text-align: center;
+    width: 60px;
+    height: auto;
+}
+
+.pt-20 {
+    padding-top: 5rem;
+    /* 80px */
 }
 
 .message {

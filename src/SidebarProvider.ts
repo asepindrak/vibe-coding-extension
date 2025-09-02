@@ -63,6 +63,28 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             // Simpan token di globalState
             this.context.globalState.update('token', message.token);
             return;
+          case 'validateToken':
+            // Simpan token di globalState
+            let workspacePath = '';
+            if (vscode.workspace.workspaceFolders) {
+              workspacePath = vscode.workspace.workspaceFolders[0].uri.fsPath;
+            } else {
+              let randomNum = Math.floor(Math.random() * 100000);
+              workspacePath = randomNum.toString();
+            }
+            const uniqueInput = `${message.userId}:${workspacePath}`; // Gabungkan userId dengan workspacePath
+
+            console.log("workspacePath: ", uniqueInput);
+            const token = crypto.createHash('md5').update(uniqueInput).digest('hex');
+            if (message.token === token) {
+              console.log("Token is valid");
+              webviewView.webview.postMessage({ command: 'tokenValid', userId: message.userId, token });
+            } else {
+              console.log("Token is invalid");
+              webviewView.webview.postMessage({ command: 'tokenInvalid' });
+            }
+            this.context.globalState.update('token', token);
+            return;
           case 'writeFile':
             this.context.globalState.update('writeContent', message.assistantMessage);
             await vscode.commands.executeCommand('vibe-coding.writeFile');
@@ -334,6 +356,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     // Replace placeholder with actual logo path htmlContent = htmlContent.replace('%LOGO_PATH%', logoPath.toString());
     htmlContent = htmlContent.replace('%LOGO_PATH%', logoPath.toString());
+    htmlContent = htmlContent.replace('%LOGO_NAV_PATH%', logoPath.toString());
     htmlContent = htmlContent.replace('%STYLES_PATH%', stylesPath.toString());
     htmlContent = htmlContent.replace('%PRISM_PATH%', prismPath.toString());
     htmlContent = htmlContent.replace('%PRISMJS_PATH%', prismJSPath.toString());
