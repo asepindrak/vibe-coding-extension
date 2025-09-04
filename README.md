@@ -1,4 +1,4 @@
-# Vibe Coding - Your Coding Companion
+# Vibe Coding (VICO) - 404 Stress Not Found!
 
 Vibe Coding is a chat extension with an assistant designed to help you while programming.
 
