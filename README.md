@@ -93,6 +93,9 @@ This extension is licensed under the MIT License. See the LICENSE file for detai
 
 ## Release Notes
 
+### 1.4.1
+- Rename to Vibe Coding - VICO
+
 ### 1.4.0
 - Generate API Spec (Postman) from ERD/DB Diagram
 

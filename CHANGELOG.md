@@ -2,9 +2,12 @@
 
 ## [Unreleased]
 
-## [1.4.0] - 2025-09-04
+## [1.4.1] - 2025-09-05
 
 ### Added
+
+### 1.4.1
+- Rename to Vibe Coding - VICO
 
 ### 1.4.0
 - Generate API Spec (Postman) from ERD/DB Diagram
