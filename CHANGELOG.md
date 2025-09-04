@@ -2,9 +2,12 @@
 
 ## [Unreleased]
 
-## [1.3.1] - 2025-09-02
+## [1.4.0] - 2025-09-04
 
 ### Added
+
+### 1.4.0
+- Generate API Spec (Postman) from ERD/DB Diagram
 
 ### 1.3.1
 - Add token validation logic and update sidebar HTML content

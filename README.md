@@ -68,10 +68,14 @@ Note: Only a sampled subset of files is used, not the full project.
 3. **Start Chatting**: Type your questions or messages, and Vibe Coding will respond.
 4. **Get Assistance**: Ask coding-related questions, debugging help, or request code generation.
 5. **Generate a Model/Page**:
-   - Example prompt: *"Buatkan model GoatCategory dengan field: name (string), createdAt (date)"*
-   - AI akan memastikan skema lengkap.
-   - Setelah lengkap, AI menghasilkan file dan extension membuatnya di proyek kamu.
-   - Cek folder: `src/models/goatCategory/`
+   - Example prompt: *"Create a GoatCategory model with fields: name (string), createdAt (date)"*
+   - The AI will ensure the schema is complete.
+   - Once complete, the AI generates the file and the extension creates it in your project.
+   - Check the folder: `src/models/goatCategory/`
+6. **Generate an API SPEC**:
+   - Example prompt: *"Generate API Spec from this ERD:"* (create ERD/DB Diagram from this website https://dbdiagram.io/, then copy & paste the ERD text)
+   - The AI will ensure the ERD is complete.
+   - Once complete, the AI generates the API Spec
 
 ---
 
@@ -88,6 +92,9 @@ This extension is licensed under the MIT License. See the LICENSE file for detai
 ---
 
 ## Release Notes
+
+### 1.4.0
+- Generate API Spec (Postman) from ERD/DB Diagram
 
 ### 1.3.1
 - Add token validation logic and update sidebar HTML content
