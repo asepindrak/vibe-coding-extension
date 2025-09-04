@@ -46,7 +46,7 @@
       "activitybar": [
         {
           "id": "vibe-coding-sidebar",
-          "title": "Vibe Coding",
+          "title": "Vibe Coding - VICO",
           "icon": "media/icon.svg"
         }
       ]
@@ -56,9 +56,9 @@
         {
           "type": "webview",
           "id": "vibe-coding-sidebar",
-          "name": "Vibe Coding",
+          "name": "Vibe Coding - VICO",
           "icon": "media/icon.svg",
-          "contextualTitle": "Vibe Coding"
+          "contextualTitle": "Vibe Coding - VICO"
         }
       ]
     },
