@@ -2,9 +2,12 @@
 
 ## [Unreleased]
 
-## [1.4.1] - 2025-09-05
+## [1.4.3] - 2025-09-15
 
 ### Added
+
+### 1.4.3
+- Change Webhook URL
 
 ### 1.4.1
 - Rename to Vibe Coding - VICO
