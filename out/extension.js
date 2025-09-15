@@ -82,7 +82,7 @@ async function fetchSuggestions(context, editor) {
                 `Continue this line naturally. Do NOT repeat existing text, and do NOT add braces, semicolons, or syntax that already exists later in the file.`
         };
         try {
-            const response = await fetch('http://103.250.10.249:5678/webhook/01fe259e-4cf2-438f-9d99-69ea451e55f7', {
+            const response = await fetch('http://103.250.10.249:5678/webhook/suggest', {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -418,7 +418,7 @@ async function triggerCodeCompletion(context, comment, allCode) {
         loadingStatusBarItem.text = "🔄 Vibe Coding loading...";
         loadingStatusBarItem.show();
         try {
-            const response = await fetch('http://103.250.10.249:5678/webhook/01fe259e-4cf2-438f-9d99-69ea451e55f7', {
+            const response = await fetch('http://103.250.10.249:5678/webhook/suggest', {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
