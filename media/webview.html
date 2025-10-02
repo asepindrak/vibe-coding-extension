@@ -243,7 +243,7 @@
 
                 try {
                     isLoading = true
-                    const response = await fetch('http://103.250.10.249:5678/webhook/message', {
+                    const response = await fetch('http://103.250.10.249:13100/api/message', {
                         method: 'POST',
                         headers: {
                             'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -367,7 +367,7 @@
                         </button>
                     `
 
-                    const response = await fetch('http://103.250.10.249:5678/webhook/login', {
+                    const response = await fetch('http://103.250.10.249:13100/api/login', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
@@ -452,7 +452,7 @@
 
                     const tokenData = localStorage.getItem('token')
 
-                    const response = await fetch('http://103.250.10.249:5678/webhook/workspace', {
+                    const response = await fetch('http://103.250.10.249:13100/api/workspace', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
@@ -498,7 +498,7 @@
                 vscode.postMessage({ type: 'saveToken', token })
                 const userId = localStorage.getItem('userId')
                 try {
-                    const response = await fetch(`http://103.250.10.249:5678/webhook/history/?token=${token}&userId=${userId}`, {
+                    const response = await fetch(`http://103.250.10.249:13100/api/history/?token=${token}&userId=${userId}`, {
                         method: 'GET',
                         headers: {
                             'Authorization': `Bearer ${localStorage.getItem('token')}`,
