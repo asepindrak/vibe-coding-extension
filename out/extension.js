@@ -114,7 +114,10 @@ async function presentSuggestions(suggestion) {
         // Beri jeda kecil agar state update
         await new Promise(resolve => setTimeout(resolve, 50));
         // Trigger autocomplete
-        await vscode.commands.executeCommand('editor.action.triggerSuggest');
+        const editor = vscode.window.activeTextEditor;
+        if (editor && lastSuggestion) {
+            editor.insertSnippet(new vscode.SnippetString(lastSuggestion), editor.selection.active);
+        }
     }
     else {
         vscode.window.showInformationMessage("No suggestions available.");
