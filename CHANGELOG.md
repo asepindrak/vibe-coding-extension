@@ -2,12 +2,19 @@
 
 ## [Unreleased]
 
-## [1.4.3] - 2025-09-15
+## [1.4.5] - 2025-10-04
 
 ### Added
 
+### 1.4.5
+- Up version & update changelog
+
+### 1.4.4
+- Stream AI responses in real time to the chat
+- Replace autocomplete trigger with snippet insertion in presentSuggestions function
+
 ### 1.4.3
-- Change Webhook URL
+- Updated Webhook URL
 
 ### 1.4.1
 - Rename to Vibe Coding - VICO

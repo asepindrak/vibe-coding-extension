@@ -93,8 +93,15 @@ This extension is licensed under the MIT License. See the LICENSE file for detai
 
 ## Release Notes
 
+### 1.4.5
+- Up version & update changelog
+
+### 1.4.4
+- Stream AI responses in real time to the chat
+- Replace autocomplete trigger with snippet insertion in presentSuggestions function
+
 ### 1.4.3
-- Change Webhook URL
+- Updated Webhook URL
 
 ### 1.4.1
 - Rename to Vibe Coding - VICO
