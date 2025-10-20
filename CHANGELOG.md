@@ -2,9 +2,12 @@
 
 ## [Unreleased]
 
-## [1.4.5] - 2025-10-04
+## [1.4.6] - 2025-10-20
 
 ### Added
+
+### 1.4.6
+- Fix languageRegex
 
 ### 1.4.5
 - Up version & update changelog

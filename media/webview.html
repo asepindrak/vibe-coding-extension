@@ -633,7 +633,7 @@
 
                                 const codeLines = codeContent.split('\n')
                                 const firstLine = codeLines[0].trim()
-                                const languageRegex = /^(nginx|dockerfile|javascript|python|java|c\+\+|c#|ruby|go|php|typescript|swift|kotlin|json|jsx|tsx|html|css|xml|c|rust|perl|r|bash|cmd|yml|yaml|markdown)$/i
+                                const languageRegex = /^(nginx|dockerfile|javascript|js|typescript|ts|python|java|c\+\+|cpp|c#|cs|ruby|go|php|swift|kotlin|json|jsx|tsx|html|css|xml|c|rust|perl|r|bash|shell|cmd|powershell|yml|yaml|markdown|md|lua|dart|sql|ini|toml|env|vue|svelte|makefile|plaintext|text|txt)$/i
 
                                 if (languageRegex.test(firstLine)) {
                                     codeContent = codeLines.slice(1).join('\n').trim() // Remove the first line if it matches a language
@@ -811,7 +811,7 @@
 
                         const codeLines = codeContent.split('\n')
                         const firstLine = codeLines[0].trim()
-                        const languageRegex = /^(nginx|dockerfile|javascript|python|java|c\+\+|c#|ruby|go|php|typescript|swift|kotlin|json|jsx|tsx|html|css|xml|c|rust|perl|r|bash|cmd|yml|yaml|markdown)$/i
+                        const languageRegex = /^(nginx|dockerfile|javascript|js|typescript|ts|python|java|c\+\+|cpp|c#|cs|ruby|go|php|swift|kotlin|json|jsx|tsx|html|css|xml|c|rust|perl|r|bash|shell|cmd|powershell|yml|yaml|markdown|md|lua|dart|sql|ini|toml|env|vue|svelte|makefile|plaintext|text|txt)$/i
 
                         if (languageRegex.test(firstLine)) {
                             codeContent = codeLines.slice(1).join('\n').trim() // Remove the first line if it matches a language
@@ -971,7 +971,7 @@
 
                         const codeLines = codeContent.split('\n')
                         const firstLine = codeLines[0].trim()
-                        const languageRegex = /^(nginx|dockerfile|javascript|python|java|c\+\+|c#|ruby|go|php|typescript|swift|kotlin|json|jsx|tsx|html|css|xml|c|rust|perl|r|bash|cmd|yml|yaml|markdown)$/i
+                        const languageRegex = /^(nginx|dockerfile|javascript|js|typescript|ts|python|java|c\+\+|cpp|c#|cs|ruby|go|php|swift|kotlin|json|jsx|tsx|html|css|xml|c|rust|perl|r|bash|shell|cmd|powershell|yml|yaml|markdown|md|lua|dart|sql|ini|toml|env|vue|svelte|makefile|plaintext|text|txt)$/i
 
                         if (languageRegex.test(firstLine)) {
                             codeContent = codeLines.slice(1).join('\n').trim() // Remove the first line if it matches a language
