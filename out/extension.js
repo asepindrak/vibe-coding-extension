@@ -160,8 +160,9 @@ async function writeFileVico(context, editor) {
         const files = [];
         for (const section of sections) {
             const headerMatch = section.match(/^(schema|form|table|detail|action|type):\s*(.+)$/m);
-            if (!headerMatch)
+            if (!headerMatch) {
                 continue;
+            }
             const [, type, filename] = headerMatch;
             const codeMatch = section.match(/```(?:ts|tsx|js|jsx)\n([\s\S]*?)\n```/);
             const codeContent = codeMatch ? codeMatch[1] : '// Konten kosong atau parsing gagal';

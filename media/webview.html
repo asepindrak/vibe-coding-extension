@@ -53,6 +53,19 @@
             var talkMessage = ""
             var workspaces = ""
 
+            const vscode = acquireVsCodeApi()
+            const persistedState = vscode.getState() || {}
+
+            function saveState() {
+                vscode.setState({
+                    messagesHTML: document.getElementById('content').innerHTML,
+                    input: document.getElementById('messageInput')?.value ?? '',
+                    token: localStorage.getItem('token'),
+                    userId: localStorage.getItem('userId'),
+                    messages: messageArray
+                })
+            }
+
             document.addEventListener('DOMContentLoaded', function () {
                 const token = localStorage.getItem('token')
                 const userId = localStorage.getItem('userId')
@@ -135,7 +148,13 @@
                     if (messageEvent.command === 'tokenValid') {
                         localStorage.setItem('token', messageEvent.token)
                         localStorage.setItem('userId', messageEvent.userId)
-                        fetchHistory()
+                        // Fetch and display chat history
+                        if (persistedState.messagesHTML) {
+                            document.getElementById('content').innerHTML = persistedState.messagesHTML
+                            document.getElementById('messageInput').value = persistedState.input ?? ''
+                        } else {
+                            fetchHistory()
+                        }
                         return
                         // Handle the list of files as needed
                     } else if (messageEvent.command === 'error') {
@@ -237,6 +256,9 @@
                 // add an empty “assistant” bubble that we’ll update
                 displayMessagesAssistant({ role: 'assistant', content: '', uniqueId: `assistant-${uniqueId}` })
 
+                //save message
+                messageArray.push({ role: 'user', content: message })
+                saveState()
                 const data = {
                     userId: localStorage.getItem('userId'),
                     token: localStorage.getItem('token'),
@@ -288,6 +310,8 @@
                     sendBtn.classList.remove('hidden')
                     document.getElementById('generating').innerHTML = ''
                     setTimeout(() => {
+
+                        saveState()
                         isLoading = false
                         const messageInput = document.getElementById('messageInput')
                         messageInput.value = ''
@@ -429,7 +453,12 @@
                     const btnWorkspace = document.getElementById('button-workspace')
                     btnWorkspace.style.display = 'block'
                     // Fetch and display chat history
-                    fetchHistory()
+                    if (persistedState.messagesHTML) {
+                        document.getElementById('content').innerHTML = persistedState.messagesHTML
+                        document.getElementById('messageInput').value = persistedState.input ?? ''
+                    } else {
+                        fetchHistory()
+                    }
                 } catch (error) {
                     messageDiv.textContent = 'Login Error.'
                     messageDiv.className = 'message error'
@@ -499,11 +528,15 @@
             }
 
             async function fetchHistory() {
-                const token = localStorage.getItem('token')
 
                 const logo = document.getElementById('logo')
                 logo.style.display = 'block'
-
+                if (persistedState.messagesHTML) {
+                    document.getElementById('content').innerHTML = persistedState.messagesHTML
+                    document.getElementById('messageInput').value = persistedState.input ?? ''
+                    return
+                }
+                const token = localStorage.getItem('token')
                 vscode.postMessage({ type: 'saveToken', token })
                 const userId = localStorage.getItem('userId')
                 try {
@@ -522,6 +555,8 @@
                     const historyData = await response.json()
                     console.log(historyData)
                     loadMessages(historyData)
+                    messageArray = historyData.messages
+                    saveState()
                 } catch (error) {
                     console.error('Error fetching history:', error)
                     document.getElementById('message').textContent = 'Gagal mengambil riwayat chat.'
@@ -1126,9 +1161,6 @@
                 showLoginForm()
             }
 
-
-
-            const vscode = acquireVsCodeApi()
 
 
 

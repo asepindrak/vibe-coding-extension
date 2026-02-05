@@ -340,7 +340,11 @@ class SidebarProvider {
             });
         }
     }
+    _cachedHtml;
     getHtmlForWebview(webview) {
+        if (this._cachedHtml) {
+            return this._cachedHtml;
+        }
         const htmlPath = path.join(this._extensionUri.fsPath, 'media', 'webview.html');
         let htmlContent = fs.readFileSync(htmlPath, 'utf8');
         const logoPath = webview.asWebviewUri(vscode.Uri.file(path.join(this._extensionUri.fsPath, 'media', 'logo.png')));
@@ -362,6 +366,7 @@ class SidebarProvider {
         htmlContent = htmlContent.replace('%VRM%', vrm.toString());
         htmlContent = htmlContent.replace('%AUDIO%', audio.toString());
         htmlContent = htmlContent.replace('%BACKGROUND%', background.toString());
+        this._cachedHtml = htmlContent;
         return htmlContent;
     }
 }

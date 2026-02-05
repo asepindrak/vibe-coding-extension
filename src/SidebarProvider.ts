@@ -21,6 +21,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       localResourceRoots: [this._extensionUri]
     };
 
+
     const selectedText = webviewView.webview.onDidReceiveMessage((message) => {
       if (message.command === 'getSelectedText') {
         console.log("get selected text");
@@ -342,7 +343,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  private _cachedHtml?: string;
+
   private getHtmlForWebview(webview: vscode.Webview): string {
+    if (this._cachedHtml) {
+      return this._cachedHtml;
+    }
     const htmlPath = path.join(this._extensionUri.fsPath, 'media', 'webview.html');
     let htmlContent = fs.readFileSync(htmlPath, 'utf8');
     const logoPath = webview.asWebviewUri(vscode.Uri.file(path.join(this._extensionUri.fsPath, 'media', 'logo.png')));
@@ -365,6 +371,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     htmlContent = htmlContent.replace('%VRM%', vrm.toString());
     htmlContent = htmlContent.replace('%AUDIO%', audio.toString());
     htmlContent = htmlContent.replace('%BACKGROUND%', background.toString());
+
+    this._cachedHtml = htmlContent;
     return htmlContent;
   }
 }

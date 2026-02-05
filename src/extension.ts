@@ -141,7 +141,9 @@ async function writeFileVico(context: vscode.ExtensionContext, editor: vscode.Te
 
 		for (const section of sections) {
 			const headerMatch = section.match(/^(schema|form|table|detail|action|type):\s*(.+)$/m);
-			if (!headerMatch) continue;
+			if (!headerMatch) {
+				continue;
+			}
 
 			const [, type, filename] = headerMatch;
 			const codeMatch = section.match(/```(?:ts|tsx|js|jsx)\n([\s\S]*?)\n```/);
