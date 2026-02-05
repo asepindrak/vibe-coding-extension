@@ -283,6 +283,11 @@ code {
     /* Blue */
 }
 
+.bg-gray-500 {
+    background-color: #3f3f3f;
+    /* Gray */
+}
+
 .bg-blue-300 {
     background-color: #13366e;
     /* Blue */

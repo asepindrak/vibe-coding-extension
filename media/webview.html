@@ -169,6 +169,8 @@
                             var content = document.getElementById('content')
                             // Scroll to the bottom of the content
                             content.scrollTop = content.scrollHeight
+                            const messageInput = document.getElementById('messageInput')
+                            messageInput.focus()
                         } else {
                             fetchHistory()
                         }
@@ -302,6 +304,7 @@
                     const decoder = new TextDecoder()
                     let assistantMessage = ''
 
+                    var no = 0
                     // read the stream
                     while (true) {
                         messageInput.value = ''
@@ -313,6 +316,11 @@
 
                         // update the existing assistant bubble
                         updateMessagesAssistant({ uniqueId: `assistant-${uniqueId}`, content: assistantMessage })
+                        if (no == 0) {
+                            const content = document.getElementById('content')
+                            content.scrollTop = content.scrollHeight
+                        }
+                        no++
                     }
 
                     console.log("stream finished")
@@ -471,10 +479,21 @@
                     messageDiv.textContent = ''
                     const btnWorkspace = document.getElementById('button-workspace')
                     btnWorkspace.style.display = 'block'
+
                     // Fetch and display chat history
                     if (persistedState.messagesHTML) {
                         document.getElementById('content').innerHTML = persistedState.messagesHTML
                         document.getElementById('messageInput').value = persistedState.input ?? ''
+                        // Show the message input container
+                        const messageInputContainer = document.getElementById('messageInputContainer')
+                        messageInputContainer.style.display = 'block'
+
+                        // Scroll to the bottom of the content
+                        var content = document.getElementById('content')
+                        content.scrollTop = content.scrollHeight
+                        // focus the message input
+                        const messageInput = document.getElementById('messageInput')
+                        messageInput.focus()
                     } else {
                         fetchHistory()
                     }
@@ -556,6 +575,16 @@
                 if (persistedState.messagesHTML) {
                     document.getElementById('content').innerHTML = persistedState.messagesHTML
                     document.getElementById('messageInput').value = persistedState.input ?? ''
+
+                    // Show the message input container
+                    const messageInputContainer = document.getElementById('messageInputContainer')
+                    messageInputContainer.style.display = 'block'
+                    // Scroll to the bottom of the content
+                    var content = document.getElementById('content')
+                    content.scrollTop = content.scrollHeight
+                    // focus the message input
+                    const messageInput = document.getElementById('messageInput')
+                    messageInput.focus()
                     return
                 }
                 try {
@@ -613,6 +642,8 @@
 
                     // Scroll to the bottom of the content
                     content.scrollTop = content.scrollHeight
+                    const messageInput = document.getElementById('messageInput')
+                    messageInput.focus()
 
                 } catch (error) {
                     console.error('Error fetching messages:', error)
@@ -638,7 +669,7 @@
 
 
                         const messageContent = document.createElement('div')
-                        messageContent.className = `inline-block p-2 rounded-lg ${msg.role === 'user' ? 'bg-blue-500 text-white' : 'bg-grey text-grey-100'}`
+                        messageContent.className = `inline-block p-2 rounded-lg ${msg.role === 'user' ? 'bg-gray-500 text-white' : 'bg-grey text-grey-100'}`
                         messageContent.style.whiteSpace = 'pre-wrap'
 
                         parts.filter(part => part).forEach((part, i) => {
@@ -810,6 +841,8 @@
 
                 content.appendChild(chatContainer)
                 content.scrollTop = content.scrollHeight
+                const messageInput = document.getElementById('messageInput')
+                messageInput.focus()
             }
 
             function displayMessagesAssistant(msg) {
@@ -824,7 +857,7 @@
 
 
                 const messageContent = document.createElement('div')
-                messageContent.className = `inline-block p-2 rounded-lg ${msg.role === 'user' ? 'bg-blue-500 text-white' : 'bg-grey text-grey-100'}`
+                messageContent.className = `inline-block p-2 rounded-lg ${msg.role === 'user' ? 'bg-gray-500 text-white' : 'bg-grey text-grey-100'}`
                 messageContent.style.whiteSpace = 'pre-wrap'
                 messageContent.id = msg.uniqueId
 
@@ -975,6 +1008,8 @@
                 chatContainer.appendChild(messageDiv)
                 content.appendChild(chatContainer)
                 content.scrollTop = content.scrollHeight
+                const messageInput = document.getElementById('messageInput')
+                messageInput.focus()
             }
 
             function updateMessagesAssistant(msg) {
@@ -1131,8 +1166,6 @@
                     }
                 })
 
-                const content = document.getElementById('content')
-                content.scrollTop = content.scrollHeight
 
             }
 
