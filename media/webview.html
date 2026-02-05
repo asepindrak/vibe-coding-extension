@@ -56,6 +56,17 @@
             const vscode = acquireVsCodeApi()
             const persistedState = vscode.getState() || {}
 
+
+
+            // const buttonContainer = document.createElement('div')
+            // buttonContainer.className = 'p-8'
+            // const logoutButton = document.createElement('button')
+            // logoutButton.className = 'logout-button'
+            // logoutButton.textContent = '⏻'
+            // logoutButton.onclick = logout
+            // buttonContainer.appendChild(logoutButton)
+            // content.appendChild(buttonContainer)
+
             function saveState() {
                 vscode.setState({
                     messagesHTML: document.getElementById('content').innerHTML,
@@ -152,6 +163,12 @@
                         if (persistedState.messagesHTML) {
                             document.getElementById('content').innerHTML = persistedState.messagesHTML
                             document.getElementById('messageInput').value = persistedState.input ?? ''
+                            // Show the message input container
+                            const messageInputContainer = document.getElementById('messageInputContainer')
+                            messageInputContainer.style.display = 'block'
+                            var content = document.getElementById('content')
+                            // Scroll to the bottom of the content
+                            content.scrollTop = content.scrollHeight
                         } else {
                             fetchHistory()
                         }
@@ -248,6 +265,8 @@
             async function sendMessageToApi(message) {
                 if (isLoading) return
                 isLoading = true
+                const messageInput = document.getElementById('messageInput')
+                messageInput.disabled = true // Disable message input while loading
 
                 // add the “user” bubble
                 const uniqueId = Date.now() + Math.random()
@@ -285,6 +304,7 @@
 
                     // read the stream
                     while (true) {
+                        messageInput.value = ''
                         const { value, done } = await reader.read()
                         if (done) break
                         const chunk = decoder.decode(value, { stream: true })
@@ -309,12 +329,11 @@
                     loader.classList.add('hidden')
                     sendBtn.classList.remove('hidden')
                     document.getElementById('generating').innerHTML = ''
+                    saveState()
                     setTimeout(() => {
-
-                        saveState()
                         isLoading = false
-                        const messageInput = document.getElementById('messageInput')
-                        messageInput.value = ''
+                        messageInput.disabled = false // Enable message input after loading is complete
+                        messageInput.focus()
                     }, 1000)
 
                 } catch (err) {
@@ -531,14 +550,14 @@
 
                 const logo = document.getElementById('logo')
                 logo.style.display = 'block'
+                const token = localStorage.getItem('token')
+                vscode.postMessage({ type: 'saveToken', token })
+                const userId = localStorage.getItem('userId')
                 if (persistedState.messagesHTML) {
                     document.getElementById('content').innerHTML = persistedState.messagesHTML
                     document.getElementById('messageInput').value = persistedState.input ?? ''
                     return
                 }
-                const token = localStorage.getItem('token')
-                vscode.postMessage({ type: 'saveToken', token })
-                const userId = localStorage.getItem('userId')
                 try {
                     const response = await fetch(`http://103.250.10.249:13100/api/history/?token=${token}&userId=${userId}`, {
                         method: 'GET',
@@ -598,17 +617,6 @@
                 } catch (error) {
                     console.error('Error fetching messages:', error)
                     content.innerHTML = 'Failed to load messages.'
-
-
-
-                    const buttonContainer = document.createElement('div')
-                    buttonContainer.className = 'p-8'
-                    const logoutButton = document.createElement('button')
-                    logoutButton.className = 'logout-button'
-                    logoutButton.textContent = '⏻'
-                    logoutButton.onclick = logout
-                    buttonContainer.appendChild(logoutButton)
-                    content.appendChild(buttonContainer)
                 }
             }
 
@@ -617,17 +625,6 @@
             function displayMessages(messages) {
                 const content = document.getElementById('content')
                 content.innerHTML = ''
-
-                const buttonContainer = document.createElement('div')
-                buttonContainer.className = 'p-8'
-                const logoutButton = document.createElement('button')
-                logoutButton.className = 'logout-button'
-                logoutButton.textContent = '⏻'
-                logoutButton.onclick = logout
-                buttonContainer.appendChild(logoutButton)
-                content.appendChild(buttonContainer)
-
-
                 const chatContainer = document.createElement('div')
                 chatContainer.className = 'flex-grow overflow-y-auto p-4 bg-chat custom-scrollbar'
                 let talkDuration = 0
@@ -1152,6 +1149,7 @@
             }
 
             function logout() {
+                console.log('Logging out...')
                 localStorage.removeItem('token')
                 localStorage.removeItem('userId')
                 const allCodeStorageKey = 'allCodeStorage'

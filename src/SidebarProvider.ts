@@ -121,7 +121,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                 "This action will train the AI with a sampled subset of the code in your workspace. This process helps the AI understand the context of your code, including its structure and logic. Do you want to proceed? Note: This may include sensitive or private code.",
                 { modal: true }, // Modal untuk memastikan pengguna memberikan respons
                 "Teach AI Current Code", // Tombol konfirmasi
-                "Cancel" // Tombol batal
               );
 
               if (userResponse === "Teach AI Current Code") {

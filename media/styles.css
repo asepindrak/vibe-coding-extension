@@ -562,7 +562,7 @@ button:active {
 .logo {
     position: fixed;
     top: 0;
-    left: 30%;
+    left: 5%;
     z-index: 1000;
     text-align: center;
     width: 60px;

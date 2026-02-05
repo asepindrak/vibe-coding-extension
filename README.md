@@ -93,6 +93,12 @@ This extension is licensed under the MIT License. See the LICENSE file for detai
 
 ## Release Notes
 
+### 1.4.8
+- Input message & loading improvement
+
+### 1.4.7
+- Enhance SidebarProvider performance by caching HTML content and improve code readability in extension.ts
+
 ### 1.4.6
 - Fix languageRegex
 

@@ -2,9 +2,15 @@
 
 ## [Unreleased]
 
-## [1.4.6] - 2025-10-20
+## [1.4.8] - 2026-02-06
 
 ### Added
+
+### 1.4.8
+- Input message & loading improvement
+
+### 1.4.7
+- Enhance SidebarProvider performance by caching HTML content and improve code readability in extension.ts
 
 ### 1.4.6
 - Fix languageRegex
