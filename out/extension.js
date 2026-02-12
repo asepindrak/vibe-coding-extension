@@ -46,6 +46,8 @@ const path = __importStar(require("path"));
 const vico_logger_1 = __importDefault(require("vico-logger"));
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
+let lastSuggestion = null;
+let lastLinePrefix = null;
 function debounce(func, wait) {
     let timeout;
     return function executedFunction(...args) {
@@ -59,68 +61,143 @@ function debounce(func, wait) {
         timeout = setTimeout(later, wait); // Set new timeout
     };
 }
+function stripPrefix(suggestion, linePrefix) {
+    if (suggestion.startsWith(linePrefix)) {
+        return suggestion.slice(linePrefix.length);
+    }
+    return suggestion;
+}
+let requestId = 0;
+let currentAbortController = null;
+let lastRequestLine = null;
+let lastRequestPrefix = null;
+let lastTypedAt = Date.now();
 async function fetchSuggestions(context, editor) {
-    const currentLine = editor.selection.active.line;
-    const lineText = editor.document.lineAt(currentLine).text;
-    // Remove comments and prepare the input for the API
+    if (!isInlineEnabled())
+        return;
+    currentAbortController?.abort();
+    const controller = new AbortController();
+    currentAbortController = controller;
+    const currentRequest = ++requestId;
+    const cursorLine = editor.selection.active.line;
+    // 👉 Baris sumber (kalau baris kosong, ambil baris atas)
+    let sourceLine = cursorLine;
+    let lineText = editor.document.lineAt(cursorLine).text;
+    if (!lineText.trim() && cursorLine > 0) {
+        sourceLine = cursorLine - 1;
+        lineText = editor.document.lineAt(sourceLine).text;
+    }
+    if (!lineText.trim())
+        return;
     const cleanedInput = removeCommentTags(lineText.trim());
-    if (cleanedInput) {
-        const allCode = editor.document.getText();
-        const token = context.globalState.get('token'); // Get your token
-        const filePath = editor.document.fileName;
-        const fileName = path.basename(filePath); // Dapatkan nama file saja
-        // Buat StatusBarItem untuk loading
-        const loadingStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-        loadingStatusBarItem.text = "🔄 Code Sugestion from Vibe Coding...";
-        loadingStatusBarItem.show();
-        console.log("Fetching suggestions for:", cleanedInput);
-        const body = {
-            userId: 'vscode-user',
-            token: token,
-            message: `The full code is:\n${allCode}\n\n` +
-                `The user is currently typing this line: "${cleanedInput}".\n` +
-                `Continue this line naturally. Do NOT repeat existing text, and do NOT add braces, semicolons, or syntax that already exists later in the file.`
-        };
-        try {
-            const response = await fetch('http://103.250.10.249:13100/api/suggest', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(body),
-            });
-            if (!response.ok) {
-                const errorMessage = await response.text();
-                throw new Error(`Error ${response.status}: ${errorMessage}`);
+    if (cleanedInput.length < 3 && cursorLine === sourceLine)
+        return;
+    // 👉 Inline muncul di posisi cursor (bisa baris kosong)
+    const isNewLine = cursorLine !== sourceLine;
+    lastRequestLine = cursorLine;
+    lastRequestPrefix = isNewLine ? '' : cleanedInput;
+    lastLinePrefix = lineText;
+    const token = context.globalState.get('token');
+    if (!token) {
+        vscode.window.showErrorMessage("Vibe Coding token is missing. Please login first.");
+        return;
+    }
+    // 🔥 Ambil konteks sekitar baris sumber (hemat token + relevan)
+    const CONTEXT_RADIUS = 40;
+    const contextCenterLine = sourceLine;
+    const start = Math.max(0, contextCenterLine - CONTEXT_RADIUS);
+    const end = Math.min(editor.document.lineCount - 1, contextCenterLine + CONTEXT_RADIUS);
+    let contextCode = '';
+    for (let i = start; i <= end; i++) {
+        contextCode += editor.document.lineAt(i).text + '\n';
+    }
+    // Status bar loading
+    loadingStatusBarItem.text = "⚡ Vibe Coding thinking...";
+    if (isNewLine) {
+        loadingStatusBarItem.text = "✨ Vibe Coding predicting next line...";
+    }
+    const showLoadingTimeout = setTimeout(() => loadingStatusBarItem.show(), 400);
+    const lang = editor.document.languageId;
+    const file = path.basename(editor.document.fileName);
+    const body = {
+        userId: 'vscode-user',
+        message: `File: ${file}\n` +
+            `Language: ${lang}\n` +
+            `Follow ${lang} best practices and syntax.\n` +
+            `Here is the surrounding code context:\n${contextCode}\n\n` +
+            (isNewLine
+                ? `The user just pressed Enter and is starting a new line.\n` +
+                    `Suggest ONLY the next single line of code that should appear here.\n`
+                : `The user is currently typing this line: "${cleanedInput}".\n` +
+                    `Complete ONLY this line.\n`) +
+            `Return a SINGLE LINE completion only.\n` +
+            `Do NOT add new lines.\n` +
+            `Do NOT return multiple statements.\n` +
+            `Do NOT repeat any existing text from the current line.\n` +
+            `Do NOT add braces, semicolons, or syntax that already exists later in the file.\n` +
+            `Return ONLY the continuation text without explanations, markdown, or code fences.`
+    };
+    // 👉 simpan posisi cursor saat request dikirim
+    const requestLine = cursorLine;
+    try {
+        const response = await fetch('http://103.250.10.249:13100/api/suggest', {
+            method: 'POST',
+            signal: controller.signal,
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
+        });
+        if (!response.ok) {
+            const errorMessage = await response.text();
+            throw new Error(`Error ${response.status}: ${errorMessage}`);
+        }
+        if (currentRequest !== requestId)
+            return; // ❌ skip response lama
+        const suggestions = await response.json();
+        // ❌ Kalau user pindah baris, skip
+        if (editor.selection.active.line !== requestLine)
+            return;
+        const freshLine = editor.document.lineAt(requestLine).text;
+        presentSuggestions(suggestions.message, freshLine);
+        await vscode.commands.executeCommand('editor.action.inlineSuggest.hide');
+        setTimeout(() => {
+            if (lastSuggestion) {
+                vscode.commands.executeCommand('editor.action.inlineSuggest.trigger');
             }
-            const suggestions = await response.json();
-            presentSuggestions(suggestions.message);
-        }
-        catch (error) {
-            console.error('Error while fetching suggestions:', error);
-        }
-        finally {
-            // Sembunyikan StatusBarItem loading setelah selesai
-            loadingStatusBarItem.hide();
-        }
+        }, 50);
+    }
+    catch (error) {
+        if (error.name === 'AbortError')
+            return;
+        console.error('Error while fetching suggestions:', error);
+    }
+    finally {
+        clearTimeout(showLoadingTimeout);
+        loadingStatusBarItem.hide();
     }
 }
-let lastSuggestion = null;
-async function presentSuggestions(suggestion) {
+function isInlineEnabled() {
+    return vscode.workspace
+        .getConfiguration("vibeCoding")
+        .get("inline.enabled", true);
+}
+function normalizeInlineSuggestion(text) {
+    return text
+        .replace(/\n/g, '')
+        .replace(/\r/g, '')
+        .slice(0, 120);
+}
+async function presentSuggestions(suggestion, linePrefix) {
     console.log("Presenting suggestion:", suggestion);
     if (suggestion && suggestion.trim().length > 0) {
-        lastSuggestion = suggestion;
-        // Beri jeda kecil agar state update
-        await new Promise(resolve => setTimeout(resolve, 50));
-        // Trigger autocomplete
-        const editor = vscode.window.activeTextEditor;
-        if (editor && lastSuggestion) {
-            editor.insertSnippet(new vscode.SnippetString(lastSuggestion), editor.selection.active);
+        let next = suggestion;
+        if (linePrefix) {
+            next = stripPrefix(suggestion, linePrefix);
         }
-    }
-    else {
-        vscode.window.showInformationMessage("No suggestions available.");
+        lastSuggestion = normalizeInlineSuggestion(next);
+        await new Promise(resolve => setTimeout(resolve, 50));
     }
 }
 async function writeFileVico(context, editor) {
@@ -213,95 +290,59 @@ async function writeFileVico(context, editor) {
         vscode.window.showErrorMessage('Failed to write file: ' + (err.message || err.toString()));
     }
 }
+let loadingStatusBarItem;
 function activate(context) {
+    loadingStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+    context.subscriptions.push(loadingStatusBarItem);
     // Disini kita daftarin command
     let disposable = vscode.commands.registerCommand('vibe-coding.writeFile', async () => {
         vico_logger_1.default.info("writeFile command triggered");
         await writeFileVico(context, vscode.window.activeTextEditor);
     });
     context.subscriptions.push(disposable);
-    vscode.languages.registerCompletionItemProvider({ scheme: 'file', language: "php" }, {
-        provideCompletionItems(document, position, token, context) {
-            // Jika tidak ada suggestion, return null (jangan error)
-            if (!lastSuggestion || lastSuggestion.trim() === '') {
-                return undefined;
-            }
-            // Ambil posisi kursor
-            const linePrefix = document.lineAt(position).text.substr(0, position.character);
-            // Buat completion item
+    context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
+        if (e.affectsConfiguration("vibeCoding.inline.enabled")) {
+            lastSuggestion = null; // clear ghost text
+            vscode.commands.executeCommand('editor.action.inlineSuggest.hide');
+        }
+    }));
+    const SUPPORTED_LANGUAGES = [
+        'javascript',
+        'typescript',
+        'python',
+        'php',
+        'go',
+        'java',
+        'c',
+        'cpp',
+        'csharp',
+        'rust',
+        'ruby',
+        'json',
+        'html',
+        'css',
+        'bash',
+        'yaml',
+        'dockerfile',
+        'markdown',
+        'sql'
+    ];
+    context.subscriptions.push(vscode.languages.registerCompletionItemProvider(SUPPORTED_LANGUAGES.map(lang => ({ scheme: 'file', language: lang })), {
+        provideCompletionItems(document, position) {
+            if (!lastSuggestion || !lastSuggestion.trim())
+                return;
             const item = new vscode.CompletionItem(lastSuggestion, vscode.CompletionItemKind.Snippet);
             item.insertText = new vscode.SnippetString(lastSuggestion);
             item.detail = 'AI Suggestion from Vibe Coding';
-            item.sortText = '\u0000'; // Karakter null — paling awal dalam urutan Unicode
-            item.filterText = lastSuggestion; // Opsional: kontrol pencarian
+            item.sortText = '\u0000';
             item.command = {
                 command: 'vibe-coding.clearSuggestion',
                 title: ''
             };
             return [item];
         }
-    }, '' // Trigger manual
-    );
-    vscode.languages.registerCompletionItemProvider({ scheme: 'file', language: "javascript" }, {
-        provideCompletionItems(document, position, token, context) {
-            // Jika tidak ada suggestion, return null (jangan error)
-            if (!lastSuggestion || lastSuggestion.trim() === '') {
-                return undefined;
-            }
-            // Ambil posisi kursor
-            const linePrefix = document.lineAt(position).text.substr(0, position.character);
-            // Buat completion item
-            const item = new vscode.CompletionItem(lastSuggestion, vscode.CompletionItemKind.Snippet);
-            item.insertText = new vscode.SnippetString(lastSuggestion);
-            item.detail = 'AI Suggestion from Vibe Coding';
-            item.command = {
-                command: 'vibe-coding.clearSuggestion',
-                title: ''
-            };
-            return [item];
-        }
-    }, '' // Trigger manual
-    );
-    vscode.languages.registerCompletionItemProvider({ scheme: 'file', language: "typescript" }, {
-        provideCompletionItems(document, position, token, context) {
-            // Jika tidak ada suggestion, return null (jangan error)
-            if (!lastSuggestion || lastSuggestion.trim() === '') {
-                return undefined;
-            }
-            // Ambil posisi kursor
-            const linePrefix = document.lineAt(position).text.substr(0, position.character);
-            // Buat completion item
-            const item = new vscode.CompletionItem(lastSuggestion, vscode.CompletionItemKind.Snippet);
-            item.insertText = new vscode.SnippetString(lastSuggestion);
-            item.detail = 'AI Suggestion from Vibe Coding';
-            item.command = {
-                command: 'vibe-coding.clearSuggestion',
-                title: ''
-            };
-            return [item];
-        }
-    }, '' // Trigger manual
-    );
-    vscode.languages.registerCompletionItemProvider({ scheme: 'file', language: "python" }, {
-        provideCompletionItems(document, position, token, context) {
-            // Jika tidak ada suggestion, return null (jangan error)
-            if (!lastSuggestion || lastSuggestion.trim() === '') {
-                return undefined;
-            }
-            // Ambil posisi kursor
-            const linePrefix = document.lineAt(position).text.substr(0, position.character);
-            // Buat completion item
-            const item = new vscode.CompletionItem(lastSuggestion, vscode.CompletionItemKind.Snippet);
-            item.insertText = new vscode.SnippetString(lastSuggestion);
-            item.detail = 'AI Suggestion from Vibe Coding';
-            item.command = {
-                command: 'vibe-coding.clearSuggestion',
-                title: ''
-            };
-            return [item];
-        }
-    }, '' // Trigger manual
-    );
+    }, '' // manual trigger
+    ));
     // Command untuk menghapus suggestion setelah dipilih
     context.subscriptions.push(vscode.commands.registerCommand('vibe-coding.clearSuggestion', () => {
         lastSuggestion = null;
@@ -331,6 +372,64 @@ function activate(context) {
             }
         }
     }));
+    context.subscriptions.push(vscode.languages.registerInlineCompletionItemProvider({ scheme: 'file' }, {
+        async provideInlineCompletionItems(document, position) {
+            if (!isInlineEnabled())
+                return [];
+            if (!lastSuggestion)
+                return [];
+            if (lastRequestLine !== position.line)
+                return [];
+            const lineText = document.lineAt(position.line).text;
+            const isNewLine = lineText.trim() === '';
+            if (!isNewLine && lastRequestPrefix && !lineText.trim().startsWith(lastRequestPrefix)) {
+                return [];
+            }
+            return [{
+                    insertText: lastSuggestion,
+                    range: new vscode.Range(position, position)
+                }];
+        }
+    }));
+    const debouncedFetch = debounce(() => {
+        const editor = vscode.window.activeTextEditor;
+        if (editor)
+            fetchSuggestions(context, editor);
+    }, 600);
+    context.subscriptions.push(vscode.workspace.onDidChangeTextDocument((e) => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor)
+            return;
+        const change = e.contentChanges[0];
+        if (!change)
+            return;
+        lastSuggestion = null;
+        vscode.commands.executeCommand('editor.action.inlineSuggest.hide');
+        const isNewLine = change.text === '\n';
+        const isTyping = change.text.length > 0 && change.text !== '\n';
+        if (isTyping || isNewLine) {
+            debouncedFetch();
+        }
+        if (isNewLine) {
+            setTimeout(() => {
+                vscode.commands.executeCommand('editor.action.inlineSuggest.trigger');
+            }, 80);
+        }
+    }));
+    vscode.workspace.onDidChangeTextDocument((e) => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor)
+            return;
+        const change = e.contentChanges[0];
+        if (!change)
+            return;
+        // 👉 Detect user tekan Enter
+        if (change.text === '\n') {
+            setTimeout(() => {
+                vscode.commands.executeCommand('editor.action.inlineSuggest.trigger');
+            }, 50);
+        }
+    });
     // Trigger the updateWebview command when the active editor changes or the selection changes
     vscode.window.onDidChangeActiveTextEditor(() => {
         vscode.commands.executeCommand('vibe-coding.updateWebview');
@@ -340,9 +439,6 @@ function activate(context) {
     });
     // Initial trigger to update the webview
     vscode.commands.executeCommand('vibe-coding.updateWebview');
-    context.subscriptions.push(vscode.commands.registerCommand('vibe-coding.testSuggestion', () => {
-        presentSuggestions("$nomor_kantor = mysqli_real_escape_string($conn, trim($_POST['nomor_kantor']));");
-    }));
     context.subscriptions.push(vscode.commands.registerCommand('vibe-coding.applyCodeSelection', (code) => {
         const editor = vscode.window.activeTextEditor;
         console.log("apply code from chat");
@@ -418,7 +514,6 @@ async function triggerCodeCompletion(context, comment, allCode) {
                 `Continue this line naturally. Do NOT repeat existing text, and do NOT add braces, semicolons, or syntax that already exists later in the file.`,
         };
         // Buat StatusBarItem untuk loading
-        const loadingStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
         loadingStatusBarItem.text = "🔄 Vibe Coding loading...";
         loadingStatusBarItem.show();
         try {

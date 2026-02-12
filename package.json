@@ -42,6 +42,134 @@
     "typescript"
   ],
   "contributes": {
+    "languages": [
+      {
+        "id": "javascript",
+        "aliases": [
+          "JavaScript",
+          "js"
+        ],
+        "extensions": [
+          ".js",
+          ".jsx"
+        ]
+      },
+      {
+        "id": "typescript",
+        "aliases": [
+          "TypeScript",
+          "ts"
+        ],
+        "extensions": [
+          ".ts",
+          ".tsx"
+        ]
+      },
+      {
+        "id": "python",
+        "aliases": [
+          "Python",
+          "py"
+        ],
+        "extensions": [
+          ".py"
+        ]
+      },
+      {
+        "id": "java",
+        "aliases": [
+          "Java"
+        ],
+        "extensions": [
+          ".java"
+        ]
+      },
+      {
+        "id": "go",
+        "aliases": [
+          "Go",
+          "golang"
+        ],
+        "extensions": [
+          ".go"
+        ]
+      },
+      {
+        "id": "rust",
+        "aliases": [
+          "Rust"
+        ],
+        "extensions": [
+          ".rs"
+        ]
+      },
+      {
+        "id": "cpp",
+        "aliases": [
+          "C++"
+        ],
+        "extensions": [
+          ".cpp",
+          ".h"
+        ]
+      },
+      {
+        "id": "csharp",
+        "aliases": [
+          "C#",
+          "csharp"
+        ],
+        "extensions": [
+          ".cs"
+        ]
+      },
+      {
+        "id": "php",
+        "aliases": [
+          "PHP"
+        ],
+        "extensions": [
+          ".php"
+        ]
+      },
+      {
+        "id": "json",
+        "aliases": [
+          "JSON"
+        ],
+        "extensions": [
+          ".json"
+        ]
+      },
+      {
+        "id": "html",
+        "aliases": [
+          "HTML"
+        ],
+        "extensions": [
+          ".html"
+        ]
+      },
+      {
+        "id": "css",
+        "aliases": [
+          "CSS"
+        ],
+        "extensions": [
+          ".css"
+        ]
+      },
+      {
+        "id": "markdown",
+        "aliases": [
+          "Markdown",
+          "md"
+        ],
+        "extensions": [
+          ".md"
+        ]
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
@@ -62,8 +190,39 @@
         }
       ]
     },
+    "configuration": {
+      "title": "Vibe Coding",
+      "properties": {
+        "vibeCoding.inline.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable inline code suggestions (ghost text) from Vibe Coding."
+        },
+        "vibeCoding.inline.debounceMs": {
+          "type": "number",
+          "default": 600,
+          "minimum": 100,
+          "maximum": 5000,
+          "description": "Debounce time (ms) before requesting inline suggestions."
+        }
+      }
+    },
     "activationEvents": [
-      "onView:vibe-coding-sidebar"
+      "onStartupFinished",
+      "onView:vibe-coding-sidebar",
+      "onLanguage:javascript",
+      "onLanguage:typescript",
+      "onLanguage:python",
+      "onLanguage:go",
+      "onLanguage:rust",
+      "onLanguage:java",
+      "onLanguage:cpp",
+      "onLanguage:csharp",
+      "onLanguage:php",
+      "onLanguage:html",
+      "onLanguage:css",
+      "onLanguage:json",
+      "onLanguage:markdown"
     ],
     "commands": [
       {
