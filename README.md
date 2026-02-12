@@ -21,8 +21,11 @@ Easily select code snippets and ask Vibe Coding for explanations, debugging help
 Effortlessly extend your code by leveraging the AI's understanding of your comments to generate relevant and context-aware code snippets that follow your intended logic and requirements.  
 👉 Press `Shift+Enter` after a comment in your code.
 
-**Code Suggestions / Code Completions**  
-Context-aware code snippets that follow your intended logic and requirements.  
+**Auto Code Suggestions**  
+Receive suggestions for code snippets that are relevant to your current context. The AI analyzes your code structure and offers snippets that align with your coding patterns.
+
+**Code Completions**  
+Contextual completions help you finish your current line of code or statement. Simply start typing and use the AI to complete it based on the surrounding code and syntax.
 👉 Press `Shift+Enter+.` after your code.
 
 **Generate Full CRUD Pages from Model Schema**  
@@ -92,6 +95,9 @@ This extension is licensed under the MIT License. See the LICENSE file for detai
 ---
 
 ## Release Notes
+
+### 1.5.0
+- **feat**: Code Suggestions
 
 ### 1.4.8
 - Input message & loading improvement

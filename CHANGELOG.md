@@ -2,9 +2,12 @@
 
 ## [Unreleased]
 
-## [1.4.8] - 2026-02-06
+## [1.5.0] - 2026-02-13
 
 ### Added
+
+### 1.5.0
+- **feat**: Code Suggestions
 
 ### 1.4.8
 - Input message & loading improvement
