@@ -624,8 +624,20 @@ button:active {
     background-color: #222222;
 }
 
-.bg-grey-700 {
-    background-color: #252525;
+.bg-gray-700 {
+    background-color: #374151;
+}
+
+.hover\:bg-gray-600:hover {
+    background-color: #4b5563;
+}
+
+.h-5 {
+    height: 1.25rem;
+}
+
+.w-5 {
+    width: 1.25rem;
 }
 
 @keyframes rotate {

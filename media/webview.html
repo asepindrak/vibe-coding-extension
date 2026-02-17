@@ -18,6 +18,16 @@
         </div>
         <div id="message" class="message"></div>
         <div id="messageInputContainer" class="p-4 bg-black shadow-md fixed-bottom">
+            <div class="flex items-center mb-2 justify-between">
+                <div class="flex items-center">
+                    <label for="modeSelect" class="text-white text-sm mr-2 select-none">Mode:</label>
+                    <select id="modeSelect"
+                        class="bg-gray-800 text-white text-sm border border-gray-600 rounded p-1 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        <option value="agent">Agent Mode</option>
+                        <option value="chat">Chat Mode</option>
+                    </select>
+                </div>
+            </div>
             <div class="flex items-center">
                 <textarea id="messageInput" placeholder="Ask Vibe Coding"
                     class="flex-grow p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 h-6 bg-black text-white">
@@ -41,14 +51,23 @@
             </div>
         </div>
 
-        <div id="div-btn-workspace" class="flex mt-2">
-            <button id="button-workspace" class="button-workspace">
+        <div id="div-btn-workspace" class="flex mt-2 items-center">
+            <button id="button-workspace" class="button-workspace flex-grow mr-2">
                 Teach AI Current Code 🔄
+            </button>
+            <button id="logoutButton" class="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
             </button>
         </div>
         <script type="module">
             var isLoading = false
             var messageArray = []
+            var pendingMessage = null
+            var isWorkspaceDirty = false
             var talkDuration = 0
             var talkMessage = ""
             var workspaces = ""
@@ -73,7 +92,8 @@
                     input: document.getElementById('messageInput')?.value ?? '',
                     token: localStorage.getItem('token'),
                     userId: localStorage.getItem('userId'),
-                    messages: messageArray
+                    messages: messageArray,
+                    mode: document.getElementById('modeSelect')?.value ?? 'agent'
                 })
             }
 
@@ -83,12 +103,16 @@
                 if (token && userId) {
                     vscode.postMessage({ type: 'validateToken', token, userId })
                 } else {
+                    // Clear state if no token
+                    vscode.setState(undefined)
                     showLoginForm()
                 }
                 const sendMessageButton = document.getElementById('sendMessageButton')
                 sendMessageButton.addEventListener('click', handleSendMessage)
                 const btnWorkspace = document.getElementById('button-workspace')
                 btnWorkspace.addEventListener('click', updateWorkspaces)
+                const logoutButton = document.getElementById('logoutButton')
+                logoutButton.addEventListener('click', logout)
 
                 messageInput.value = messageInput.value.trim()
 
@@ -156,6 +180,19 @@
                         return
                     }
 
+                    if (messageEvent.command === 'workspaceDirty') {
+                        isWorkspaceDirty = messageEvent.isDirty
+                        const btnWorkspace = document.getElementById('button-workspace')
+                        if (isWorkspaceDirty) {
+                            btnWorkspace.innerHTML = `Teach AI Current Code 🔄 (Changes detected)`
+                            btnWorkspace.classList.add('bg-yellow-600') // Visual indicator
+                        } else {
+                            btnWorkspace.innerHTML = `Teach AI Current Code 🔄`
+                            btnWorkspace.classList.remove('bg-yellow-600')
+                        }
+                        return
+                    }
+
                     if (messageEvent.command === 'tokenValid') {
                         localStorage.setItem('token', messageEvent.token)
                         localStorage.setItem('userId', messageEvent.userId)
@@ -163,6 +200,10 @@
                         if (persistedState.messagesHTML) {
                             document.getElementById('content').innerHTML = persistedState.messagesHTML
                             document.getElementById('messageInput').value = persistedState.input ?? ''
+                            const modeSelect = document.getElementById('modeSelect')
+                            if (modeSelect) {
+                                modeSelect.value = persistedState.mode ?? 'agent'
+                            }
                             // Show the message input container
                             const messageInputContainer = document.getElementById('messageInputContainer')
                             messageInputContainer.style.display = 'block'
@@ -261,33 +302,61 @@
                 console.log("send message to Vibe Coding")
                 // Proses pengiriman pesan
                 vscode.postMessage({ command: 'getSelectedText' })
-
+                document.getElementById('generating').innerHTML = ''
             }
 
-            async function sendMessageToApi(message) {
+            async function sendMessageToApi(message, isRetry = false) {
                 if (isLoading) return
                 isLoading = true
                 const messageInput = document.getElementById('messageInput')
                 messageInput.disabled = true // Disable message input while loading
 
-                // add the “user” bubble
                 const uniqueId = Date.now() + Math.random()
-                displayMessagesAssistant({ role: 'user', content: message, uniqueId })
+
+                if (!isRetry) {
+                    // add the “user” bubble
+                    displayMessagesAssistant({ role: 'user', content: message, uniqueId })
+                    //save message
+                    messageArray.push({ role: 'user', content: message })
+                    saveState()
+                }
 
                 // add an empty “assistant” bubble that we’ll update
                 displayMessagesAssistant({ role: 'assistant', content: '', uniqueId: `assistant-${uniqueId}` })
 
-                //save message
-                messageArray.push({ role: 'user', content: message })
-                saveState()
+                const modeSelect = document.getElementById('modeSelect')
+                const mode = modeSelect ? modeSelect.value : 'agent'
+
+                // NEW: Check if workspace is dirty before sending
+                if (mode === 'agent' && isWorkspaceDirty && !isRetry) {
+                    console.log("Workspace is dirty, auto-updating...")
+
+                    // Show a temporary bubble or just the loader?
+                    // Let's use the pending message logic
+                    pendingMessage = message
+
+                    // Remove the user bubble we just added to avoid duplication on retry?
+                    // Actually, if we just stop here, the user bubble is already in messageArray.
+                    // When retry happens, isRetry=true, so we won't add it again.
+                    // But we need to make sure the assistant bubble is ready or removed.
+                    // The assistant bubble is added above.
+                    // Let's remove the assistant bubble so it doesn't look stuck
+                    const bubble = document.getElementById(`assistant-${uniqueId}`)
+                    if (bubble) bubble.parentElement.remove()
+
+                    await updateWorkspaces(true) // Silent update
+                    return
+                }
+
                 const data = {
                     userId: localStorage.getItem('userId'),
                     token: localStorage.getItem('token'),
-                    message
+                    message,
+                    mode: mode
                 }
 
                 try {
-                    const response = await fetch('http://103.250.10.249:13100/api/message', {
+                    const response = await fetch('http://localhost:13100/api/message', {
                         method: 'POST',
                         headers: {
                             'Authorization': `Bearer ${data.token}`,
@@ -297,6 +366,22 @@
                     })
 
                     if (!response.ok) {
+                        const clone = response.clone()
+                        try {
+                            const errJson = await clone.json()
+                            if (errJson.error === "WORKSPACE_MISSING") {
+                                console.log("Workspace missing, triggering auto-scan...")
+
+                                // Remove the empty assistant bubble we just added
+                                const bubble = document.getElementById(`assistant-${uniqueId}`)
+                                if (bubble) bubble.parentElement.remove()
+
+                                pendingMessage = message // Save for retry
+                                await updateWorkspaces(true) // Call with silent=true
+                                return
+                            }
+                        } catch (e) { console.error(e) }
+
                         throw new Error('Failed to send message')
                     }
 
@@ -326,9 +411,10 @@
                     console.log("stream finished")
                     console.log(assistantMessage)
                     // if a write-file command appears, send it immediately
-                    if (assistantMessage.includes('[writeFileVico]')) {
+                    if (assistantMessage.includes('[writeFile]')) {
                         vscode.postMessage({ type: 'writeFile', assistantMessage })
                     }
+
                     // finalize: save and tidy up UI
                     messageArray.push({ role: 'assistant', content: assistantMessage })
 
@@ -356,8 +442,10 @@
                 const messageInputContainer = document.getElementById('messageInputContainer')
                 messageInputContainer.style.display = 'none'
 
-                const btnWorkspace = document.getElementById('button-workspace')
-                btnWorkspace.style.display = 'none'
+                const btnWorkspaceContainer = document.getElementById('div-btn-workspace')
+                btnWorkspaceContainer.style.display = 'none'
+
+                const content = document.getElementById('content')
                 content.innerHTML = `
                     <center>
                         <div class="login-wrapper bg-white">
@@ -427,7 +515,7 @@
                         </button>
                     `
 
-                    const response = await fetch('http://103.250.10.249:13100/api/login', {
+                    const response = await fetch('http://localhost:13100/api/login', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
@@ -477,26 +565,13 @@
 
 
                     messageDiv.textContent = ''
+                    const btnWorkspaceContainer = document.getElementById('div-btn-workspace')
+                    btnWorkspaceContainer.style.display = 'flex'
                     const btnWorkspace = document.getElementById('button-workspace')
                     btnWorkspace.style.display = 'block'
 
                     // Fetch and display chat history
-                    if (persistedState.messagesHTML) {
-                        document.getElementById('content').innerHTML = persistedState.messagesHTML
-                        document.getElementById('messageInput').value = persistedState.input ?? ''
-                        // Show the message input container
-                        const messageInputContainer = document.getElementById('messageInputContainer')
-                        messageInputContainer.style.display = 'block'
-
-                        // Scroll to the bottom of the content
-                        var content = document.getElementById('content')
-                        content.scrollTop = content.scrollHeight
-                        // focus the message input
-                        const messageInput = document.getElementById('messageInput')
-                        messageInput.focus()
-                    } else {
-                        fetchHistory()
-                    }
+                    fetchHistory()
                 } catch (error) {
                     messageDiv.textContent = 'Login Error.'
                     messageDiv.className = 'message error'
@@ -508,9 +583,9 @@
                 }
             }
 
-            async function updateWorkspaces() {
-                if (isLoading) return
-                isLoading = true
+            async function updateWorkspaces(silent = false) {
+                if (isLoading && !silent && !pendingMessage) return
+                if (!silent) isLoading = true
 
                 const btnWorkspace = document.getElementById('button-workspace')
                 btnWorkspace.innerHTML = `
@@ -518,7 +593,7 @@
                         <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
                     </svg>
                 `
-                vscode.postMessage({ type: 'updateWorkspaces' })
+                vscode.postMessage({ type: 'updateWorkspaces', silent })
             }
 
             async function updateWorkspacesAPI(workspacesParam) {
@@ -528,7 +603,7 @@
 
                     const tokenData = localStorage.getItem('token')
 
-                    const response = await fetch('http://103.250.10.249:13100/api/workspace', {
+                    const response = await fetch('http://localhost:13100/api/workspace', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
@@ -550,6 +625,13 @@
                     btnWorkspace.innerHTML = `Teach AI Current Code 🔄`
                     btnWorkspace.addEventListener('click', updateWorkspaces)
                     isLoading = false
+
+                    if (pendingMessage) {
+                        const msg = pendingMessage
+                        pendingMessage = null
+                        console.log("Retrying pending message...")
+                        sendMessageToApi(msg, true)
+                    }
 
                 } catch (error) {
                     console.log("update workspaces gagal")
@@ -588,7 +670,7 @@
                     return
                 }
                 try {
-                    const response = await fetch(`http://103.250.10.249:13100/api/history/?token=${token}&userId=${userId}`, {
+                    const response = await fetch(`http://localhost:13100/api/history/?token=${token}&userId=${userId}`, {
                         method: 'GET',
                         headers: {
                             'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -662,7 +744,7 @@
                 let talkMessage = ""
                 messages.forEach((msg, index) => {
                     if (msg.role !== 'system') {
-                        const parts = msg.content.split(/(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[file\][\s\S]*?\[file\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|###.*|##.*|#.*|^- .*)/gm)
+                        const parts = msg.content.split(/(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[file\][\s\S]*?\[file\]|\[status\][\s\S]*?\[\/status\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|####.*|###.*|##.*|#.*|^- .*)/gm)
 
                         const messageDiv = document.createElement('div')
                         messageDiv.className = `mb-2 flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`
@@ -690,6 +772,12 @@
                                 //skip
                             } else if (part.startsWith('[files]') && part.endsWith('[files]')) {
                                 //skip
+                            } else if (part.startsWith('[status]') && part.endsWith('[/status]')) {
+                                const statusContent = part.slice(8, -9).trim()
+                                const statusDiv = document.createElement('div')
+                                statusDiv.className = "bg-gray-800 border-l-2 border-blue-500 p-2 mb-2 text-sm text-gray-300"
+                                statusDiv.innerHTML = `<div class="font-bold text-xs text-blue-400 mb-1">AGENTS THINKING</div>${statusContent}`
+                                messageContent.appendChild(statusDiv)
                             } else if (part.startsWith('```') && part.endsWith('```')) {
 
                                 let codeContent = part.slice(3, -3).trim()
@@ -725,7 +813,25 @@
                                 const applyButton = document.createElement('button')
                                 applyButton.textContent = 'Apply'
                                 applyButton.className = 'mt-2 bg-blue-300 text-white px-2 py-1 rounded ml-2'
-                                applyButton.onclick = () => handleaApply(codeContent)
+
+                                // Cek apakah ada informasi file sebelumnya
+                                let filePath = null
+                                if (i > 0) {
+                                    const prevPart = parts[i - 1].trim()
+                                    // Regex untuk menangkap "File: path/to/file.ext" atau "**File:** path/to/file.ext"
+                                    const fileMatch = prevPart.match(/(?:File|file|FILE):\s*`?([\w\-\./\\]+)`?/)
+                                    if (fileMatch) {
+                                        filePath = fileMatch[1]
+                                    }
+                                }
+
+                                if (filePath) {
+                                    applyButton.textContent = `Apply to ${filePath}`
+                                    applyButton.onclick = () => handleaApply(codeContent, filePath)
+                                } else {
+                                    applyButton.onclick = () => handleaApply(codeContent)
+                                }
+
                                 codeDiv.appendChild(applyButton)
 
                                 messageContent.appendChild(codeDiv)
@@ -747,6 +853,34 @@
                                 const textStrong = document.createElement('strong')
                                 textStrong.textContent = part
                                 messageContent.appendChild(textStrong)
+                            } else if (part.startsWith('####')) {
+                                // Cek header h4
+                                part = part.slice(4).trim()
+                                const textHeader = document.createElement('h4')
+                                textHeader.style = "font-weight: bold; font-size:13px; color: #60a5fa; margin-top: 8px;"
+                                textHeader.textContent = part
+                                messageContent.appendChild(textHeader)
+                            } else if (part.startsWith('####')) {
+                                // Cek header h4
+                                part = part.slice(4).trim()
+                                const textHeader = document.createElement('h4')
+                                textHeader.style = "font-weight: bold; font-size:13px; color: #60a5fa; margin-top: 8px;"
+                                textHeader.textContent = part
+                                messageContent.appendChild(textHeader)
+                            } else if (part.startsWith('####')) {
+                                // Cek header h4
+                                part = part.slice(4).trim()
+                                const textHeader = document.createElement('h4')
+                                textHeader.style = "font-weight: bold; font-size:13px; color: #60a5fa; margin-top: 8px;"
+                                textHeader.textContent = part
+                                messageContent.appendChild(textHeader)
+                            } else if (part.startsWith('####')) {
+                                // Cek header h4
+                                part = part.slice(4).trim()
+                                const textHeader = document.createElement('h4')
+                                textHeader.style = "font-weight: bold; font-size:13px; color: #60a5fa; margin-top: 8px;"
+                                textHeader.textContent = part
+                                messageContent.appendChild(textHeader)
                             } else if (part.startsWith('###')) {
                                 // Cek header
                                 part = part.slice(3).trim()
@@ -850,7 +984,7 @@
 
                 const chatContainer = document.createElement('div')
                 chatContainer.className = 'flex-grow overflow-y-auto p-4 bg-chat custom-scrollbar'
-                const parts = msg.content.split(/(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[file\][\s\S]*?\[file\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|###.*|##.*|#.*|^- .*)/gm)
+                const parts = msg.content.split(/(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[file\][\s\S]*?\[file\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|####.*|###.*|##.*|#.*|^- .*)/gm)
 
                 const messageDiv = document.createElement('div')
                 messageDiv.className = `mb-2 flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`
@@ -1014,7 +1148,7 @@
 
             function updateMessagesAssistant(msg) {
 
-                const parts = msg.content.split(/(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[file\][\s\S]*?\[file\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|###.*|##.*|#.*|^- .*)/gm)
+                const parts = msg.content.split(/(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[file\][\s\S]*?\[file\]|\[status\][\s\S]*?\[\/status\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|####.*|###.*|##.*|#.*|^- .*)/gm)
 
 
                 const messageContent = document.getElementById(msg.uniqueId)
@@ -1028,6 +1162,12 @@
                         //skip
                     } else if (part.startsWith('[files]') && part.endsWith('[files]')) {
                         //skip
+                    } else if (part.startsWith('[status]') && part.endsWith('[/status]')) {
+                        const statusContent = part.slice(8, -9).trim()
+                        const statusDiv = document.createElement('div')
+                        statusDiv.className = "bg-gray-800 border-l-2 border-blue-500 p-2 mb-2 text-sm text-gray-300"
+                        statusDiv.innerHTML = `<div class="font-bold text-xs text-blue-400 mb-1">AGENTS THINKING</div>${statusContent}`
+                        messageContent.appendChild(statusDiv)
                     } else if (part.startsWith('[file]') && part.endsWith('[file]')) {
                         const textSpan = document.createElement('span')
                         textSpan.textContent = '--File--'
@@ -1174,10 +1314,11 @@
                     alert('Copied!')
                 })
             }
-            function handleaApply(code) {
+            function handleaApply(code, filePath = null) {
                 vscode.postMessage({
                     command: 'applyCodeSelection',
-                    code: code
+                    code: code,
+                    filePath: filePath
                 })
             }
 
@@ -1189,6 +1330,21 @@
                 const codingStorageKey = 'codingStorage'
                 localStorage.removeItem(allCodeStorageKey)
                 localStorage.removeItem(codingStorageKey)
+
+                // Clear state
+                vscode.setState(undefined)
+
+                // Clear message array and content
+                messageArray = []
+                document.getElementById('content').innerHTML = ''
+
+                // Reset persisted state explicitly
+                if (persistedState) {
+                    persistedState.messagesHTML = ''
+                    persistedState.input = ''
+                    persistedState.messages = []
+                }
+
                 showLoginForm()
             }
 

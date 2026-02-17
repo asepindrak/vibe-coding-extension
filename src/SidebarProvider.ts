@@ -1,13 +1,34 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as crypto from 'crypto';
 
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   public _view?: vscode.WebviewView;
+  private fileWatcher?: vscode.FileSystemWatcher;
+  private isWorkspaceDirty = false;
 
-  constructor(private readonly _extensionUri: vscode.Uri, private readonly context: vscode.ExtensionContext) { }
+  constructor(private readonly _extensionUri: vscode.Uri, private readonly context: vscode.ExtensionContext) {
+    this.setupFileWatcher();
+  }
+
+  private setupFileWatcher() {
+    // Watch for changes in supported file types
+    this.fileWatcher = vscode.workspace.createFileSystemWatcher('**/*.{js,ts,jsx,tsx,json,py,go,rs,java,c,cpp,h,hpp,css,scss,html,php}');
+
+    const markDirty = () => {
+      this.isWorkspaceDirty = true;
+      if (this._view) {
+        this._view.webview.postMessage({ command: 'workspaceDirty', isDirty: true });
+      }
+    };
+
+    this.fileWatcher.onDidChange(markDirty);
+    this.fileWatcher.onDidCreate(markDirty);
+    this.fileWatcher.onDidDelete(markDirty);
+  }
 
   public resolveWebviewView(
     webviewView: vscode.WebviewView,
@@ -16,13 +37,19 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   ) {
     this._view = webviewView;
 
+    // Initial check: if we reloaded, assume dirty or let frontend check
+    // But we can also send current status
+    setTimeout(() => {
+      webviewView.webview.postMessage({ command: 'workspaceDirty', isDirty: this.isWorkspaceDirty });
+    }, 1000);
+
     webviewView.webview.options = {
       enableScripts: true,
       localResourceRoots: [this._extensionUri]
     };
 
 
-    const selectedText = webviewView.webview.onDidReceiveMessage((message) => {
+    const selectedText = webviewView.webview.onDidReceiveMessage(async (message) => {
       if (message.command === 'getSelectedText') {
         console.log("get selected text");
         const editor = vscode.window.activeTextEditor;
@@ -37,18 +64,136 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           webviewView.webview.postMessage({ text: '' });
         }
       } else if (message.command === 'applyCodeSelection') {
-        const editor = vscode.window.activeTextEditor;
-        // console.log("apply code from chat", message.code);
-        if (editor) {
-          const selection = editor.selection;
-          editor.edit(editBuilder => {
-            // Ganti teks yang dipilih dengan kode baru
-            editBuilder.replace(selection, message.code);
-          }).then(() => {
-            console.log('Code applied successfully!');
-          }, (err) => {
-            console.error('Failed to apply code:', err);
-          });
+        try {
+          let document;
+          let selection;
+          let editor = vscode.window.activeTextEditor;
+
+          if (message.filePath) {
+            // Jika ada filePath, cari file tersebut di workspace
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (workspaceFolders) {
+              const rootPath = workspaceFolders[0].uri.fsPath;
+              // Bersihkan path
+              let cleanPath = message.filePath.trim();
+              if (cleanPath.startsWith('/') || cleanPath.startsWith('\\')) {
+                cleanPath = cleanPath.substring(1);
+              }
+              const fullPath = path.join(rootPath, cleanPath);
+
+              if (fs.existsSync(fullPath)) {
+                // Buka dokumen jika file ada
+                document = await vscode.workspace.openTextDocument(fullPath);
+                // Kita tidak punya selection spesifik, jadi anggap seluruh file atau perlu diff seluruh file
+                // Untuk diff view, kita akan replace seluruh konten jika tidak ada selection spesifik?
+                // Tapi user mungkin ingin apply ke bagian tertentu. 
+                // Karena ini agent mode, asumsi kita replace/modify sesuai instruksi.
+                // Mari kita gunakan seluruh teks dokumen sebagai originalText.
+              } else {
+                vscode.window.showErrorMessage(`File not found: ${message.filePath}`);
+                return;
+              }
+            }
+          }
+
+          // Fallback ke active editor jika tidak ada filePath atau gagal load
+          if (!document && editor) {
+            document = editor.document;
+            selection = editor.selection;
+          }
+
+          if (document) {
+            const originalText = document.getText();
+            let newText = message.code;
+
+            // Jika ada selection dan kita menggunakan editor aktif (mode chat biasa atau fallback), 
+            // kita replace selection.
+            // Tapi jika mode Agent dengan File Path, biasanya agent memberikan FULL FILE content atau partial update.
+            // Sesuai prompt "output the entire file/class/function", kita harus hati-hati.
+            // Jika prompt meminta "complete code block", dan kita diff, maka diff view akan menangani perbedaannya.
+            // Jadi strategi terbaik adalah: 
+            // 1. Jika filePath diberikan, anggap code adalah konten BARU untuk file tersebut (atau bagian darinya).
+            //    Namun, me-replace seluruh file dengan snippet kecil itu bahaya.
+            //    KECUALI agent prompt bilang "If modifying a function, output the entire function".
+            //    VS Code diff view membandingkan file A dan file B.
+            //    Jika file B cuma potongan fungsi, diff-nya akan aneh (file A penuh, file B cuma fungsi).
+            //    
+            //    Solusi: Agent diminta "output the entire file" jika file kecil.
+            //    Jika file besar, agent output fungsi.
+            //    TAPI, kita tidak bisa dengan mudah "inject" fungsi ke tempat yang benar tanpa parsing AST.
+            //    
+            //    Untuk sekarang, mari kita asumsikan agent memberikan konten yang relevan.
+            //    Jika kita replace seluruh konten file dengan apa yang dikasih agent, dan agent cuma kasih satu fungsi,
+            //    user akan lihat diff dimana sisanya dihapus. User bisa reject/copy part yang perlu.
+            //    Ini behavior yang aman (user review diff).
+
+            //    JADI: Kita buat temp file dengan konten dari agent.
+            //    Diff view: Kiri (File Asli), Kanan (Konten Agent).
+
+            // Logic sebelumnya untuk selection replacement:
+            if (!message.filePath && selection && !selection.isEmpty) {
+              // Case: User select text in editor, click apply (Chat Mode)
+              const startOffset = document.offsetAt(selection.start);
+              const endOffset = document.offsetAt(selection.end);
+              newText = originalText.substring(0, startOffset) +
+                message.code +
+                originalText.substring(endOffset);
+            }
+            // Case: Agent Mode (filePath provided) OR No selection (Chat Mode) -> Treat code as "New Content" to compare
+            // Note: If code is partial, Diff View will show deletions. User must manually handle merge in standard Diff View?
+            // Wait, VS Code Diff View is Read-Only on Left, Editable on Right (usually). 
+            // Actually `vscode.diff` opens two resources. If right resource is temp file, user can edit it but it doesn't affect original.
+            // If user wants to "Accept", they usually copy from Right to Left?
+            // OR we can make the Right side the "Proposed" state. 
+
+            const tempDir = os.tmpdir();
+            const fileName = path.basename(document.fileName);
+            const tempFilePath = path.join(tempDir, `vico_diff_${Date.now()}_${fileName}`);
+
+            fs.writeFileSync(tempFilePath, newText);
+
+            const tempUri = vscode.Uri.file(tempFilePath);
+            const originalUri = document.uri;
+
+            await vscode.commands.executeCommand('vscode.diff',
+              originalUri,
+              tempUri,
+              `${fileName} ↔ Proposed Changes`
+            );
+
+            // Show confirmation dialog
+            const choice = await vscode.window.showInformationMessage(
+              `Review changes for ${fileName}. Do you want to apply these changes?`,
+              'Apply Changes',
+              'Discard'
+            );
+
+            if (choice === 'Apply Changes') {
+              // Apply changes to the original file
+              fs.writeFileSync(document.fileName, newText);
+
+              // Close the diff editor (optional, but good for UX)
+              await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+
+              // Show success message
+              vscode.window.showInformationMessage(`Changes applied to ${fileName}`);
+
+              // Open the updated file
+              const doc = await vscode.workspace.openTextDocument(document.fileName);
+              await vscode.window.showTextDocument(doc);
+            } else {
+              // Discard - maybe delete temp file?
+              // fs.unlinkSync(tempFilePath); // Optional: cleanup
+              vscode.window.showInformationMessage('Changes discarded.');
+              await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+            }
+          } else {
+            vscode.window.showErrorMessage('No active editor or file found to apply code.');
+          }
+
+        } catch (err) {
+          console.error('Failed to open diff:', err);
+          vscode.window.showErrorMessage('Failed to open diff view.');
         }
       } else if (message.command === 'updateFileInfo') {
         this.updateFileInfo(message.filePath, message.selectedLine);
@@ -115,6 +260,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             }
             return;
           case 'updateWorkspaces':
+            if (message.silent) {
+              const files = await this.getAllWorkspaceFiles();
+              this.isWorkspaceDirty = false; // Reset dirty flag after update
+              if (this._view) this._view.webview.postMessage({ command: 'workspaceDirty', isDirty: false });
+
+              webviewView.webview.postMessage({ command: 'workspaceCode', files });
+              return;
+            }
             try {
               // Tampilkan prompt kepada pengguna
               const userResponse = await vscode.window.showInformationMessage(
@@ -165,7 +318,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         const raw = document.getText();
         const priority = this.isPriorityFile(file.fsPath);
         const config = this.isConfigFile(file.fsPath);
-        const compressed = priority
+        const compressed = (priority || config)
           ? this.stripComments(raw)
           : this.compressCodeSkeleton(raw);
 
@@ -239,6 +392,25 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         }
       }
 
+      // Add package.json dependencies to help AI understand the tech stack
+      const packageJsonFiles = files.filter(f => f.fsPath.endsWith('package.json'));
+      for (const pkgFile of packageJsonFiles) {
+        try {
+          const doc = await vscode.workspace.openTextDocument(pkgFile);
+          const pkgContent = JSON.parse(doc.getText());
+          const deps = { ...pkgContent.dependencies, ...pkgContent.devDependencies };
+          const depsString = `\n\n// ===== Dependencies (${path.basename(path.dirname(pkgFile.fsPath))}) =====\n// ${JSON.stringify(deps, null, 2)}\n`;
+
+          if (totalSize + depsString.length <= this.targetSize) {
+            allCode += depsString;
+            totalSize += depsString.length;
+            console.log(`+ Dependencies for ${pkgFile.fsPath}`);
+          }
+        } catch (e) {
+          console.error(`Failed to read package.json: ${pkgFile.fsPath}`);
+        }
+      }
+
       console.log('=== END OF FILE LIST ===');
       return allCode;
 
@@ -261,37 +433,42 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   // --- Skeleton code untuk semua bahasa ---
   private compressCodeSkeleton(source: string): string {
     return source
+      // Remove comments (C-style, Python, Shell)
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\/\/.*$/gm, '')
       .replace(/^\s*#.*$/gm, '')
 
-      // Functions
-      .replace(/(function\s+\w+\s*\(.*?\))\s*\{[\s\S]*?\}/g, '$1;')
-      .replace(/(const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\([^)]*\)\s*=>\s*\{[\s\S]*?\}/g, '$1 $2 = (...): ... => { ... };')
-      .replace(/(export\s+function\s+\w+)\s*\([^)]*\)\s*:\s*JSX\.Element\s*\{[\s\S]*?\}/g, '$1(...): JSX.Element;')
+      // IMPORTANT: Keep imports to understand dependencies
 
-      // Classes
+      // JavaScript/TypeScript/PHP/Go Functions
+      .replace(/(function\s+\w+\s*\(.*?\))\s*\{[\s\S]*?\}/g, '$1 { ... }')
+      .replace(/(const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\([^)]*\)\s*=>\s*\{[\s\S]*?\}/g, '$1 $2 = (...): ... => { ... };')
+      .replace(/(export\s+function\s+\w+)\s*\([^)]*\)\s*:\s*JSX\.Element\s*\{[\s\S]*?\}/g, '$1(...): JSX.Element { ... }')
+
+      // Python Functions & Classes
+      .replace(/(def\s+\w+\s*\(.*?\)\s*:)\s*(?:(?:\r\n|\r|\n)(?:\s+.*)?)+/g, '$1 ...\n')
+      .replace(/(class\s+\w+(?:\(.*\))?\s*:)\s*(?:(?:\r\n|\r|\n)(?:\s+.*)?)+/g, '$1 ...\n')
+
+      // Java/C#/C++ Methods (approximation)
+      .replace(/(public|private|protected)\s+(?:static\s+)?(?:[\w<>,\[\]]+\s+)(\w+)\s*\(.*?\)\s*\{[\s\S]*?\}/g, '$1 ... $2(...) { ... }')
+
+      // Go Structs & Interfaces
+      .replace(/(type\s+\w+\s+(?:struct|interface))\s*\{[\s\S]*?\}/g, '$1 { ... }')
+
+      // Classes (Generic)
       .replace(/(class\s+\w+)(<.*?>)?\s*\{[\s\S]*?\}/g, '$1$2 { ... }')
 
-      // Types
-      .replace(/(type\s+\w+\s*=\s*)[\s\S]*?(?=\n\S|\n$)/g, '$1...;')
-      .replace(/(interface\s+\w+\s*)\{[\s\S]*?\}/g, '$1{ ... }')
-      .replace(/(enum\s+\w+\s*)\{[\s\S]*?\}/g, '$1{ ... }')
+      // Types & Interfaces (TS, Java, C#, Go)
+      .replace(/(type\s+\w+\s*=\s*)\{[\s\S]*?\}/g, '$1{ /* keys */ }')
+      .replace(/(interface\s+\w+\s*)\{[\s\S]*?\}/g, '$1{ /* keys */ }')
+      .replace(/(enum\s+\w+\s*)\{[\s\S]*?\}/g, '$1{ /* keys */ }')
 
-      // Schemas
+      // Compress Schemas (Zod, etc)
       .replace(/(z\.ZodObject<.*?>\s*=\s*)\{[\s\S]*?\}/g, '$1...;')
       .replace(/(const\s+\w+Schema\s*=\s*\w+\.object\(.*)\)\s*;/g, '$1 ... });')
 
-      // Stores
-      .replace(/(const\s+use\w+Store\s*=\s*create<.*?>\s*\()([\s\S]*?\}\s*\))/g, '$1... => { ... }$2')
-
-      // Routes
+      // Compress Routes (Express/others)
       .replace(/(app\.(get|post|put|delete|patch)\(.*?,\s*)(\(.*?\)\s*=>\s*)?\{[\s\S]*?\}/g, '$1$3{ ... }')
-
-      // Python, Go, Rust
-      .replace(/(def\s+\w+\s*\(.*?\):)[\s\S]*?(?=\n\S|\n$)/g, '$1 ...')
-      .replace(/(func\s+\w+\s*\(.*?\)\s*.*)\{[\s\S]*?\}/g, '$1 { ... }')
-      .replace(/(fn\s+\w+\s*\(.*?\)\s*.*)\{[\s\S]*?\}/g, '$1 { ... }')
 
       .replace(/^\s*$/gm, '')
       .trim();
@@ -311,21 +488,24 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   // --- Deteksi file prioritas ---
   private isPriorityFile(filePath: string): boolean {
-    return /(model|schema|entity|types?|interfaces?|dto|config|api|routes?|validation)/i.test(filePath);
+    return /(model|schema|entity|types?|interfaces?|dto|config|api|routes?|validation|controller|service|store|hook|utils|lib|context|provider|component)/i.test(filePath);
   }
 
   // --- Deteksi file config ---
   private isConfigFile(filePath: string): boolean {
     const configPatterns = [
-      "eslint.config.js",
-      "tsconfig.json",
-      "tsconfig.app.json",
-      "tsconfig.node.json",
+      "eslint.config",
+      "tsconfig",
       "vite.config",
       "webpack.config",
       "postcss.config",
       "tailwind.config",
       "package.json",
+      "next.config",
+      "nuxt.config",
+      ".env.example",
+      "docker-compose",
+      "Dockerfile"
     ];
     return configPatterns.some(p => filePath.includes(p));
   }

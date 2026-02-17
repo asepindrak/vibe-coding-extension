@@ -43,6 +43,8 @@ exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
 const SidebarProvider_1 = require("./SidebarProvider");
 const path = __importStar(require("path"));
+const fs = __importStar(require("fs"));
+const os = __importStar(require("os"));
 const vico_logger_1 = __importDefault(require("vico-logger"));
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -140,7 +142,7 @@ async function fetchSuggestions(context, editor) {
     // 👉 simpan posisi cursor saat request dikirim
     const requestLine = cursorLine;
     try {
-        const response = await fetch('http://103.250.10.249:13100/api/suggest', {
+        const response = await fetch('http://localhost:13100/api/suggest', {
             method: 'POST',
             signal: controller.signal,
             headers: {
@@ -204,86 +206,77 @@ async function writeFileVico(context, editor) {
     vico_logger_1.default.info("writeFileVico called");
     const writeContent = context.globalState.get('writeContent');
     if (!writeContent) {
-        vscode.window.showWarningMessage('Tidak ada konten untuk ditulis. Belum ada respons dari assistant.');
+        vscode.window.showWarningMessage('No content to write. No response from assistant.');
         return;
     }
     if (!vscode.workspace.workspaceFolders) {
-        vscode.window.showErrorMessage('Tidak ada folder workspace terbuka!');
+        vscode.window.showErrorMessage('No workspace folder open!');
         return;
     }
     const projectRoot = vscode.workspace.workspaceFolders[0].uri;
     try {
-        // 1. Extract blok [writeFileVico] ... (jika ada pembungkus)
-        const blockMatch = writeContent.match(/\[writeFileVico\]([\s\S]*)/);
-        const contentBlock = blockMatch ? blockMatch[1].trim() : writeContent.trim();
-        // 2. Parse `name` dari baris pertama
-        const nameMatch = contentBlock.match(/name:\s*(.+)/);
-        const folderName = nameMatch ? nameMatch[1].trim() : 'generated';
-        const actionDir = vscode.Uri.joinPath(projectRoot, 'src', 'actions');
-        const pageDir = vscode.Uri.joinPath(projectRoot, 'src', 'page', folderName);
-        const typesDir = vscode.Uri.joinPath(projectRoot, 'src', 'types');
-        const validationsDir = vscode.Uri.joinPath(projectRoot, 'src', 'validations');
-        // 3. Buat folder jika belum ada
-        await vscode.workspace.fs.createDirectory(actionDir);
-        await vscode.workspace.fs.createDirectory(pageDir);
-        await vscode.workspace.fs.createDirectory(typesDir);
-        await vscode.workspace.fs.createDirectory(validationsDir);
-        vico_logger_1.default.info(`Folder ditargetkan: ${actionDir.path}`);
-        vico_logger_1.default.info(`Folder ditargetkan: ${pageDir.path}`);
-        vico_logger_1.default.info(`Folder ditargetkan: ${typesDir.path}`);
-        vico_logger_1.default.info(`Folder ditargetkan: ${validationsDir.path}`);
-        // 4. Split berdasarkan baris yang diawali: schema:, form:, dll
-        const sections = contentBlock.split(/\n(?=(?:schema|form|table|detail|action|type):)/);
-        const files = [];
-        for (const section of sections) {
-            const headerMatch = section.match(/^(schema|form|table|detail|action|type):\s*(.+)$/m);
-            if (!headerMatch) {
-                continue;
-            }
-            const [, type, filename] = headerMatch;
-            const codeMatch = section.match(/```(?:ts|tsx|js|jsx)\n([\s\S]*?)\n```/);
-            const codeContent = codeMatch ? codeMatch[1] : '// Konten kosong atau parsing gagal';
-            files.push({
-                type,
-                filename: filename.trim(),
-                content: codeContent
-            });
+        // 1. Extract block [writeFile]...[/writeFile]
+        // Supports both single block or multiple blocks if the AI outputs them sequentially
+        const blockRegex = /\[writeFile\]([\s\S]*?)\[\/writeFile\]/g;
+        let match;
+        let contentToProcess = '';
+        // Accumulate all content within [writeFile] tags
+        while ((match = blockRegex.exec(writeContent)) !== null) {
+            contentToProcess += match[1] + '\n';
         }
-        // 5. Tulis setiap file
-        for (const file of files) {
-            console.log(file);
-            let fileUri = vscode.Uri.joinPath(actionDir, file.filename);
-            if (file.type === 'form' || file.type === 'table' || file.type === 'detail') {
-                fileUri = vscode.Uri.joinPath(pageDir, file.filename);
+        if (!contentToProcess.trim()) {
+            // Fallback: try to parse the whole message if the tags are missing but command was triggered
+            // or if the tag was just [writeFile] without closing (though regex above requires closing)
+            // Let's try to match open tag until end of string if no closing tag found
+            const openTagMatch = writeContent.match(/\[writeFile\]([\s\S]*)/);
+            if (openTagMatch) {
+                contentToProcess = openTagMatch[1];
             }
-            else if (file.type === 'type') {
-                fileUri = vscode.Uri.joinPath(typesDir, file.filename);
+            else {
+                contentToProcess = writeContent;
             }
-            else if (file.type === 'schema') {
-                fileUri = vscode.Uri.joinPath(validationsDir, file.filename);
-            }
-            const data = Buffer.from(file.content, 'utf8');
+        }
+        // 2. Parse [file name="path"]...[/file]
+        // Regex explanation:
+        // \[file name="([^"]+)"\]  -> Matches [file name="path/to/file.ext"] and captures the path
+        // ([\s\S]*?)               -> Matches content non-greedily
+        // \[\/file\]               -> Matches [/file]
+        const fileRegex = /\[file name="([^"]+)"\]([\s\S]*?)\[\/file\]/g;
+        let fileMatch;
+        let filesCreated = 0;
+        while ((fileMatch = fileRegex.exec(contentToProcess)) !== null) {
+            const relativePath = fileMatch[1].trim();
+            const fileContent = fileMatch[2].trim(); // Trim leading/trailing whitespace from content
+            const fileUri = vscode.Uri.joinPath(projectRoot, relativePath);
+            const dirUri = vscode.Uri.file(path.dirname(fileUri.fsPath));
+            // 3. Create directory if it doesn't exist
+            await vscode.workspace.fs.createDirectory(dirUri);
+            // 4. Write file
+            const data = Buffer.from(fileContent, 'utf8');
+            // Check if file exists
             try {
-                // Check if the file already exists
                 await vscode.workspace.fs.stat(fileUri);
-                // If it exists, prompt the user for confirmation to overwrite
-                const confirmOverwrite = await vscode.window.showWarningMessage(`File ${file.filename} already exists. Do you want to overwrite it?`, { modal: true }, 'Yes', 'No');
+                // File exists, ask for overwrite confirmation
+                const confirmOverwrite = await vscode.window.showWarningMessage(`File ${relativePath} already exists. Overwrite?`, { modal: true }, 'Yes', 'No');
                 if (confirmOverwrite !== 'Yes') {
-                    // User chose not to overwrite, continue to the next file
-                    console.log(`Skipping file: ${file.filename}`);
-                    vscode.window.showInformationMessage(`Skipping file: ${file.filename}`);
-                    continue; // Continue to the next iteration
+                    vscode.window.showInformationMessage(`Skipped: ${relativePath}`);
+                    continue;
                 }
             }
             catch (error) {
-                // File does not exist, we can proceed to write
+                // File does not exist, proceed
             }
-            // Now you can safely write to the file, it's either non-existent or the user confirmed overwrite
             await vscode.workspace.fs.writeFile(fileUri, data);
             vico_logger_1.default.info(`File created: ${fileUri.path}`);
-            vscode.window.showInformationMessage(`✅ File created: ${file.filename}`);
+            vscode.window.showInformationMessage(`✅ Created: ${relativePath}`);
+            filesCreated++;
         }
-        vscode.window.showInformationMessage(`🎉 All files succesfully created: models/${folderName}`);
+        if (filesCreated > 0) {
+            vscode.window.showInformationMessage(`🎉 Successfully created ${filesCreated} files.`);
+        }
+        else {
+            vscode.window.showWarningMessage('No file blocks found to create. Format: [file name="path"]content[/file]');
+        }
     }
     catch (err) {
         vico_logger_1.default.error('Failed to write file:', err);
@@ -439,19 +432,98 @@ function activate(context) {
     });
     // Initial trigger to update the webview
     vscode.commands.executeCommand('vibe-coding.updateWebview');
-    context.subscriptions.push(vscode.commands.registerCommand('vibe-coding.applyCodeSelection', (code) => {
-        const editor = vscode.window.activeTextEditor;
-        console.log("apply code from chat");
-        if (editor) {
-            const selection = editor.selection;
-            editor.edit(editBuilder => {
-                // Ganti teks yang dipilih dengan kode baru
-                editBuilder.replace(selection, code);
-            }).then(() => {
-                console.log('Code applied successfully!');
-            }, (err) => {
-                console.error('Failed to apply code:', err);
-            });
+    context.subscriptions.push(vscode.commands.registerCommand('vibe-coding.applyCodeSelection', async (args) => {
+        // Handle argument passing from webview which might be just "code" string or object
+        let code = '';
+        let filePath = null;
+        if (typeof args === 'string') {
+            code = args;
+        }
+        else if (typeof args === 'object') {
+            code = args.code;
+            filePath = args.filePath;
+        }
+        console.log("apply code from chat", filePath ? `to ${filePath}` : "to active editor");
+        try {
+            let document;
+            let selection;
+            let editor = vscode.window.activeTextEditor;
+            if (filePath) {
+                const workspaceFolders = vscode.workspace.workspaceFolders;
+                if (workspaceFolders) {
+                    const rootPath = workspaceFolders[0].uri.fsPath;
+                    let cleanPath = filePath.trim();
+                    if (cleanPath.startsWith('/') || cleanPath.startsWith('\\')) {
+                        cleanPath = cleanPath.substring(1);
+                    }
+                    const fullPath = path.join(rootPath, cleanPath);
+                    if (fs.existsSync(fullPath)) {
+                        document = await vscode.workspace.openTextDocument(fullPath);
+                    }
+                    else {
+                        vscode.window.showErrorMessage(`File not found: ${filePath}`);
+                        return;
+                    }
+                }
+            }
+            if (!document && editor) {
+                document = editor.document;
+                selection = editor.selection;
+            }
+            if (document) {
+                const originalText = document.getText();
+                let newText = code;
+                if (!filePath && selection && !selection.isEmpty) {
+                    const startOffset = document.offsetAt(selection.start);
+                    const endOffset = document.offsetAt(selection.end);
+                    newText = originalText.substring(0, startOffset) +
+                        code +
+                        originalText.substring(endOffset);
+                }
+                else if (filePath) {
+                    newText = code;
+                }
+                else {
+                    // Chat Mode (no file path) and no selection -> Append or Replace?
+                    // Usually chat mode without selection assumes replacement or new content?
+                    // Let's stick to replacing everything if no selection, OR warn user.
+                    // But for safety, let's just use the code as is for the diff.
+                    newText = code;
+                }
+                const tempDir = os.tmpdir();
+                const fileName = path.basename(document.fileName);
+                const tempFilePath = path.join(tempDir, `vico_diff_${Date.now()}_${fileName}`);
+                fs.writeFileSync(tempFilePath, newText);
+                const tempUri = vscode.Uri.file(tempFilePath);
+                const originalUri = document.uri;
+                await vscode.commands.executeCommand('vscode.diff', originalUri, tempUri, `${fileName} ↔ Proposed Changes`);
+                // Show confirmation dialog
+                const choice = await vscode.window.showInformationMessage(`Review changes for ${fileName}. Do you want to apply these changes?`, 'Apply Changes', 'Discard');
+                if (choice === 'Apply Changes') {
+                    // Apply changes to the original file
+                    fs.writeFileSync(document.fileName, newText);
+                    // Close the diff editor (optional, but good for UX)
+                    await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+                    // Show success message
+                    vscode.window.showInformationMessage(`Changes applied to ${fileName}`);
+                    // Open the updated file
+                    const doc = await vscode.workspace.openTextDocument(document.fileName);
+                    await vscode.window.showTextDocument(doc);
+                }
+                else {
+                    // Discard - maybe delete temp file?
+                    // fs.unlinkSync(tempFilePath); // Optional: cleanup
+                    vscode.window.showInformationMessage('Changes discarded.');
+                    await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+                }
+            }
+            else {
+                vscode.window.showErrorMessage('No active editor or file found to apply code.');
+            }
+        }
+        catch (err) {
+            console.error('Failed to open diff:', err);
+            vscode.window.showErrorMessage('Failed to open diff view.');
         }
     }));
     context.subscriptions.push(vscode.commands.registerCommand('vibe-coding.fetchSuggestions', () => {
@@ -517,7 +589,7 @@ async function triggerCodeCompletion(context, comment, allCode) {
         loadingStatusBarItem.text = "🔄 Vibe Coding loading...";
         loadingStatusBarItem.show();
         try {
-            const response = await fetch('http://103.250.10.249:13100/api/suggest', {
+            const response = await fetch('http://localhost:13100/api/suggest', {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
