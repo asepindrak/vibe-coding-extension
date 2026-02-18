@@ -1,158 +1,223 @@
-# Vibe Coding (VICO) - 404 Stress Not Found!
+# Vibe Coding (VICO) --- AI Coding Agent for VS Code
 
-Vibe Coding is a chat extension with an assistant designed to help you while programming.
+Vibe Coding is an AI-powered coding assistant and autonomous agent built
+for developers who want more than just chat.\
+From inline completions to full multi-step task execution --- VICO works
+directly inside your workspace.
 
-![Vibe Coding Logo](media/vibe-coding-logo.png)
-![Vibe Coding SS 1](media/vibe-coding-ss-1.png)
-![Vibe Coding SS 2](media/vibe-coding-ss-2.png)
-
-## Features
-
-**Programming Assistance**  
-Get help with coding problems, syntax errors, and best practices.
-
-**Interactive Chat**  
-Communicate with Vibe Coding in real-time. Ask questions and receive instant responses.
-
-**Select Code to AI**  
-Easily select code snippets and ask Vibe Coding for explanations, debugging help, or improvements directly.
-
-**Continue the Code Based on the Provided Comment with Shift+Enter Key**  
-Effortlessly extend your code by leveraging the AI's understanding of your comments to generate relevant and context-aware code snippets that follow your intended logic and requirements.  
-👉 Press `Shift+Enter` after a comment in your code.
-
-**Auto Code Suggestions**  
-Receive suggestions for code snippets that are relevant to your current context. The AI analyzes your code structure and offers snippets that align with your coding patterns.
-
-**Code Completions**  
-Contextual completions help you finish your current line of code or statement. Simply start typing and use the AI to complete it based on the surrounding code and syntax.
-👉 Press `Shift+Enter+.` after your code.
-
-**Generate Full CRUD Pages from Model Schema**  
-Automatically generate complete frontend components (Form, List, Detail, Schema, Action) from a simple model description.  
-- Just ask: *"Generate model Goat with field: id, name, age, breed"*
-- Vibe Coding will guide you to complete the schema.
-- Once complete, it generates ready-to-use TypeScript and React files.
-- Files are saved directly into your project under `src/models/<model-name>/`.
-
-**Teach AI Current Code 🔄**  
-This feature allows you to train the AI with a sampled subset of the code in your workspace. By doing so, the AI gains a better understanding of the context, structure, and logic of your code. This helps the AI provide more accurate and relevant suggestions, explanations, and completions tailored to your specific project.
-Note: Only a sampled subset of files is used, not the full project.
-
-> ✅ Files generated:
-> - `model.schema.ts` (Zod validation)
-> - `ModelForm.tsx` (React form)
-> - `ModelList.tsx` (Table/list view)
-> - `ModelDetailView.tsx` (Detail page)
-> - `model.action.ts` (API calls)
+![Vibe Coding Logo](media/vibe-coding-logo.png) ![Vibe Coding SS
+1](media/vibe-coding-ss-1.png) ![Vibe Coding SS
+2](media/vibe-coding-ss-2.png)
 
 ---
 
-## Upcoming Features
+# 🚀 What's New in v2 (Major Update)
 
-- **Backend Code Generation**: Extend generation to backend (controllers, routes, services).
-- **Custom Templates**: Let users define their own file templates for generation.
+## 🤖 Agent Mode --- Autonomous Task Execution
 
----
+Turn Vibe Coding into a real AI coding agent.
 
-## Installation
+Agent Mode can:
 
-1. **Install the Extension**: Open Visual Studio Code, go to the Extensions view by clicking the Extensions icon in the Activity Bar on the side of the window, or select `View` → `Extensions`.
-2. **Search for Vibe Coding**: Type `Vibe Coding` in the search box.
-3. **Install**: Click the `Install` button on the Vibe Coding extension from the Marketplace.
-4. **Activate**: Once installed, activate the extension by clicking on the Vibe Coding icon in the sidebar.
+- Plan tasks automatically\
+- Think step-by-step before execution\
+- Execute actions directly in your workspace
 
----
+### The agent can:
 
-## Usage
+- 📄 Read files and analyze code
+- ✏️ Modify files using diff-based updates
+- 🆕 Create new files
+- 🖥 Execute terminal commands
+- 🧠 Reason per step before making changes
 
-1. **Open the Chat**: Click on the Vibe Coding icon in the sidebar to open the chat window.
-2. **Login**: Click on the Vibe Coding icon, and log in to start using the assistant.
-3. **Start Chatting**: Type your questions or messages, and Vibe Coding will respond.
-4. **Get Assistance**: Ask coding-related questions, debugging help, or request code generation.
-5. **Generate a Model/Page**:
-   - Example prompt: *"Create a GoatCategory model with fields: name (string), createdAt (date)"*
-   - The AI will ensure the schema is complete.
-   - Once complete, the AI generates the file and the extension creates it in your project.
-   - Check the folder: `src/models/goatCategory/`
-6. **Generate an API SPEC**:
-   - Example prompt: *"Generate API Spec from this ERD:"* (create ERD/DB Diagram from this website https://dbdiagram.io/, then copy & paste the ERD text)
-   - The AI will ensure the ERD is complete.
-   - Once complete, the AI generates the API Spec
+### Example use cases:
+
+- Refactor entire modules
+- Implement features across multiple files
+- Fix complex bugs with multi-step reasoning
+- Run migrations or build commands
+
+Just describe the task.\
+VICO handles the plan → reasoning → execution cycle automatically.
 
 ---
 
-## Contributing
+## 🖼 File & Image Upload Support (Multimodal Input)
 
-We welcome contributions! Please feel free to submit pull requests or issues on our [GitHub repository](https://github.com/asepindrak/vibe-coding-extension).
+You can now provide richer context to the AI.
+
+### Supported methods:
+
+- 📂 Select files via file browser
+- 📋 Paste content directly
+- 🖱 Drag & drop files into chat
+
+### Use cases:
+
+- Upload screenshots of errors
+- Share design mockups
+- Provide log files
+- Attach documentation
+- Send existing code for deeper analysis
+
+The AI automatically includes uploaded content in its reasoning context.
 
 ---
 
-## License
+# ✨ Core Features
 
-This extension is licensed under the MIT License. See the LICENSE file for details.
+## Programming Assistance
+
+Get help with coding problems, syntax errors, refactoring advice, and
+best practices.
+
+## Interactive Chat
+
+Real-time AI chat inside VS Code.
+
+## Select Code to AI
+
+Highlight any code and instantly ask for: - Explanation - Debugging
+help - Refactoring - Optimization
+
+## Continue Code from Comment (Shift + Enter)
+
+Write a comment describing what you want, then: 👉 Press `Shift + Enter`
+
+The AI will continue your code based on the comment context.
+
+## Auto Code Suggestions
+
+Context-aware suggestions based on your coding patterns and project
+structure.
+
+## Code Completions
+
+Start typing and let AI complete your line intelligently.\
+👉 Press `Shift + Enter + .` after your code.
+
+## Generate Full CRUD Pages from Model Schema
+
+Automatically generate complete frontend components from a model
+description.
+
+Example prompt: "Generate model Goat with field: id, name, age, breed"
+
+Generated files: - model.schema.ts (Zod validation) - ModelForm.tsx -
+ModelList.tsx - ModelDetailView.tsx - model.action.ts
+
+Files are saved under: `src/models/<model-name>/`
+
+## Teach AI Current Code 🔄
+
+Improve AI accuracy by training it with a sampled subset of your
+workspace.
+
+Note: Only a sampled subset is used --- not the full project.
 
 ---
 
-## Release Notes
+# 🧠 Why Vibe Coding v2 is Different
 
-### 1.5.0
-- **feat**: Code Suggestions
+Feature Basic AI Chat Vibe Coding v2
 
-### 1.4.8
-- Input message & loading improvement
+---
 
-### 1.4.7
-- Enhance SidebarProvider performance by caching HTML content and improve code readability in extension.ts
+Chat Assistance ✅ ✅
+Code Completion ✅ ✅
+Multi-file Refactor ❌ ✅
+Terminal Execution ❌ ✅
+Step-by-step Planning ❌ ✅
+File & Image Upload ❌ ✅
 
-### 1.4.6
-- Fix languageRegex
+VICO is not just a chatbot.\
+It is an AI coding agent.
 
-### 1.4.5
-- Up version & update changelog
+---
 
-### 1.4.4
-- Stream AI responses in real time to the chat
-- Replace autocomplete trigger with snippet insertion in presentSuggestions function
+# 📦 Installation
 
-### 1.4.3
-- Updated Webhook URL
+1.  Open VS Code
+2.  Go to Extensions
+3.  Search for "Vibe Coding"
+4.  Click Install
+5.  Open the Vibe Coding sidebar
+6.  Login and start building
 
-### 1.4.1
-- Rename to Vibe Coding - VICO
+---
 
-### 1.4.0
-- Generate API Spec (Postman) from ERD/DB Diagram
+# 💻 Usage
 
-### 1.3.1
-- Add token validation logic and update sidebar HTML content
-- Implemented token validation in the SidebarProvider class.
-- Combined userId with workspacePath to generate a unique token.
-- Added logic to check if the provided token matches the generated token.
-- Updated global state with the new token upon validation.
-- Enhanced HTML content replacement to include logo navigation path.
+1.  Open Vibe Coding sidebar
+2.  Login
+3.  Start chatting or activate Agent Mode
+4.  Select code or describe tasks
+5.  Let the AI assist or execute autonomously
 
+Example tasks: - "Refactor this service to use repository pattern" -
+"Fix all TypeScript errors in this folder" - "Create authentication
+module with JWT" - "Generate CRUD for Product model"
 
-### 1.3.0
-- **feat**: Teach AI Current Code 🔄
+---
 
-### 1.2.2
-- **fix**: Confirm overwrite when generating file
+# 🛠 Upcoming Features
 
-### 1.2.1
-- **fix**: New training code base & redesign
+- Backend code generation (controllers, services, routes)
+- Custom file templates
+- Project-wide refactor mode
+- Advanced agent memory
 
-### 1.2.0
-- **feat**: Generate Full CRUD Pages from Model Schema
+---
 
-### 1.1.2
-- **fix**: code completions with `Ctrl+Shift+.`
+# 🤝 Contributing
 
-### 1.1.0
-- **feat**: code completions
+We welcome contributions!\
+Submit pull requests or issues at:
 
-### 1.0.1
-- **fix**: update button styles and text in login and logout functionality
+https://github.com/asepindrak/vibe-coding-extension
 
-### 1.0.0
-- **Initial Release**: Vibe Coding.
+---
+
+# 📄 License
+
+MIT License
+
+---
+
+# 📜 Release Notes
+
+## 2.0.0
+
+- 🚀 Major Update: Agent Mode (Autonomous Task Execution)
+- 🖼 Added File & Image Upload Support
+- 🧠 Step-by-step reasoning system
+- 🖥 Terminal command execution
+- ✏️ Diff-based file modification
+
+## 1.5.0
+
+- Code Suggestions
+
+## 1.4.x
+
+- Performance improvements
+- Streaming AI responses
+- API Spec generation
+- Token validation improvements
+
+## 1.3.0
+
+- Teach AI Current Code
+
+## 1.2.0
+
+- Generate Full CRUD Pages
+
+## 1.1.x
+
+- Code completions improvements
+
+## 1.0.0
+
+- Initial Release

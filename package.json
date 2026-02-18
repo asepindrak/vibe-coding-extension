@@ -250,10 +250,38 @@
         "title": "Vibe Coding: Find Files Vico"
       },
       {
+        "command": "vibe-coding.openDiff",
+        "title": "Vibe Coding: Open Diff"
+      },
+      {
         "command": "vibe-coding.updateWorkspaces",
         "title": "Vibe Coding: Update Workspaces"
+      },
+      {
+        "command": "vibe-coding.acceptDiff",
+        "title": "Keep",
+        "icon": "$(check)"
+      },
+      {
+        "command": "vibe-coding.rejectDiff",
+        "title": "Discard",
+        "icon": "$(close)"
       }
     ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "vibe-coding.acceptDiff",
+          "when": "vibe-coding.isVicoDiff",
+          "group": "navigation"
+        },
+        {
+          "command": "vibe-coding.rejectDiff",
+          "when": "vibe-coding.isVicoDiff",
+          "group": "navigation"
+        }
+      ]
+    },
     "keybindings": [
       {
         "command": "vibe-coding.triggerCompletion",

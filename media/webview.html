@@ -1,1360 +1,1879 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vibe Coding Chat</title>
+    <!-- Include style and script from media/prism.css, media/prism.js -->
+    <link rel="stylesheet" href="%PRISM_PATH%" />
+    <!-- Link to the Prism CSS for syntax highlighting -->
+    <link rel="stylesheet" href="%STYLES_PATH%" />
+  </head>
 
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Vibe Coding Chat</title>
-        <!-- Include style and script from media/prism.css, media/prism.js -->
-        <link rel="stylesheet" href="%PRISM_PATH%"> <!-- Link to the Prism CSS for syntax highlighting -->
-        <link rel="stylesheet" href="%STYLES_PATH%">
-    </head>
-
-    <body>
-
-        <div id="content" class="content"></div>
-        <div class="logo" id="logo">
-            <img src="%LOGO_NAV_PATH%" alt="Logo">
+  <body>
+    <div id="header" class="header">
+      <div class="logo" id="logo">
+        <img src="%LOGO_NAV_PATH%" alt="Logo" />
+      </div>
+      <div id="header-controls" class="header-controls">
+        <button
+          id="button-workspace"
+          class="btn-elegant"
+          style="height: 32px; font-size: 12px"
+        >
+          Teach AI 🔄
+        </button>
+        <button
+          id="logoutButton"
+          class="btn-elegant"
+          style="height: 32px; padding: 0 10px"
+          title="Logout"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-4 w-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+            />
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div id="content" class="content custom-scrollbar"></div>
+    <div id="message" class="message"></div>
+    <div id="messageInputContainer" class="p-4 bg-black shadow-md">
+      <div class="flex items-center mb-2 justify-between">
+        <div class="flex items-center">
+          <label for="modeSelect" class="text-white text-sm mr-2 select-none"
+            >Mode:</label
+          >
+          <select
+            id="modeSelect"
+            class="bg-gray-800 text-white text-sm border border-gray-600 rounded p-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="agent">Agent Mode</option>
+            <option value="chat">Chat Mode</option>
+          </select>
         </div>
-        <div id="message" class="message"></div>
-        <div id="messageInputContainer" class="p-4 bg-black shadow-md fixed-bottom">
-            <div class="flex items-center mb-2 justify-between">
-                <div class="flex items-center">
-                    <label for="modeSelect" class="text-white text-sm mr-2 select-none">Mode:</label>
-                    <select id="modeSelect"
-                        class="bg-gray-800 text-white text-sm border border-gray-600 rounded p-1 focus:outline-none focus:ring-1 focus:ring-blue-500">
-                        <option value="agent">Agent Mode</option>
-                        <option value="chat">Chat Mode</option>
-                    </select>
-                </div>
-            </div>
-            <div class="flex items-center">
-                <textarea id="messageInput" placeholder="Ask Vibe Coding"
-                    class="flex-grow p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 h-6 bg-black text-white">
-                </textarea>
-                <button id="sendMessageButton"
-                    class="ml-2 h-12 p-8 flex items-center justify-center bg-blue-500 hover:bg-blue-600 text-white rounded">
-                    <div id="button-send" class="button-send">
-                        <svg class="h-4 w-4 ml-1" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-                        </svg>
-                    </div>
-                    <svg id="loader" class="loader hidden" viewBox="0 0 24 24">
-                        <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="4" />
-                    </svg>
-                </button>
-            </div>
-            <div class="flex">
-                <div id="div-code-selected" class="flex mt-2">
-                </div>
-                <div id="generating" class="mt-2 ml-2 border border-1 p-2"></div>
-            </div>
-        </div>
+      </div>
+      <div
+        id="attachment-preview"
+        class="flex flex-wrap gap-2 mb-2 hidden"
+      ></div>
+      <div id="composerRow" class="flex items-center">
+        <input
+          type="file"
+          id="file-input"
+          multiple
+          class="hidden"
+          style="display: none"
+        />
+        <button
+          id="attach-button"
+          class="btn-elegant mr-2 p-2 rounded-lg flex items-center justify-center"
+          style="width: 40px; height: 40px"
+          title="Attach files"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+            />
+          </svg>
+        </button>
+        <textarea
+          id="messageInput"
+          placeholder="Ask Vibe Coding"
+          class="flex-grow p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 h-6 bg-black text-white"
+        >
+        </textarea>
+        <button
+          id="sendMessageButton"
+          class="ml-2 flex items-center justify-center bg-blue-500 hover:bg-blue-600 text-white rounded"
+        >
+          <div id="button-send" class="button-send">
+            <svg class="h-4 w-4 ml-1" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+            </svg>
+          </div>
+          <div id="button-stop" class="hidden">
+            <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+              <rect x="6" y="6" width="12" height="12" />
+            </svg>
+          </div>
+          <svg id="loader" class="loader hidden" viewBox="0 0 24 24">
+            <circle
+              class="path"
+              cx="12"
+              cy="12"
+              r="10"
+              fill="none"
+              stroke-width="4"
+            />
+          </svg>
+        </button>
+      </div>
+      <div class="flex">
+        <div id="div-code-selected" class="flex mt-2"></div>
+        <div id="generating" class="mt-2 ml-2 border border-1 p-2"></div>
+      </div>
+    </div>
+    <script type="module">
+      var isLoading = false;
+      var messageArray = [];
+      var pendingMessage = null;
+      var isWorkspaceDirty = false;
+      var talkDuration = 0;
+      var talkMessage = "";
+      var workspaces = "";
+      var lastSentMessage = "";
+      var abortController = null;
 
-        <div id="div-btn-workspace" class="flex mt-2 items-center">
-            <button id="button-workspace" class="button-workspace flex-grow mr-2">
-                Teach AI Current Code 🔄
-            </button>
-            <button id="logoutButton" class="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                    stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-            </button>
-        </div>
-        <script type="module">
-            var isLoading = false
-            var messageArray = []
-            var pendingMessage = null
-            var isWorkspaceDirty = false
-            var talkDuration = 0
-            var talkMessage = ""
-            var workspaces = ""
+      var attachments = [];
 
-            const vscode = acquireVsCodeApi()
-            const persistedState = vscode.getState() || {}
+      const vscode = acquireVsCodeApi();
+      const persistedState = vscode.getState() || {};
 
+      function saveState() {
+        vscode.setState({
+          messagesHTML: document.getElementById("content").innerHTML,
+          input: document.getElementById("messageInput")?.value ?? "",
+          token: localStorage.getItem("token"),
+          userId: localStorage.getItem("userId"),
+          messages: messageArray,
+          mode: document.getElementById("modeSelect")?.value ?? "agent",
+        });
+      }
 
+      document.addEventListener("DOMContentLoaded", function () {
+        const token = localStorage.getItem("token");
+        const userId = localStorage.getItem("userId");
+        if (token && userId) {
+          vscode.postMessage({ type: "validateToken", token, userId });
+        } else {
+          // Clear state if no token
+          vscode.setState(undefined);
+          showLoginForm();
+        }
+        const sendMessageButton = document.getElementById("sendMessageButton");
+        sendMessageButton.addEventListener("click", handleSendMessage);
+        const btnWorkspace = document.getElementById("button-workspace");
+        btnWorkspace.addEventListener("click", updateWorkspaces);
+        const logoutButton = document.getElementById("logoutButton");
+        logoutButton.addEventListener("click", logout);
 
-            // const buttonContainer = document.createElement('div')
-            // buttonContainer.className = 'p-8'
-            // const logoutButton = document.createElement('button')
-            // logoutButton.className = 'logout-button'
-            // logoutButton.textContent = '⏻'
-            // logoutButton.onclick = logout
-            // buttonContainer.appendChild(logoutButton)
-            // content.appendChild(buttonContainer)
+        messageInput.value = messageInput.value.trim();
 
-            function saveState() {
-                vscode.setState({
-                    messagesHTML: document.getElementById('content').innerHTML,
-                    input: document.getElementById('messageInput')?.value ?? '',
-                    token: localStorage.getItem('token'),
-                    userId: localStorage.getItem('userId'),
-                    messages: messageArray,
-                    mode: document.getElementById('modeSelect')?.value ?? 'agent'
-                })
+        messageInput.addEventListener("keydown", handleKeyDown);
+
+        // Attachment Logic
+        const fileInput = document.getElementById("file-input");
+        const attachButton = document.getElementById("attach-button");
+        const preview = document.getElementById("attachment-preview");
+        const dropZone = document.getElementById("messageInputContainer");
+
+        attachButton.addEventListener("click", () => fileInput.click());
+        fileInput.addEventListener("change", (e) =>
+          handleFiles(e.target.files),
+        );
+
+        dropZone.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          dropZone.classList.add("border-blue-500", "border-2");
+        });
+        dropZone.addEventListener("dragleave", (e) => {
+          e.preventDefault();
+          dropZone.classList.remove("border-blue-500", "border-2");
+        });
+        dropZone.addEventListener("drop", (e) => {
+          e.preventDefault();
+          dropZone.classList.remove("border-blue-500", "border-2");
+          handleFiles(e.dataTransfer.files);
+        });
+
+        messageInput.addEventListener("paste", (e) => {
+          const items = (e.clipboardData || e.originalEvent.clipboardData)
+            .items;
+          const files = [];
+          for (let index in items) {
+            const item = items[index];
+            if (item.kind === "file") {
+              files.push(item.getAsFile());
             }
+          }
+          if (files.length > 0) {
+            e.preventDefault();
+            handleFiles(files);
+          }
+        });
 
-            document.addEventListener('DOMContentLoaded', function () {
-                const token = localStorage.getItem('token')
-                const userId = localStorage.getItem('userId')
-                if (token && userId) {
-                    vscode.postMessage({ type: 'validateToken', token, userId })
-                } else {
-                    // Clear state if no token
-                    vscode.setState(undefined)
-                    showLoginForm()
-                }
-                const sendMessageButton = document.getElementById('sendMessageButton')
-                sendMessageButton.addEventListener('click', handleSendMessage)
-                const btnWorkspace = document.getElementById('button-workspace')
-                btnWorkspace.addEventListener('click', updateWorkspaces)
-                const logoutButton = document.getElementById('logoutButton')
-                logoutButton.addEventListener('click', logout)
+        window.addEventListener("message", async (event) => {
+          const messageEvent = event.data;
 
-                messageInput.value = messageInput.value.trim()
-
-                messageInput.addEventListener('keydown', handleKeyDown)
-
-                window.addEventListener('message', async event => {
-                    const messageEvent = event.data
-
-                    if (messageEvent.command == 'updateFileInfo') {
-                        if (messageEvent.filePath) {
-
-
-                            document.getElementById('div-code-selected').innerHTML = `
+          if (messageEvent.command == "updateFileInfo") {
+            if (messageEvent.filePath) {
+              document.getElementById("div-code-selected").innerHTML = `
                             <div id="fileOpen"
                                 class="flex file-open p-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                                 <span id="filePath"></span><span class="fs-6" id="selectedLine"></span>
                                 <span id="svg-eye"></span>
-                            </div>`
+                            </div>`;
 
-                            document.getElementById('filePath').textContent = messageEvent.filePath
-                            document.getElementById('selectedLine').textContent = ': ' + messageEvent.selectedLine + ' Current file'
-                            document.getElementById('svg-eye').innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" id="eye" fill="white" class="icon">
+              document.getElementById("filePath").textContent =
+                messageEvent.filePath;
+              document.getElementById("selectedLine").textContent =
+                ": " + messageEvent.selectedLine + " Current file";
+              document.getElementById("svg-eye").innerHTML =
+                `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" id="eye" fill="white" class="icon">
                                 <path
                                     d="M21.92,11.6C19.9,6.91,16.1,4,12,4S4.1,6.91,2.08,11.6a1,1,0,0,0,0,.8C4.1,17.09,7.9,20,12,20s7.9-2.91,9.92-7.6A1,1,0,0,0,21.92,11.6ZM12,18c-3.17,0-6.17-2.29-7.9-6C5.83,8.29,8.83,6,12,6s6.17,2.29,7.9,6C18.17,15.71,15.17,18,12,18ZM12,8a4,4,0,1,0,4,4A4,4,0,0,0,12,8Zm0,6a2,2,0,1,1,2-2A2,2,0,0,1,12,14Z">
                                 </path>
-                            </svg>`
-                        } else {
-                            document.getElementById('div-code-selected').innerHTML = ""
-                            document.getElementById('filePath').textContent = ""
-                            document.getElementById('selectedLine').textContent = ""
-                            document.getElementById('svg-eye').innerHTML = ""
-                        }
-                        return
-                    }
+                            </svg>`;
+            } else {
+              document.getElementById("div-code-selected").innerHTML = "";
+              document.getElementById("filePath").textContent = "";
+              document.getElementById("selectedLine").textContent = "";
+              document.getElementById("svg-eye").innerHTML = "";
+            }
+            return;
+          }
 
-                    if (messageEvent.command === 'filesFound') {
-                        // console.log(`Files found webview: ${messageEvent.files}`)
-                        workspaces = messageEvent.files
-                        var token = messageEvent.token
-                        await loginAPI(workspaces, token)
-                        return
-                        // Handle the list of files as needed
-                    } else if (messageEvent.command === 'error') {
-                        console.error(`Error: ${messageEvent.error}`)
-                        return
-                    }
+          if (messageEvent.command === "filesFound") {
+            // console.log(`Files found webview: ${messageEvent.files}`)
+            workspaces = messageEvent.files;
+            var token = messageEvent.token;
+            await loginAPI(workspaces, token);
+            return;
+            // Handle the list of files as needed
+          } else if (messageEvent.command === "error") {
+            console.error(`Error: ${messageEvent.error}`);
+            return;
+          }
 
-                    if (messageEvent.command === 'workspaceCode') {
-                        // console.log(`Files found webview: ${messageEvent.files}`)
-                        workspaces = messageEvent.files
-                        await updateWorkspacesAPI(workspaces)
-                        return
-                        // Handle the list of files as needed
-                    } else if (messageEvent.command === 'error') {
-                        console.error(`Error: ${messageEvent.error}`)
-                        return
-                    }
+          if (messageEvent.command === "workspaceCode") {
+            // console.log(`Files found webview: ${messageEvent.files}`)
+            workspaces = messageEvent.files;
+            await updateWorkspacesAPI(workspaces);
+            return;
+            // Handle the list of files as needed
+          } else if (messageEvent.command === "error") {
+            console.error(`Error: ${messageEvent.error}`);
+            return;
+          }
 
-                    if (messageEvent.command === 'workspaceCodeCancel') {
-                        await cancelUpdateWorkspaces()
-                        return
-                        // Handle the list of files as needed
-                    } else if (messageEvent.command === 'error') {
-                        console.error(`Error: ${messageEvent.error}`)
-                        return
-                    }
+          if (messageEvent.command === "workspaceCodeCancel") {
+            await cancelUpdateWorkspaces();
+            return;
+            // Handle the list of files as needed
+          } else if (messageEvent.command === "error") {
+            console.error(`Error: ${messageEvent.error}`);
+            return;
+          }
 
-                    if (messageEvent.command === 'workspaceDirty') {
-                        isWorkspaceDirty = messageEvent.isDirty
-                        const btnWorkspace = document.getElementById('button-workspace')
-                        if (isWorkspaceDirty) {
-                            btnWorkspace.innerHTML = `Teach AI Current Code 🔄 (Changes detected)`
-                            btnWorkspace.classList.add('bg-yellow-600') // Visual indicator
-                        } else {
-                            btnWorkspace.innerHTML = `Teach AI Current Code 🔄`
-                            btnWorkspace.classList.remove('bg-yellow-600')
-                        }
-                        return
-                    }
+          if (messageEvent.command === "workspaceDirty") {
+            isWorkspaceDirty = messageEvent.isDirty;
+            const btnWorkspace = document.getElementById("button-workspace");
+            if (isWorkspaceDirty) {
+              btnWorkspace.innerHTML = `Teach AI Current Code 🔄 (Changes detected)`;
+              btnWorkspace.classList.add("bg-yellow-600"); // Visual indicator
+            } else {
+              btnWorkspace.innerHTML = `Teach AI Current Code 🔄`;
+              btnWorkspace.classList.remove("bg-yellow-600");
+            }
+            return;
+          }
 
-                    if (messageEvent.command === 'tokenValid') {
-                        localStorage.setItem('token', messageEvent.token)
-                        localStorage.setItem('userId', messageEvent.userId)
-                        // Fetch and display chat history
-                        if (persistedState.messagesHTML) {
-                            document.getElementById('content').innerHTML = persistedState.messagesHTML
-                            document.getElementById('messageInput').value = persistedState.input ?? ''
-                            const modeSelect = document.getElementById('modeSelect')
-                            if (modeSelect) {
-                                modeSelect.value = persistedState.mode ?? 'agent'
-                            }
-                            // Show the message input container
-                            const messageInputContainer = document.getElementById('messageInputContainer')
-                            messageInputContainer.style.display = 'block'
-                            var content = document.getElementById('content')
-                            // Scroll to the bottom of the content
-                            content.scrollTop = content.scrollHeight
-                            const messageInput = document.getElementById('messageInput')
-                            messageInput.focus()
-                        } else {
-                            fetchHistory()
-                        }
-                        return
-                        // Handle the list of files as needed
-                    } else if (messageEvent.command === 'error') {
-                        console.error(`Error: ${messageEvent.error}`)
-                        return
-                    }
+          if (messageEvent.command === "tokenValid") {
+            localStorage.setItem("token", messageEvent.token);
+            localStorage.setItem("userId", messageEvent.userId);
+            // Fetch and display chat history
+            if (persistedState.messagesHTML) {
+              document.getElementById("content").innerHTML =
+                persistedState.messagesHTML;
+              document.getElementById("messageInput").value =
+                persistedState.input ?? "";
+              const modeSelect = document.getElementById("modeSelect");
+              if (modeSelect) {
+                modeSelect.value = persistedState.mode ?? "agent";
+              }
+              // Show the message input container
+              const messageInputContainer = document.getElementById(
+                "messageInputContainer",
+              );
+              messageInputContainer.style.display = "block";
+              var content = document.getElementById("content");
+              // Scroll to the bottom of the content
+              content.scrollTop = content.scrollHeight;
+              const messageInput = document.getElementById("messageInput");
+              messageInput.focus();
+            } else {
+              fetchHistory();
+            }
+            return;
+            // Handle the list of files as needed
+          } else if (messageEvent.command === "error") {
+            console.error(`Error: ${messageEvent.error}`);
+            return;
+          }
 
-                    if (messageEvent.command === 'tokenInvalid') {
-                        logout()
-                        return
-                        // Handle the list of files as needed
-                    } else if (messageEvent.command === 'error') {
-                        console.error(`Error: ${messageEvent.error}`)
-                        return
-                    }
+          if (messageEvent.command === "tokenInvalid") {
+            logout();
+            return;
+            // Handle the list of files as needed
+          } else if (messageEvent.command === "error") {
+            console.error(`Error: ${messageEvent.error}`);
+            return;
+          }
 
-                    const messageText = event.data // Menerima pesan dari extension
-                    let coding = messageText.text || "" // Menggunakan operator logika OR untuk inisialisasi
-                    let allCode = messageText.allCode || "" // Menggunakan operator logika OR untuk inisialisasi
-                    const allCodeStorageKey = 'allCodeStorage' // Define a key for storing all code in local storage
-                    const codingStorageKey = 'codingStorage' // Define a key for storing all code in local storage
-                    const storedAllCode = localStorage.getItem(allCodeStorageKey)
-                    const storedCoding = localStorage.getItem(codingStorageKey)
+          // Ignore other commands that fell through
+          if (messageEvent.command) {
+            return;
+          }
 
-                    if (storedAllCode === allCode) {
-                        allCode = "" // Reset allCode jika sama dengan yang disimpan
-                    }
-                    if (storedCoding === coding) {
-                        coding = "" // Reset allCode jika sama dengan yang disimpan
-                    }
+          const messageText = event.data; // Menerima pesan dari extension
+          let coding = messageText.text || ""; // Menggunakan operator logika OR untuk inisialisasi
+          let allCode = messageText.allCode || ""; // Menggunakan operator logika OR untuk inisialisasi
+          const allCodeStorageKey = "allCodeStorage"; // Define a key for storing all code in local storage
+          const codingStorageKey = "codingStorage"; // Define a key for storing all code in local storage
+          const storedAllCode = localStorage.getItem(allCodeStorageKey);
+          const storedCoding = localStorage.getItem(codingStorageKey);
 
-                    // Save all code to local storage only if it's not empty
-                    if (allCode) {
-                        localStorage.setItem(allCodeStorageKey, allCode)
-                        console.log("All code saved to local storage.")
+          if (storedAllCode === allCode) {
+            allCode = ""; // Reset allCode jika sama dengan yang disimpan
+          }
+          if (storedCoding === coding) {
+            coding = ""; // Reset allCode jika sama dengan yang disimpan
+          }
 
+          // Save all code to local storage only if it's not empty
+          if (allCode) {
+            localStorage.setItem(allCodeStorageKey, allCode);
+            console.log("All code saved to local storage.");
+          } else {
+            console.log("No allCode to save.");
+          }
 
-                    } else {
-                        console.log("No allCode to save.")
-                    }
+          // Save all code to local storage only if it's not empty
+          if (coding) {
+            localStorage.setItem(codingStorageKey, coding);
+            console.log("Coding saved to local storage.");
+          } else {
+            console.log("No coding to save.");
+          }
 
-                    // Save all code to local storage only if it's not empty
-                    if (coding) {
-                        localStorage.setItem(codingStorageKey, coding)
-                        console.log("Coding saved to local storage.")
-                    } else {
-                        console.log("No coding to save.")
-                    }
+          const messageInput = document.getElementById("messageInput");
+          // Menghapus spasi di awal dan akhir pada load
 
+          let message = messageInput.value.trim();
+          if (coding) {
+            message =
+              "[labelInstruction]Instruction: [labelInstruction]" +
+              message +
+              "[selection]" +
+              coding +
+              "[selection]";
+          }
+          if (allCode) {
+            message = "[fullcode]" + allCode + "[fullcode]" + message;
+          }
+          console.log("send message to API");
+          if (!message) return;
+          sendMessageToApi(message);
+        });
+      });
 
-                    const messageInput = document.getElementById('messageInput')
-                    // Menghapus spasi di awal dan akhir pada load
+      function handleFiles(files) {
+        if (!files || files.length === 0) return;
+        const fileInput = document.getElementById("file-input");
+        Array.from(files).forEach((file) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const content = e.target.result;
+            const attachment = {
+              name: file.name,
+              type: file.type,
+              content: content,
+            };
+            attachments.push(attachment);
+            renderAttachments();
+          };
+          reader.readAsDataURL(file);
+        });
+        if (fileInput) fileInput.value = "";
+      }
 
-                    let message = messageInput.value.trim()
-                    if (coding) {
-                        message = "[labelInstruction]Instruction: [labelInstruction]" + message + "[selection]" + coding + "[selection]"
-                    }
-                    if (allCode) {
-                        message = "[fullcode]" + allCode + "[fullcode]" + message
-                    }
-                    console.log("send message to API")
-                    if (!message) return
-                    sendMessageToApi(message)
-                })
-            })
+      function renderAttachments() {
+        const preview = document.getElementById("attachment-preview");
+        if (!preview) return;
 
-            function handleKeyDown(event) {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault()
-                    handleSendMessage()
-                } else {
-                    this.style.height = 'auto' // Reset tinggi agar bisa menghitung tinggi yang baru
-                    this.style.height = Math.min(this.scrollHeight, 300) + 'px' // Set tinggi maksimal 300px
-                }
+        preview.innerHTML = "";
+        if (attachments.length > 0) {
+          preview.classList.remove("hidden");
+        } else {
+          preview.classList.add("hidden");
+        }
+
+        attachments.forEach((att, index) => {
+          const div = document.createElement("div");
+          div.className =
+            "relative group bg-gray-800 rounded p-1 border border-gray-600 inline-block mr-2";
+
+          if (att.type.startsWith("image/")) {
+            const img = document.createElement("img");
+            img.src = att.content;
+            img.className = "h-8 w-8 object-cover rounded";
+            div.appendChild(img);
+          } else {
+            const span = document.createElement("div");
+            span.className =
+              "h-8 w-8 flex items-center justify-center text-xs text-center overflow-hidden p-1 break-all text-white";
+            span.textContent = att.name;
+            div.appendChild(span);
+          }
+
+          const removeBtn = document.createElement("button");
+          removeBtn.className =
+            "absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs";
+          removeBtn.innerHTML = "&times;";
+          removeBtn.onclick = () => {
+            attachments.splice(index, 1);
+            renderAttachments();
+          };
+          div.appendChild(removeBtn);
+          preview.appendChild(div);
+        });
+      }
+
+      function normalizeAttachments(files) {
+        const arr = (files || []).map((att) => {
+          const content = att?.content || "";
+          const match = /^data:(.*?);base64,(.*)$/.exec(content);
+          if (match) {
+            const mime = match[1] || att.type || "";
+            const base64 = match[2] || "";
+            return {
+              name: att.name,
+              type: mime,
+              contentBase64: base64,
+              encoding: "base64",
+              contentDataUrl: content,
+            };
+          }
+          return {
+            name: att.name,
+            type: att.type || "",
+            contentBase64: content,
+            encoding: "base64",
+            contentDataUrl: content,
+          };
+        });
+        try {
+          console.log(
+            "normalizeAttachments",
+            arr.map((a) => ({
+              name: a.name,
+              type: a.type,
+              len: a.contentBase64?.length || 0,
+            })),
+          );
+        } catch (e) {}
+        return arr;
+      }
+
+      function handleKeyDown(event) {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          handleSendMessage();
+        } else {
+          this.style.height = "auto"; // Reset tinggi agar bisa menghitung tinggi yang baru
+          this.style.height = Math.min(this.scrollHeight, 300) + "px"; // Set tinggi maksimal 300px
+        }
+      }
+
+      async function handleSendMessage() {
+        if (isLoading) {
+          stopGeneration();
+          return;
+        }
+
+        const messageInput = document.getElementById("messageInput");
+        const messageVal = messageInput.value.trim();
+        if (!messageVal) return;
+
+        lastSentMessage = messageVal;
+
+        document.getElementById("generating").innerHTML = "Generating...";
+        const sendMessageButton = document.getElementById("button-send");
+        const stopButton = document.getElementById("button-stop");
+        // const loader = document.getElementById("loader");
+
+        // Ganti tombol send dengan stop
+        sendMessageButton.classList.add("hidden");
+        stopButton.classList.remove("hidden");
+        // loader.classList.remove("hidden");
+
+        console.log("send message to Vibe Coding");
+        // Proses pengiriman pesan
+        vscode.postMessage({ command: "getSelectedText" });
+        // document.getElementById("generating").innerHTML = ""; // Don't clear yet
+      }
+
+      function stopGeneration() {
+        if (abortController) {
+          abortController.abort();
+          abortController = null;
+        }
+        isLoading = false;
+
+        const sendMessageButton = document.getElementById("button-send");
+        const stopButton = document.getElementById("button-stop");
+        const loader = document.getElementById("loader");
+        const messageInput = document.getElementById("messageInput");
+
+        sendMessageButton.classList.remove("hidden");
+        stopButton.classList.add("hidden");
+        loader.classList.add("hidden");
+
+        messageInput.value = lastSentMessage;
+        messageInput.disabled = false;
+        messageInput.focus();
+
+        document.getElementById("generating").innerHTML = "Stopped.";
+        setTimeout(() => {
+          if (!isLoading) document.getElementById("generating").innerHTML = "";
+        }, 2000);
+      }
+
+      async function sendMessageToApi(message, isRetry = false) {
+        if (isLoading && !isRetry) return; // Allow retry to proceed if called internally
+        isLoading = true;
+
+        // Setup AbortController
+        abortController = new AbortController();
+
+        const messageInput = document.getElementById("messageInput");
+
+        // Clear input immediately
+        if (!isRetry) {
+          messageInput.value = "";
+        }
+
+        messageInput.disabled = true;
+        document.getElementById("generating").innerHTML = "Generating...";
+
+        const uniqueId = Date.now() + Math.random();
+
+        // Clone attachments for this message
+        const currentAttachments = [...attachments];
+        const normalizedAttachments = normalizeAttachments(currentAttachments);
+        try {
+          console.log(
+            "sending attachments",
+            normalizedAttachments.map((a) => ({
+              name: a.name,
+              type: a.type,
+              len: a.contentBase64?.length || 0,
+            })),
+          );
+        } catch (e) {}
+
+        let displayMessage = message;
+        if (currentAttachments.length > 0) {
+          displayMessage +=
+            "\n\n" +
+            currentAttachments.map((a) => `[Attachment: ${a.name}]`).join("\n");
+        }
+
+        if (!isRetry) {
+          // add the “user” bubble
+          displayMessagesAssistant({
+            role: "user",
+            content: displayMessage,
+            uniqueId,
+          });
+          //save message
+          messageArray.push({ role: "user", content: displayMessage });
+          saveState();
+        }
+
+        // add an empty “assistant” bubble that we’ll update
+        displayMessagesAssistant({
+          role: "assistant",
+          content: "",
+          uniqueId: `assistant-${uniqueId}`,
+        });
+
+        const modeSelect = document.getElementById("modeSelect");
+        const mode = modeSelect ? modeSelect.value : "agent";
+
+        // NEW: Check if workspace is dirty before sending
+        if (mode === "agent" && isWorkspaceDirty && !isRetry) {
+          console.log("Workspace is dirty, auto-updating...");
+
+          // Show a temporary bubble or just the loader?
+          // Let's use the pending message logic
+          pendingMessage = message;
+
+          // Remove the user bubble we just added to avoid duplication on retry?
+          // Actually, if we just stop here, the user bubble is already in messageArray.
+          // When retry happens, isRetry=true, so we won't add it again.
+          // But we need to make sure the assistant bubble is ready or removed.
+          // The assistant bubble is added above.
+          // Let's remove the assistant bubble so it doesn't look stuck
+          const bubble = document.getElementById(`assistant-${uniqueId}`);
+          if (bubble) bubble.parentElement.remove();
+
+          await updateWorkspaces(true); // Silent update
+          return;
+        }
+
+        if (mode === "agent") {
+          await handleAgentWorkflow(message, uniqueId, normalizedAttachments);
+          // Clear attachments
+          attachments = [];
+          renderAttachments();
+          return;
+        }
+
+        const data = {
+          userId: localStorage.getItem("userId"),
+          token: localStorage.getItem("token"),
+          message,
+          mode: mode,
+          attachments: normalizedAttachments,
+        };
+
+        // Clear attachments
+        attachments = [];
+        renderAttachments();
+
+        try {
+          const response = await fetch("http://localhost:13100/api/message", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${data.token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(data),
+            signal: abortController.signal,
+          });
+
+          if (!response.ok) {
+            const clone = response.clone();
+            try {
+              const errJson = await clone.json();
+              if (errJson.error === "WORKSPACE_MISSING") {
+                console.log("Workspace missing, triggering auto-scan...");
+
+                // Remove the empty assistant bubble we just added
+                const bubble = document.getElementById(`assistant-${uniqueId}`);
+                if (bubble) bubble.parentElement.remove();
+
+                pendingMessage = message; // Save for retry
+                await updateWorkspaces(true); // Call with silent=true
+                return;
+              }
+            } catch (e) {
+              console.error(e);
             }
 
-            async function handleSendMessage() {
-                document.getElementById('generating').innerHTML = "Generating..."
-                const sendMessageButton = document.getElementById('button-send')
-                const loader = document.getElementById('loader')
+            throw new Error("Failed to send message");
+          }
 
-                // Ganti tombol dengan loader
-                sendMessageButton.classList.add('hidden') // Sembunyikan tombol
-                loader.classList.remove('hidden') // Tampilkan loader
-                console.log("send message to Vibe Coding")
-                // Proses pengiriman pesan
-                vscode.postMessage({ command: 'getSelectedText' })
-                document.getElementById('generating').innerHTML = ''
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let assistantMessage = "";
+
+          var no = 0;
+          // read the stream
+          while (true) {
+            messageInput.value = "";
+            const { value, done } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            assistantMessage += chunk;
+
+            // update the existing assistant bubble
+            updateMessagesAssistant({
+              uniqueId: `assistant-${uniqueId}`,
+              content: assistantMessage,
+            });
+            if (no == 0) {
+              const content = document.getElementById("content");
+              content.scrollTop = content.scrollHeight;
+            }
+            no++;
+          }
+
+          console.log("stream finished");
+          console.log(assistantMessage);
+          // if a write-file command appears, send it immediately
+          if (assistantMessage.includes("[writeFile]")) {
+            vscode.postMessage({ type: "writeFile", assistantMessage });
+          }
+
+          // finalize: save and tidy up UI
+          messageArray.push({ role: "assistant", content: assistantMessage });
+
+          const loader = document.getElementById("loader");
+          const sendBtn = document.getElementById("button-send");
+          const stopBtn = document.getElementById("button-stop");
+
+          loader.classList.add("hidden");
+          stopBtn.classList.add("hidden");
+          sendBtn.classList.remove("hidden");
+
+          document.getElementById("generating").innerHTML = "";
+          saveState();
+          setTimeout(() => {
+            isLoading = false;
+            messageInput.disabled = false; // Enable message input after loading is complete
+            messageInput.focus();
+          }, 1000);
+        } catch (err) {
+          if (err.name === "AbortError") {
+            console.log("Fetch aborted by user");
+            return; // Stop execution here, stopGeneration handled UI
+          }
+          console.error("Stream error:", err);
+          isLoading = false;
+          // Restore UI on error
+          document.getElementById("loader").classList.add("hidden");
+          document.getElementById("button-stop").classList.add("hidden");
+          document.getElementById("button-send").classList.remove("hidden");
+          document.getElementById("messageInput").disabled = false;
+        }
+      }
+
+      async function handleAgentWorkflow(message, uniqueId, attachments) {
+        const token = localStorage.getItem("token");
+        const userId = localStorage.getItem("userId");
+        try {
+          console.log(
+            "agent attachments",
+            (attachments || []).map((a) => ({
+              name: a.name,
+              type: a.type,
+              len: a.contentBase64?.length || 0,
+            })),
+          );
+        } catch (e) {}
+
+        // 1. Request Plan
+        updateMessagesAssistant({
+          uniqueId: `assistant-${uniqueId}`,
+          content: "🧠 Thinking & Planning...",
+        });
+
+        try {
+          const response = await fetch(
+            "http://localhost:13100/api/agent/plan",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ userId, token, message, attachments }),
+            },
+          );
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let planJson = "";
+
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            planJson += chunk;
+          }
+
+          let planData;
+          try {
+            // Find JSON in the response (in case of extra text)
+            const jsonMatch = planJson.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              planData = JSON.parse(jsonMatch[0]);
+            } else {
+              throw new Error("Invalid JSON plan");
+            }
+          } catch (e) {
+            updateMessagesAssistant({
+              uniqueId: `assistant-${uniqueId}`,
+              content: `Error parsing plan: ${e.message}\nRaw output:\n${planJson}`,
+            });
+            resetUI();
+            return;
+          }
+
+          // Render Plan
+          let planMarkdown = `**Plan:**\n`;
+          planData.plan.forEach((step) => {
+            planMarkdown += `- [ ] Step ${step.step}: ${step.description}\n`;
+          });
+          updateMessagesAssistant({
+            uniqueId: `assistant-${uniqueId}`,
+            content: planMarkdown,
+          });
+
+          // Execute Plan
+          await executePlan(
+            planData.plan,
+            uniqueId,
+            userId,
+            token,
+            planMarkdown,
+            attachments,
+          );
+        } catch (err) {
+          console.error(err);
+          updateMessagesAssistant({
+            uniqueId: `assistant-${uniqueId}`,
+            content: `Error: ${err.message}`,
+          });
+          resetUI();
+        }
+      }
+
+      async function executePlan(
+        plan,
+        uniqueId,
+        userId,
+        token,
+        initialMarkdown,
+        attachments,
+      ) {
+        let context = "";
+        let planMarkdown = initialMarkdown;
+        let modifiedFiles = new Set();
+
+        for (const step of plan) {
+          // Update to In Progress
+          planMarkdown = planMarkdown.replace(
+            `- [ ] Step ${step.step}`,
+            `- [🔄] Step ${step.step}`,
+          );
+          updateMessagesAssistant({
+            uniqueId: `assistant-${uniqueId}`,
+            content: planMarkdown,
+          });
+
+          try {
+            // --- PHASE 1: THINKING ---
+            updateMessagesAssistant({
+              uniqueId: `assistant-${uniqueId}`,
+              content: planMarkdown + `\n  > *Thinking...*`,
+            });
+
+            const thinkResponse = await fetch(
+              "http://localhost:13100/api/agent/execute",
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  userId,
+                  token,
+                  step,
+                  context,
+                  mode: "think",
+                  attachments,
+                }),
+              },
+            );
+
+            const thinkReader = thinkResponse.body.getReader();
+            const thinkDecoder = new TextDecoder();
+            let thinkOutput = "";
+            while (true) {
+              const { value, done } = await thinkReader.read();
+              if (done) break;
+              thinkOutput += thinkDecoder.decode(value, { stream: true });
             }
 
-            async function sendMessageToApi(message, isRetry = false) {
-                if (isLoading) return
-                isLoading = true
-                const messageInput = document.getElementById('messageInput')
-                messageInput.disabled = true // Disable message input while loading
+            // Extract thought
+            const thoughtMatch = thinkOutput.match(
+              /\*\*Thought:\*\*([\s\S]*?)(?=\*\*Action:|$)/i,
+            );
+            const thought = thoughtMatch
+              ? thoughtMatch[1].trim()
+              : "Analyzing context...";
 
-                const uniqueId = Date.now() + Math.random()
+            // Update UI with thought
+            planMarkdown += `\n  > *Thought:* ${thought}\n`;
+            updateMessagesAssistant({
+              uniqueId: `assistant-${uniqueId}`,
+              content: planMarkdown,
+            });
 
-                if (!isRetry) {
-                    // add the “user” bubble
-                    displayMessagesAssistant({ role: 'user', content: message, uniqueId })
-                    //save message
-                    messageArray.push({ role: 'user', content: message })
-                    saveState()
-                }
+            // Check for [readFile]
+            // Updated regex to be more flexible with quotes and spacing
+            const readFileRegex = /\[readFile\]([\s\S]*?)\[\/readFile\]/;
+            const readFileMatch = thinkOutput.match(readFileRegex);
 
-                // add an empty “assistant” bubble that we’ll update
-                displayMessagesAssistant({ role: 'assistant', content: '', uniqueId: `assistant-${uniqueId}` })
+            if (readFileMatch) {
+              const fileBlock = readFileMatch[1];
+              // Use non-global regex for matchAll or exec in loop
+              const filePathsRegex = /\[file\s+path=["']([^"']+)["']\s*\]/g;
+              let fileMatch;
 
-                const modeSelect = document.getElementById('modeSelect')
-                const mode = modeSelect ? modeSelect.value : 'agent'
+              while ((fileMatch = filePathsRegex.exec(fileBlock)) !== null) {
+                const filePath = fileMatch[1];
 
-                // NEW: Check if workspace is dirty before sending
-                if (mode === 'agent' && isWorkspaceDirty && !isRetry) {
-                    console.log("Workspace is dirty, auto-updating...")
+                // Visual feedback
+                planMarkdown += `\n  > *Reading file:* ${filePath}\n`;
+                updateMessagesAssistant({
+                  uniqueId: `assistant-${uniqueId}`,
+                  content: planMarkdown,
+                });
 
-                    // Show a temporary bubble or just the loader?
-                    // Let's use the pending message logic
-                    pendingMessage = message
-
-                    // Remove the user bubble we just added to avoid duplication on retry?
-                    // Actually, if we just stop here, the user bubble is already in messageArray.
-                    // When retry happens, isRetry=true, so we won't add it again.
-                    // But we need to make sure the assistant bubble is ready or removed.
-                    // The assistant bubble is added above.
-                    // Let's remove the assistant bubble so it doesn't look stuck
-                    const bubble = document.getElementById(`assistant-${uniqueId}`)
-                    if (bubble) bubble.parentElement.remove()
-
-                    await updateWorkspaces(true) // Silent update
-                    return
-                }
-
-                const data = {
-                    userId: localStorage.getItem('userId'),
-                    token: localStorage.getItem('token'),
-                    message,
-                    mode: mode
-                }
-
+                // Send readFile to extension with timeout
                 try {
-                    const response = await fetch('http://localhost:13100/api/message', {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${data.token}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(data)
-                    })
+                  const fileContent = await new Promise((resolve) => {
+                    // Define handler first so we can remove it
+                    let handleMessage;
 
-                    if (!response.ok) {
-                        const clone = response.clone()
-                        try {
-                            const errJson = await clone.json()
-                            if (errJson.error === "WORKSPACE_MISSING") {
-                                console.log("Workspace missing, triggering auto-scan...")
+                    const timeout = setTimeout(() => {
+                      window.removeEventListener("message", handleMessage);
+                      resolve(`Error: Timeout reading file ${filePath}`);
+                    }, 5000); // 5 second timeout
 
-                                // Remove the empty assistant bubble we just added
-                                const bubble = document.getElementById(`assistant-${uniqueId}`)
-                                if (bubble) bubble.parentElement.remove()
+                    handleMessage = (event) => {
+                      if (
+                        event.data.command === "readFileResult" &&
+                        event.data.filePath === filePath
+                      ) {
+                        clearTimeout(timeout);
+                        window.removeEventListener("message", handleMessage);
+                        resolve(event.data.content || event.data.error || "");
+                      }
+                    };
+                    window.addEventListener("message", handleMessage);
+                    vscode.postMessage({ type: "readFile", filePath });
+                  });
 
-                                pendingMessage = message // Save for retry
-                                await updateWorkspaces(true) // Call with silent=true
-                                return
-                            }
-                        } catch (e) { console.error(e) }
+                  context += `\nFile Content (${filePath}):\n${fileContent}\n`;
 
-                        throw new Error('Failed to send message')
-                    }
-
-                    const reader = response.body.getReader()
-                    const decoder = new TextDecoder()
-                    let assistantMessage = ''
-
-                    var no = 0
-                    // read the stream
-                    while (true) {
-                        messageInput.value = ''
-                        const { value, done } = await reader.read()
-                        if (done) break
-                        const chunk = decoder.decode(value, { stream: true })
-                        assistantMessage += chunk
-
-
-                        // update the existing assistant bubble
-                        updateMessagesAssistant({ uniqueId: `assistant-${uniqueId}`, content: assistantMessage })
-                        if (no == 0) {
-                            const content = document.getElementById('content')
-                            content.scrollTop = content.scrollHeight
-                        }
-                        no++
-                    }
-
-                    console.log("stream finished")
-                    console.log(assistantMessage)
-                    // if a write-file command appears, send it immediately
-                    if (assistantMessage.includes('[writeFile]')) {
-                        vscode.postMessage({ type: 'writeFile', assistantMessage })
-                    }
-
-                    // finalize: save and tidy up UI
-                    messageArray.push({ role: 'assistant', content: assistantMessage })
-
-                    const loader = document.getElementById('loader')
-                    const sendBtn = document.getElementById('button-send')
-                    loader.classList.add('hidden')
-                    sendBtn.classList.remove('hidden')
-                    document.getElementById('generating').innerHTML = ''
-                    saveState()
-                    setTimeout(() => {
-                        isLoading = false
-                        messageInput.disabled = false // Enable message input after loading is complete
-                        messageInput.focus()
-                    }, 1000)
-
-                } catch (err) {
-                    console.error('Stream error:', err)
-                    isLoading = false
+                  // Visual feedback completion
+                  planMarkdown += `\n  > *Read complete.*\n`;
+                  updateMessagesAssistant({
+                    uniqueId: `assistant-${uniqueId}`,
+                    content: planMarkdown,
+                  });
+                } catch (e) {
+                  context += `\nError reading file ${filePath}: ${e}\n`;
+                  planMarkdown += `\n  > *Error reading file:* ${e}\n`;
+                  updateMessagesAssistant({
+                    uniqueId: `assistant-${uniqueId}`,
+                    content: planMarkdown,
+                  });
                 }
+              }
             }
 
-            function showLoginForm() {
-                const logo = document.getElementById('logo')
-                logo.style.display = 'none'
-                const messageInputContainer = document.getElementById('messageInputContainer')
-                messageInputContainer.style.display = 'none'
-
-                const btnWorkspaceContainer = document.getElementById('div-btn-workspace')
-                btnWorkspaceContainer.style.display = 'none'
-
-                const content = document.getElementById('content')
-                content.innerHTML = `
-                    <center>
-                        <div class="login-wrapper bg-white">
-                            <div class="login-container bg-white">
-                                <img src="%LOGO_PATH%" alt="Logo">
-                                <form id="loginForm" action="#" method="post">
-                                    <input type="text" name="email" placeholder="Enter username" class="bg-white text-black" required />
-                                    <button type="submit">➜]</button>
-                                </form>     
-                            </div>
-                        </div>
-                    </center>
-                `
-
-                const form = document.getElementById('loginForm')
-                form.addEventListener('submit', login)
-
+            // --- PHASE 2: EXECUTE ---
+            if (planMarkdown.indexOf("> *Executing...*") === -1) {
+              planMarkdown += `\n  > *Executing...*\n`;
+              updateMessagesAssistant({
+                uniqueId: `assistant-${uniqueId}`,
+                content: planMarkdown,
+              });
             }
-            var formEmail = ""
-            async function login(event) {
-                event.preventDefault() // Mencegah form dari submit default
-                formEmail = event.target.email.value
 
-                const messageDiv = document.getElementById('message')
-                const loginForm = document.getElementById('loginForm')
+            const response = await fetch(
+              "http://localhost:13100/api/agent/execute",
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  userId,
+                  token,
+                  step,
+                  context,
+                  mode: "execute",
+                  attachments,
+                }),
+              },
+            );
 
-                try {
-                    // Send a message to the extension to find files
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let stepOutput = "";
 
-                    if (isLoading) return
-                    loginForm.innerHTML = `
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              const chunk = decoder.decode(value, { stream: true });
+              stepOutput += chunk;
+
+              // Only update UI if we have a substantial chunk or it's been a while?
+              // For now, let's assume stepOutput is raw text.
+              // We want to replace the "Executing..." block or append to it.
+              // But stepOutput grows.
+              // Let's create a temporary variable for display.
+              // We need to escape special markdown characters if we are dumping raw text?
+              // The agent output usually contains markdown.
+
+              // Strategy: Replace "Executing..." with "Executing...\n\n" + stepOutput
+              // But planMarkdown already has "Executing...".
+
+              const executingBlock = `\n  > *Executing...*\n`;
+              const displayOutput = executingBlock + `\n${stepOutput}`;
+
+              // We replace the last occurrence of executingBlock with displayOutput
+              // But planMarkdown is the BASE.
+              // So we need to construct the full content.
+
+              // Find the index of the executing block
+              const idx = planMarkdown.lastIndexOf(executingBlock);
+              if (idx !== -1) {
+                const pre = planMarkdown.substring(0, idx);
+                updateMessagesAssistant({
+                  uniqueId: `assistant-${uniqueId}`,
+                  content: pre + displayOutput,
+                });
+              }
+            }
+
+            // After loop, we update planMarkdown permanently?
+            // The original code does: planMarkdown += ...
+            // But we might have displayed partial output.
+            // Let's remove the "Executing..." block and the partial output from the UI state
+            // and let the logic below handle the final formatting.
+
+            // Actually, the logic below extracts "Reasoning" and "Action".
+            // If we just leave the raw output, it might be messy.
+            // So we should revert planMarkdown to the state before "Executing..."?
+            // No, the original code adds "Step X Output" to context, but parses output for display.
+
+            // Let's just remove the "Executing..." line from planMarkdown before adding the final result.
+            planMarkdown = planMarkdown.replace(`\n  > *Executing...*\n`, "");
+
+            // Append output to context for next steps
+            context += `\nStep ${step.step} Output:\n${stepOutput}\n`;
+
+            // Process Actions
+            if (stepOutput.includes("[writeFile]")) {
+              // Wait for writeFile to finish to avoid race conditions with subsequent readFiles
+              await new Promise((resolve) => {
+                const handleMessage = (event) => {
+                  if (event.data.command === "writeFileFinished") {
+                    window.removeEventListener("message", handleMessage);
+                    resolve();
+                  }
+                };
+                window.addEventListener("message", handleMessage);
+
+                // Send the message inside the promise setup to ensure we don't miss the response
+                // (though unlikely with JS event loop)
+                vscode.postMessage({
+                  type: "writeFile",
+                  assistantMessage: stepOutput,
+                });
+
+                // Fallback timeout just in case
+                setTimeout(() => {
+                  window.removeEventListener("message", handleMessage);
+                  resolve();
+                }, 10000);
+              });
+
+              const fileRegex = /\[file name="([^"]+)"\]/g;
+              let match;
+              while ((match = fileRegex.exec(stepOutput)) !== null) {
+                modifiedFiles.add(match[1]);
+              }
+
+              // Extract and save file content for Open Diff button
+              const fileContentRegex =
+                /\[file name="([^"]+)"\]([\s\S]*?)\[\/file\]/g;
+              let contentMatch;
+              while (
+                (contentMatch = fileContentRegex.exec(stepOutput)) !== null
+              ) {
+                const fPath = contentMatch[1];
+                const fContent = contentMatch[2];
+                window.fileContentMap.set(fPath, fContent);
+              }
+            }
+            if (stepOutput.includes("[command]")) {
+              const commandMatch = stepOutput.match(
+                /\[command\]([\s\S]*?)\[\/command\]/,
+              );
+              if (commandMatch) {
+                const command = commandMatch[1].trim();
+
+                // Add a "Terminal Output" block
+                let terminalOutput = "";
+                // Remove the "Executing..." visual if it's still there (handled above by replace)
+
+                // Show that we are running the command
+                planMarkdown += `\n  > *Running command:* \`${command}\`\n`;
+                planMarkdown += `\n**Terminal Output:**\n\`\`\`bash\n`;
+
+                updateMessagesAssistant({
+                  uniqueId: `assistant-${uniqueId}`,
+                  content: planMarkdown + "\n\`\`\`",
+                });
+
+                // Request execution and wait for completion
+                await new Promise((resolve) => {
+                  const handleMessage = (event) => {
+                    if (event.data.command === "commandOutput") {
+                      terminalOutput += event.data.output;
+                      // Update UI
+                      updateMessagesAssistant({
+                        uniqueId: `assistant-${uniqueId}`,
+                        content: planMarkdown + terminalOutput + "\n\`\`\`",
+                      });
+                    }
+                    if (event.data.command === "commandFinished") {
+                      window.removeEventListener("message", handleMessage);
+
+                      // Add note about external terminal if we didn't capture much output
+                      if (terminalOutput.trim().length === 0) {
+                        terminalOutput += "(See VS Code Terminal for output)";
+                      }
+
+                      if (event.data.exitCode !== 0) {
+                        console.error(
+                          `Command failed with exit code ${event.data.exitCode}`,
+                        );
+                        terminalOutput += `\n\n[Process exited with code ${event.data.exitCode}]`;
+                      } else {
+                        terminalOutput += `\n\n[Process completed successfully]`;
+                      }
+
+                      // Final update with full output
+                      updateMessagesAssistant({
+                        uniqueId: `assistant-${uniqueId}`,
+                        content: planMarkdown + terminalOutput + "\n\`\`\`",
+                      });
+
+                      resolve();
+                    }
+                  };
+                  window.addEventListener("message", handleMessage);
+                  vscode.postMessage({ type: "executeCommand", command });
+                });
+
+                planMarkdown += terminalOutput + "\n\`\`\`\n";
+              }
+            }
+
+            // Update to Done
+            planMarkdown = planMarkdown.replace(
+              `- [🔄] Step ${step.step}`,
+              `- [✅] Step ${step.step}`,
+            );
+
+            // Extract reasoning
+            const reasoningMatch = stepOutput.match(
+              /\*\*Reasoning:\*\*([\s\S]*?)(?=\*\*Action:|$)/,
+            );
+            const reasoning = reasoningMatch
+              ? reasoningMatch[1].trim()
+              : "Executed.";
+
+            planMarkdown += `\n  > *Step ${step.step}:* ${reasoning}\n`;
+            updateMessagesAssistant({
+              uniqueId: `assistant-${uniqueId}`,
+              content: planMarkdown,
+            });
+
+            // Re-inject modified files diff buttons at the end of EACH step to ensure they are available
+            // This is optional but helps if user wants to see diffs incrementally
+          } catch (err) {
+            planMarkdown = planMarkdown.replace(
+              `- [🔄] Step ${step.step}`,
+              `- [❌] Step ${step.step}`,
+            );
+            planMarkdown += `\n  > *Step ${step.step} Error:* ${err.message}\n`;
+            updateMessagesAssistant({
+              uniqueId: `assistant-${uniqueId}`,
+              content: planMarkdown,
+            });
+            break; // Stop execution on error
+          }
+        }
+
+        if (modifiedFiles.size > 0) {
+          planMarkdown += `\n\n**Modified Files:**\n`;
+          modifiedFiles.forEach((file) => {
+            planMarkdown += `\n[openDiff path="${file}"]`;
+          });
+        }
+
+        planMarkdown += `\n\n**All steps completed.**`;
+        updateMessagesAssistant({
+          uniqueId: `assistant-${uniqueId}`,
+          content: planMarkdown,
+        });
+
+        // Finalize
+        messageArray.push({ role: "assistant", content: planMarkdown });
+        saveState();
+        resetUI();
+      }
+
+      function resetUI() {
+        const loader = document.getElementById("loader");
+        const sendBtn = document.getElementById("button-send");
+        loader.classList.add("hidden");
+        sendBtn.classList.remove("hidden");
+        document.getElementById("generating").innerHTML = "";
+        isLoading = false;
+        document.getElementById("messageInput").disabled = false;
+        document.getElementById("messageInput").value = "";
+        document.getElementById("messageInput").focus();
+      }
+
+      function showLoginForm() {
+        const logo = document.getElementById("logo");
+        if (logo) logo.style.display = "none";
+
+        const headerControls = document.getElementById("header-controls");
+        if (headerControls) headerControls.style.display = "none";
+
+        const messageInputContainer = document.getElementById(
+          "messageInputContainer",
+        );
+        if (messageInputContainer) messageInputContainer.style.display = "none";
+
+        const content = document.getElementById("content");
+        content.innerHTML = `
+            <div class="login-wrapper">
+                <div class="login-container">
+                    <img src="%LOGO_PATH%" alt="Logo" class="login-logo">
+                    <h2 style="text-align: center; margin-bottom: 20px; color: #fff;">Login</h2>
+                    <form id="loginForm" action="#" method="post">
+                        <input type="text" name="email" placeholder="Enter username" required />
+                        <button type="submit">Login ➜</button>
+                    </form>     
+                </div>
+            </div>
+        `;
+
+        const form = document.getElementById("loginForm");
+        form.addEventListener("submit", login);
+      }
+      var formEmail = "";
+      async function login(event) {
+        event.preventDefault(); // Mencegah form dari submit default
+        formEmail = event.target.email.value;
+
+        const messageDiv = document.getElementById("message");
+        const loginForm = document.getElementById("loginForm");
+
+        try {
+          // Send a message to the extension to find files
+
+          if (isLoading) return;
+          loginForm.innerHTML = `
                         <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
                         <button type="submit" disabled>
                             <svg class="loader-button" viewBox="0 0 24 24" width="16" height="16"> <!-- Adjust width and height -->
                                 <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
                             </svg>
                         </button>
-                    `
-                    isLoading = true
-                    console.log("findFiles")
-                    vscode.postMessage({ type: 'findFiles', email: formEmail })
-                } catch (error) {
-                    messageDiv.textContent = 'Email atau password salah.'
-                    messageDiv.className = 'message error'
-                    isLoading = false
-                    loginForm.innerHTML = `
+                    `;
+          isLoading = true;
+          console.log("findFiles");
+          vscode.postMessage({ type: "findFiles", email: formEmail });
+        } catch (error) {
+          messageDiv.textContent = "Email atau password salah.";
+          messageDiv.className = "message error";
+          isLoading = false;
+          loginForm.innerHTML = `
                             <input type="text" name="email" placeholder="Enter username" value="${email}" required />
                             <button type="submit">➜]</button>
-                        `
-                }
+                        `;
+        }
+      }
 
-            }
+      async function loginAPI(workspacesParam, tokenParam) {
+        const messageDiv = document.getElementById("message");
+        const loginForm = document.getElementById("loginForm");
+        console.log("tokenParam", tokenParam);
+        try {
+          // Send a message to the extension to find files
 
-            async function loginAPI(workspacesParam, tokenParam) {
-                const messageDiv = document.getElementById('message')
-                const loginForm = document.getElementById('loginForm')
-                console.log("tokenParam", tokenParam)
-                try {
-                    // Send a message to the extension to find files
-
-                    loginForm.innerHTML = `
+          loginForm.innerHTML = `
                         <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
                         <button type="submit" disabled>
                             <svg class="loader-button" viewBox="0 0 24 24" width="16" height="16"> <!-- Adjust width and height -->
                                 <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
                             </svg>
                         </button>
-                    `
+                    `;
 
-                    const response = await fetch('http://localhost:13100/api/login', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            email: formEmail,
-                            token: tokenParam
-                        })
-                    })
+          const response = await fetch("http://localhost:13100/api/login", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              email: formEmail,
+              token: tokenParam,
+            }),
+          });
 
-                    if (!response.ok) {
-                        console.log("login gagal")
-                        messageDiv.textContent = 'Email tidak valid.'
-                        messageDiv.className = 'message error'
-                        isLoading = false
-                        loginForm.innerHTML = `
+          if (!response.ok) {
+            console.log("login gagal");
+            messageDiv.textContent = "Email tidak valid.";
+            messageDiv.className = "message error";
+            isLoading = false;
+            loginForm.innerHTML = `
                             <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
                             <button type="submit">➜]</button>
-                        `
-                        throw new Error('Login gagal')
-                    }
+                        `;
+            throw new Error("Login gagal");
+          }
 
+          console.log("login berhasil");
+          const allCodeStorageKey = "allCodeStorage";
+          const codingStorageKey = "codingStorage";
+          localStorage.removeItem(allCodeStorageKey);
+          localStorage.removeItem(codingStorageKey);
 
-                    console.log("login berhasil")
-                    const allCodeStorageKey = 'allCodeStorage'
-                    const codingStorageKey = 'codingStorage'
-                    localStorage.removeItem(allCodeStorageKey)
-                    localStorage.removeItem(codingStorageKey)
+          const data = await response.json();
+          localStorage.setItem("token", tokenParam);
+          localStorage.setItem("userId", data.userId);
+          vscode.postMessage({ type: "saveToken", tokenParam });
 
-                    const data = await response.json()
-                    localStorage.setItem('token', tokenParam)
-                    localStorage.setItem('userId', data.userId)
-                    vscode.postMessage({ type: 'saveToken', tokenParam })
-
-
-                    messageDiv.textContent = 'Login berhasil!'
-                    messageDiv.className = 'message success'
-                    isLoading = false
-                    setTimeout(() => {
-
-                        updateWorkspaces()
-                        loginForm.innerHTML = `
+          messageDiv.textContent = "Login berhasil!";
+          messageDiv.className = "message success";
+          isLoading = false;
+          setTimeout(() => {
+            updateWorkspaces();
+            loginForm.innerHTML = `
                             <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
                             <button type="submit">➜]</button>
-                        `
-                    }, 3000)
+                        `;
+          }, 3000);
 
+          messageDiv.textContent = "";
 
-                    messageDiv.textContent = ''
-                    const btnWorkspaceContainer = document.getElementById('div-btn-workspace')
-                    btnWorkspaceContainer.style.display = 'flex'
-                    const btnWorkspace = document.getElementById('button-workspace')
-                    btnWorkspace.style.display = 'block'
+          const headerControls = document.getElementById("header-controls");
+          if (headerControls) headerControls.style.display = "flex";
 
-                    // Fetch and display chat history
-                    fetchHistory()
-                } catch (error) {
-                    messageDiv.textContent = 'Login Error.'
-                    messageDiv.className = 'message error'
-                    isLoading = false
-                    loginForm.innerHTML = `
+          const logo = document.getElementById("logo");
+          if (logo) logo.style.display = "flex";
+
+          const btnWorkspace = document.getElementById("button-workspace");
+          if (btnWorkspace) btnWorkspace.style.display = "block";
+
+          // Fetch and display chat history
+          fetchHistory();
+        } catch (error) {
+          messageDiv.textContent = "Login Error.";
+          messageDiv.className = "message error";
+          isLoading = false;
+          loginForm.innerHTML = `
                             <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
                             <button type="submit">➜]</button>
-                        `
-                }
-            }
+                        `;
+        }
+      }
 
-            async function updateWorkspaces(silent = false) {
-                if (isLoading && !silent && !pendingMessage) return
-                if (!silent) isLoading = true
+      async function updateWorkspaces(silent = false) {
+        if (isLoading && !silent && !pendingMessage) return;
+        if (!silent) isLoading = true;
 
-                const btnWorkspace = document.getElementById('button-workspace')
-                btnWorkspace.innerHTML = `
+        const btnWorkspace = document.getElementById("button-workspace");
+        btnWorkspace.innerHTML = `
                     <svg class="loader-button" viewBox="0 0 24 24" width="16" height="16"> <!-- Adjust width and height -->
                         <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
                     </svg>
-                `
-                vscode.postMessage({ type: 'updateWorkspaces', silent })
+                `;
+        vscode.postMessage({ type: "updateWorkspaces", silent });
+      }
+
+      async function updateWorkspacesAPI(workspacesParam) {
+        try {
+          // Send a message to the extension to find files
+
+          const tokenData = localStorage.getItem("token");
+
+          const response = await fetch("http://localhost:13100/api/workspace", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              token: tokenData,
+              workspaces: workspacesParam,
+            }),
+          });
+
+          if (!response.ok) {
+            console.log("update workspaces gagal");
+            isLoading = false;
+          }
+          console.log("update workspaces berhasil");
+          const btnWorkspace = document.getElementById("button-workspace");
+          btnWorkspace.style.display = "block";
+          btnWorkspace.innerHTML = `Teach AI Current Code 🔄`;
+          btnWorkspace.addEventListener("click", updateWorkspaces);
+          isLoading = false;
+
+          if (pendingMessage) {
+            const msg = pendingMessage;
+            pendingMessage = null;
+            console.log("Retrying pending message...");
+            sendMessageToApi(msg, true);
+          }
+        } catch (error) {
+          console.log("update workspaces gagal");
+          isLoading = false;
+        }
+      }
+
+      async function cancelUpdateWorkspaces() {
+        isLoading = false;
+        const btnWorkspace = document.getElementById("button-workspace");
+        btnWorkspace.style.display = "block";
+        btnWorkspace.innerHTML = `Teach AI Current Code 🔄`;
+        btnWorkspace.addEventListener("click", updateWorkspaces);
+      }
+
+      async function fetchHistory() {
+        const logo = document.getElementById("logo");
+        logo.style.display = "block";
+        const token = localStorage.getItem("token");
+        vscode.postMessage({ type: "saveToken", token });
+        const userId = localStorage.getItem("userId");
+        if (persistedState.messagesHTML) {
+          document.getElementById("content").innerHTML =
+            persistedState.messagesHTML;
+          document.getElementById("messageInput").value =
+            persistedState.input ?? "";
+
+          // Show the message input container
+          const messageInputContainer = document.getElementById(
+            "messageInputContainer",
+          );
+          messageInputContainer.style.display = "block";
+          // Scroll to the bottom of the content
+          var content = document.getElementById("content");
+          content.scrollTop = content.scrollHeight;
+          // focus the message input
+          const messageInput = document.getElementById("messageInput");
+          messageInput.focus();
+          return;
+        }
+        try {
+          const response = await fetch(
+            `http://localhost:13100/api/history/?token=${token}&userId=${userId}`,
+            {
+              method: "GET",
+              headers: {
+                Authorization: `Bearer ${localStorage.getItem("token")}`,
+                "Content-Type": "application/json",
+              },
+            },
+          );
+
+          if (!response.ok) {
+            throw new Error("Failed to fetch history");
+          }
+
+          const historyData = await response.json();
+          console.log(historyData);
+          loadMessages(historyData);
+          messageArray = historyData.messages;
+          saveState();
+        } catch (error) {
+          console.error("Error fetching history:", error);
+          document.getElementById("message").textContent =
+            "Gagal mengambil riwayat chat.";
+          document.getElementById("message").className = "message error";
+
+          // Perform logout
+          logout();
+        }
+      }
+
+      async function checkUrlExists(url) {
+        try {
+          const response = await fetch(url, { method: "HEAD" });
+          return response.ok; // Return true if the response is OK (status 200)
+        } catch (error) {
+          console.error("Error checking URL:", error);
+          return false; // Return false if there was an error
+        }
+      }
+
+      async function loadMessages(messages) {
+        const content = document.getElementById("content");
+        content.innerHTML = "Loading...";
+        try {
+          displayMessages(messages.messages);
+
+          // Show the message input container
+          const messageInputContainer = document.getElementById(
+            "messageInputContainer",
+          );
+          messageInputContainer.style.display = "block";
+
+          // Scroll to the bottom of the content
+          content.scrollTop = content.scrollHeight;
+          const messageInput = document.getElementById("messageInput");
+          messageInput.focus();
+        } catch (error) {
+          console.error("Error fetching messages:", error);
+          content.innerHTML = "Failed to load messages.";
+        }
+      }
+
+      var isAudioPlay = true;
+
+      function displayMessages(messages) {
+        const content = document.getElementById("content");
+        content.innerHTML = "";
+        const chatContainer = document.createElement("div");
+        chatContainer.id = "chat-container";
+        chatContainer.className = "custom-scrollbar";
+        let talkDuration = 0;
+        let talkMessage = "";
+        messages.forEach((msg, index) => {
+          if (msg.role !== "system") {
+            const messageDiv = document.createElement("div");
+            messageDiv.className = `message-container ${msg.role === "user" ? "user" : "agent"}`;
+
+            const messageContent = document.createElement("div");
+            messageContent.className = `message-bubble ${msg.role === "user" ? "user-message" : "agent-message"}`;
+            messageContent.style.whiteSpace = "pre-wrap";
+
+            renderMessageParts(msg.content, messageContent);
+
+            messageDiv.appendChild(messageContent);
+            chatContainer.appendChild(messageDiv);
+          }
+        });
+
+        content.appendChild(chatContainer);
+        content.scrollTop = content.scrollHeight;
+        const messageInput = document.getElementById("messageInput");
+        messageInput.focus();
+      }
+
+      function displayMessagesAssistant(msg) {
+        const content = document.getElementById("content");
+        let chatContainer = document.getElementById("chat-container");
+        if (!chatContainer) {
+          chatContainer = document.createElement("div");
+          chatContainer.id = "chat-container";
+          chatContainer.className = "custom-scrollbar";
+          content.innerHTML = "";
+          content.appendChild(chatContainer);
+        }
+
+        const messageDiv = document.createElement("div");
+        messageDiv.className = `message-container ${msg.role === "user" ? "user" : "agent"}`;
+
+        const messageContent = document.createElement("div");
+        messageContent.id = msg.uniqueId;
+        messageContent.className = `message-bubble ${msg.role === "user" ? "user-message" : "agent-message"}`;
+        messageContent.style.whiteSpace = "pre-wrap";
+
+        renderMessageParts(msg.content, messageContent);
+
+        messageDiv.appendChild(messageContent);
+        chatContainer.appendChild(messageDiv);
+        content.scrollTop = content.scrollHeight;
+      }
+
+      function updateMessagesAssistant(msg) {
+        const messageContent = document.getElementById(msg.uniqueId);
+        if (!messageContent) return;
+        messageContent.innerHTML = "";
+        renderMessageParts(msg.content, messageContent);
+      }
+
+      function renderMessageParts(content, container) {
+        const parts = content.split(
+          /(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[file name=".*?"\][\s\S]*?\[\/file\]|\[openDiff path=".*?"\]|\[file\][\s\S]*?\[file\]|\[status\][\s\S]*?\[\/status\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|####.*|###.*|##.*|#.*|^- .*)/gm,
+        );
+
+        parts
+          .filter((part) => part)
+          .forEach((part, i) => {
+            if (
+              part.startsWith("[selection]") &&
+              part.endsWith("[selection]")
+            ) {
+              //skip
+            } else if (part.startsWith('[file name="')) {
+              const match = part.match(
+                /\[file name="(.*?)"\]([\s\S]*?)\[\/file\]/,
+              );
+              if (match) {
+                window.fileContentMap.set(match[1], match[2]);
+              }
+            } else if (part.startsWith('[openDiff path="')) {
+              const match = part.match(/\[openDiff path="(.*?)"\]/);
+              if (match) {
+                const btn = document.createElement("button");
+                btn.className = "btn-diff";
+                btn.innerHTML = `<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"></path></svg> Open Diff: ${match[1]}`;
+                btn.onclick = () => window.openDiff(match[1]);
+                container.appendChild(btn);
+              }
+            } else if (
+              part.startsWith("[fullcode]") &&
+              part.endsWith("[fullcode]")
+            ) {
+              //skip
+            } else if (
+              part.startsWith("[labelInstruction]") &&
+              part.endsWith("[labelInstruction]")
+            ) {
+              //skip
+            } else if (part.startsWith("[files]") && part.endsWith("[files]")) {
+              //skip
+            } else if (
+              part.startsWith("[status]") &&
+              part.endsWith("[/status]")
+            ) {
+              const statusContent = part.slice(8, -9).trim();
+              const statusDiv = document.createElement("div");
+              statusDiv.className = "status-box";
+              statusDiv.innerHTML = `<span class="status-label">STATUS</span>${statusContent}`;
+              container.appendChild(statusDiv);
+            } else if (part.startsWith("[file]") && part.endsWith("[file]")) {
+              const textSpan = document.createElement("span");
+              textSpan.textContent = "--File--";
+              container.appendChild(textSpan);
+            } else if (part.startsWith("```") && part.endsWith("```")) {
+              let codeContent = part.slice(3, -3).trim();
+
+              const codeLines = codeContent.split("\n");
+              const firstLine = codeLines[0].trim();
+              const languageRegex =
+                /^(nginx|dockerfile|javascript|js|typescript|ts|python|java|c\+\+|cpp|c#|cs|ruby|go|php|swift|kotlin|json|jsx|tsx|html|css|xml|c|rust|perl|r|bash|shell|cmd|powershell|yml|yaml|markdown|md|lua|dart|sql|ini|toml|env|vue|svelte|makefile|plaintext|text|txt)$/i;
+
+              if (languageRegex.test(firstLine)) {
+                codeContent = codeLines.slice(1).join("\n").trim(); // Remove the first line if it matches a language
+              }
+
+              const codeDiv = document.createElement("div");
+              codeDiv.className = "p-2 rounded-lg mb-2 wrap";
+
+              const pre = document.createElement("pre");
+
+              const code = document.createElement("code");
+              code.className = `language-${firstLine}`; // Menambahkan kelas bahasa
+              code.textContent = codeContent;
+              pre.appendChild(code);
+
+              codeDiv.appendChild(pre);
+
+              Prism.highlightElement(code);
+
+              const copyButton = document.createElement("button");
+              copyButton.textContent = "Copy";
+              copyButton.className = "mt-2 btn-primary px-2 py-1 text-xs";
+              copyButton.onclick = () => handleCopy(codeContent);
+              codeDiv.appendChild(copyButton);
+
+              const applyButton = document.createElement("button");
+              applyButton.textContent = "Apply";
+              applyButton.className = "mt-2 btn-elegant px-2 py-1 ml-2 text-xs";
+              applyButton.onclick = () => handleaApply(codeContent);
+              codeDiv.appendChild(applyButton);
+
+              container.appendChild(codeDiv);
+            } else if (part.startsWith("`") && part.endsWith("`")) {
+              const inlineCode = part.slice(1, -1);
+              const codeSpan = document.createElement("code");
+              codeSpan.className =
+                "bg-black text-white p-1 rounded border border-gray-700";
+              codeSpan.textContent = inlineCode;
+              container.appendChild(codeSpan);
+            } else if (part.startsWith("**") && part.endsWith("**")) {
+              // Cek Bold & Badges
+              const text = part.slice(2, -2).trim();
+              const upper = text.toUpperCase();
+
+              if (
+                [
+                  "THOUGHT:",
+                  "ACTION:",
+                  "REASONING:",
+                  "PLAN:",
+                  "ERROR:",
+                  "STEP",
+                ].some((k) => upper.startsWith(k))
+              ) {
+                const span = document.createElement("div");
+                span.className = "badge-header";
+                if (upper.includes("THOUGHT"))
+                  span.classList.add("badge-thought");
+                else if (upper.includes("ACTION"))
+                  span.classList.add("badge-action");
+                else if (upper.includes("REASONING"))
+                  span.classList.add("badge-reasoning");
+                else if (upper.includes("PLAN"))
+                  span.classList.add("badge-plan");
+                else if (upper.includes("ERROR"))
+                  span.classList.add("badge-error");
+
+                span.innerHTML = text;
+                container.appendChild(span);
+              } else {
+                const textStrong = document.createElement("strong");
+                textStrong.textContent = text;
+                container.appendChild(textStrong);
+              }
+            } else if (part.startsWith("###")) {
+              // Cek header
+              part = part.slice(3).trim();
+              const textHeader = document.createElement("h3");
+              textHeader.style =
+                "font-weight: bold; font-size:14px; margin-top:10px;";
+              textHeader.textContent = part;
+              container.appendChild(textHeader);
+            } else if (part.startsWith("##")) {
+              // Cek header
+              part = part.slice(2).trim();
+              const textHeader = document.createElement("h2");
+              textHeader.style =
+                "font-weight: bold; font-size:16px; margin-top:12px;";
+              textHeader.textContent = part;
+              container.appendChild(textHeader);
+            } else if (part.startsWith("#")) {
+              // Cek header
+              part = part.slice(1).trim();
+              const textHeader = document.createElement("h1");
+              textHeader.style =
+                "font-weight: bold; font-size:18px; margin-top:14px;";
+              textHeader.textContent = part;
+              container.appendChild(textHeader);
+            } else if (part.startsWith("- ")) {
+              // Cek list
+              const listItem = part.slice(2);
+              const partsList = listItem.split(
+                /(\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|###.*|##.*|#.*|^- .*)/gm,
+              );
+
+              const textLi = document.createElement("li");
+              partsList
+                .filter((partList) => partList)
+                .map((partList, i2) => {
+                  if (partList.startsWith("**") && partList.endsWith("**")) {
+                    partList = partList.slice(2, -2);
+                    const textStrong = document.createElement("strong");
+                    textStrong.textContent = partList;
+                    textLi.appendChild(textStrong);
+                  } else {
+                    const text = document.createElement("span");
+                    text.textContent = partList;
+                    textLi.appendChild(text);
+                  }
+                });
+              container.appendChild(textLi);
+            } else if (part.startsWith("_") && part.endsWith("_")) {
+              const italicText = part.slice(1, -1);
+              const textEm = document.createElement("em");
+              textEm.textContent = italicText;
+              container.appendChild(textEm);
+            } else if (part.startsWith('*"') && part.startsWith("*")) {
+              // Quote Style 1
+              const quoteText = part.slice(1, -1).trim();
+              const quote = document.createElement("div");
+              quote.className = "modern-blockquote";
+              quote.textContent = quoteText;
+              container.appendChild(quote);
+            } else if (part.startsWith(">")) {
+              // Quote Style 2 (Standard Markdown)
+              const quoteText = part.slice(1).trim();
+              const quote = document.createElement("div");
+              quote.className = "modern-blockquote";
+              quote.textContent = quoteText;
+              container.appendChild(quote);
+            } else if (/\[.*?\]\(.*?\)/.test(part)) {
+              const linkMatch = part.match(/\[(.*?)\]\((.*?)\)/);
+              if (linkMatch) {
+                const linkText = linkMatch[1];
+                const linkUrl = linkMatch[2];
+                const link = document.createElement("a");
+                link.textContent = linkText;
+                link.href = linkUrl;
+                container.appendChild(link);
+              }
+            } else {
+              const textSpan = document.createElement("span");
+              textSpan.textContent = part;
+              container.appendChild(textSpan);
             }
-
-            async function updateWorkspacesAPI(workspacesParam) {
-
-                try {
-                    // Send a message to the extension to find files
-
-                    const tokenData = localStorage.getItem('token')
-
-                    const response = await fetch('http://localhost:13100/api/workspace', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            token: tokenData,
-                            workspaces: workspacesParam
-                        })
-                    })
-
-                    if (!response.ok) {
-                        console.log("update workspaces gagal")
-                        isLoading = false
-
-                    }
-                    console.log("update workspaces berhasil")
-                    const btnWorkspace = document.getElementById('button-workspace')
-                    btnWorkspace.style.display = 'block'
-                    btnWorkspace.innerHTML = `Teach AI Current Code 🔄`
-                    btnWorkspace.addEventListener('click', updateWorkspaces)
-                    isLoading = false
-
-                    if (pendingMessage) {
-                        const msg = pendingMessage
-                        pendingMessage = null
-                        console.log("Retrying pending message...")
-                        sendMessageToApi(msg, true)
-                    }
-
-                } catch (error) {
-                    console.log("update workspaces gagal")
-                    isLoading = false
-                }
-            }
-
-            async function cancelUpdateWorkspaces() {
-                isLoading = false
-                const btnWorkspace = document.getElementById('button-workspace')
-                btnWorkspace.style.display = 'block'
-                btnWorkspace.innerHTML = `Teach AI Current Code 🔄`
-                btnWorkspace.addEventListener('click', updateWorkspaces)
-            }
-
-            async function fetchHistory() {
-
-                const logo = document.getElementById('logo')
-                logo.style.display = 'block'
-                const token = localStorage.getItem('token')
-                vscode.postMessage({ type: 'saveToken', token })
-                const userId = localStorage.getItem('userId')
-                if (persistedState.messagesHTML) {
-                    document.getElementById('content').innerHTML = persistedState.messagesHTML
-                    document.getElementById('messageInput').value = persistedState.input ?? ''
-
-                    // Show the message input container
-                    const messageInputContainer = document.getElementById('messageInputContainer')
-                    messageInputContainer.style.display = 'block'
-                    // Scroll to the bottom of the content
-                    var content = document.getElementById('content')
-                    content.scrollTop = content.scrollHeight
-                    // focus the message input
-                    const messageInput = document.getElementById('messageInput')
-                    messageInput.focus()
-                    return
-                }
-                try {
-                    const response = await fetch(`http://localhost:13100/api/history/?token=${token}&userId=${userId}`, {
-                        method: 'GET',
-                        headers: {
-                            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-                            'Content-Type': 'application/json'
-                        }
-                    })
-
-                    if (!response.ok) {
-                        throw new Error('Failed to fetch history')
-                    }
-
-                    const historyData = await response.json()
-                    console.log(historyData)
-                    loadMessages(historyData)
-                    messageArray = historyData.messages
-                    saveState()
-                } catch (error) {
-                    console.error('Error fetching history:', error)
-                    document.getElementById('message').textContent = 'Gagal mengambil riwayat chat.'
-                    document.getElementById('message').className = 'message error'
-
-                    // Perform logout
-                    logout()
-                }
-            }
-
-
-
-
-
-            async function checkUrlExists(url) {
-                try {
-                    const response = await fetch(url, { method: 'HEAD' })
-                    return response.ok // Return true if the response is OK (status 200)
-                } catch (error) {
-                    console.error('Error checking URL:', error)
-                    return false // Return false if there was an error
-                }
-            }
-
-
-            async function loadMessages(messages) {
-                const content = document.getElementById('content')
-                content.innerHTML = 'Loading...'
-                try {
-                    displayMessages(messages.messages)
-
-                    // Show the message input container
-                    const messageInputContainer = document.getElementById('messageInputContainer')
-                    messageInputContainer.style.display = 'block'
-
-                    // Scroll to the bottom of the content
-                    content.scrollTop = content.scrollHeight
-                    const messageInput = document.getElementById('messageInput')
-                    messageInput.focus()
-
-                } catch (error) {
-                    console.error('Error fetching messages:', error)
-                    content.innerHTML = 'Failed to load messages.'
-                }
-            }
-
-            var isAudioPlay = true
-
-            function displayMessages(messages) {
-                const content = document.getElementById('content')
-                content.innerHTML = ''
-                const chatContainer = document.createElement('div')
-                chatContainer.className = 'flex-grow overflow-y-auto p-4 bg-chat custom-scrollbar'
-                let talkDuration = 0
-                let talkMessage = ""
-                messages.forEach((msg, index) => {
-                    if (msg.role !== 'system') {
-                        const parts = msg.content.split(/(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[file\][\s\S]*?\[file\]|\[status\][\s\S]*?\[\/status\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|####.*|###.*|##.*|#.*|^- .*)/gm)
-
-                        const messageDiv = document.createElement('div')
-                        messageDiv.className = `mb-2 flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`
-
-
-                        const messageContent = document.createElement('div')
-                        messageContent.className = `inline-block p-2 rounded-lg ${msg.role === 'user' ? 'bg-gray-500 text-white' : 'bg-grey text-grey-100'}`
-                        messageContent.style.whiteSpace = 'pre-wrap'
-
-                        parts.filter(part => part).forEach((part, i) => {
-                            if (part.startsWith('[selection]') && part.endsWith('[selection]')) {
-                                //skip
-                            }
-                            // else if (part.startsWith('[writeFileVico]') && part.endsWith('[writeFileVico]')) {
-                            //     let codeContent = part.slice(15, -15).trim()
-                            //     // kirim ke extension
-                            //     window.acquireVsCodeApi().postMessage({
-                            //         command: 'writeFile',
-                            //         text: codeContent
-                            //     })
-                            // } 
-                            else if (part.startsWith('[fullcode]') && part.endsWith('[fullcode]')) {
-                                //skip
-                            } else if (part.startsWith('[labelInstruction]') && part.endsWith('[labelInstruction]')) {
-                                //skip
-                            } else if (part.startsWith('[files]') && part.endsWith('[files]')) {
-                                //skip
-                            } else if (part.startsWith('[status]') && part.endsWith('[/status]')) {
-                                const statusContent = part.slice(8, -9).trim()
-                                const statusDiv = document.createElement('div')
-                                statusDiv.className = "bg-gray-800 border-l-2 border-blue-500 p-2 mb-2 text-sm text-gray-300"
-                                statusDiv.innerHTML = `<div class="font-bold text-xs text-blue-400 mb-1">AGENTS THINKING</div>${statusContent}`
-                                messageContent.appendChild(statusDiv)
-                            } else if (part.startsWith('```') && part.endsWith('```')) {
-
-                                let codeContent = part.slice(3, -3).trim()
-
-                                const codeLines = codeContent.split('\n')
-                                const firstLine = codeLines[0].trim()
-                                const languageRegex = /^(nginx|dockerfile|javascript|js|typescript|ts|python|java|c\+\+|cpp|c#|cs|ruby|go|php|swift|kotlin|json|jsx|tsx|html|css|xml|c|rust|perl|r|bash|shell|cmd|powershell|yml|yaml|markdown|md|lua|dart|sql|ini|toml|env|vue|svelte|makefile|plaintext|text|txt)$/i
-
-                                if (languageRegex.test(firstLine)) {
-                                    codeContent = codeLines.slice(1).join('\n').trim() // Remove the first line if it matches a language
-                                }
-
-                                const codeDiv = document.createElement('div')
-                                codeDiv.className = 'p-2 rounded-lg mb-2 wrap'
-
-                                const pre = document.createElement('pre')
-
-                                const code = document.createElement('code')
-                                code.className = `language-${firstLine}` // Menambahkan kelas bahasa
-                                code.textContent = codeContent
-                                pre.appendChild(code)
-
-                                codeDiv.appendChild(pre)
-
-                                Prism.highlightElement(code)
-
-                                const copyButton = document.createElement('button')
-                                copyButton.textContent = 'Copy'
-                                copyButton.className = 'mt-2 bg-blue-500 text-white px-2 py-1 rounded'
-                                copyButton.onclick = () => handleCopy(codeContent)
-                                codeDiv.appendChild(copyButton)
-
-                                const applyButton = document.createElement('button')
-                                applyButton.textContent = 'Apply'
-                                applyButton.className = 'mt-2 bg-blue-300 text-white px-2 py-1 rounded ml-2'
-
-                                // Cek apakah ada informasi file sebelumnya
-                                let filePath = null
-                                if (i > 0) {
-                                    const prevPart = parts[i - 1].trim()
-                                    // Regex untuk menangkap "File: path/to/file.ext" atau "**File:** path/to/file.ext"
-                                    const fileMatch = prevPart.match(/(?:File|file|FILE):\s*`?([\w\-\./\\]+)`?/)
-                                    if (fileMatch) {
-                                        filePath = fileMatch[1]
-                                    }
-                                }
-
-                                if (filePath) {
-                                    applyButton.textContent = `Apply to ${filePath}`
-                                    applyButton.onclick = () => handleaApply(codeContent, filePath)
-                                } else {
-                                    applyButton.onclick = () => handleaApply(codeContent)
-                                }
-
-                                codeDiv.appendChild(applyButton)
-
-                                messageContent.appendChild(codeDiv)
-                            } else if (part.startsWith('`') && part.endsWith('`')) {
-                                const inlineCode = part.slice(1, -1)
-                                const codeSpan = document.createElement('code')
-                                codeSpan.className = 'bg-gray-800 text-white p-1 rounded'
-                                codeSpan.textContent = inlineCode
-                                messageContent.appendChild(codeSpan)
-                                if (messages.length - 1 == index) {
-                                    if (msg.role === 'assistant') {
-                                        talkDuration += part.length
-                                        talkMessage = `${talkMessage}. ${part}`
-                                    }
-                                }
-                            } else if (part.startsWith('**') && part.endsWith('**')) {
-                                // Cek Bold
-                                part = part.slice(2, -2).trim()
-                                const textStrong = document.createElement('strong')
-                                textStrong.textContent = part
-                                messageContent.appendChild(textStrong)
-                            } else if (part.startsWith('####')) {
-                                // Cek header h4
-                                part = part.slice(4).trim()
-                                const textHeader = document.createElement('h4')
-                                textHeader.style = "font-weight: bold; font-size:13px; color: #60a5fa; margin-top: 8px;"
-                                textHeader.textContent = part
-                                messageContent.appendChild(textHeader)
-                            } else if (part.startsWith('####')) {
-                                // Cek header h4
-                                part = part.slice(4).trim()
-                                const textHeader = document.createElement('h4')
-                                textHeader.style = "font-weight: bold; font-size:13px; color: #60a5fa; margin-top: 8px;"
-                                textHeader.textContent = part
-                                messageContent.appendChild(textHeader)
-                            } else if (part.startsWith('####')) {
-                                // Cek header h4
-                                part = part.slice(4).trim()
-                                const textHeader = document.createElement('h4')
-                                textHeader.style = "font-weight: bold; font-size:13px; color: #60a5fa; margin-top: 8px;"
-                                textHeader.textContent = part
-                                messageContent.appendChild(textHeader)
-                            } else if (part.startsWith('####')) {
-                                // Cek header h4
-                                part = part.slice(4).trim()
-                                const textHeader = document.createElement('h4')
-                                textHeader.style = "font-weight: bold; font-size:13px; color: #60a5fa; margin-top: 8px;"
-                                textHeader.textContent = part
-                                messageContent.appendChild(textHeader)
-                            } else if (part.startsWith('###')) {
-                                // Cek header
-                                part = part.slice(3).trim()
-                                const textHeader = document.createElement('h3')
-                                textHeader.style = "font-weight: bold; font-size:14px"
-                                textHeader.textContent = part
-                                messageContent.appendChild(textHeader)
-                            } else if (part.startsWith('##')) {
-                                // Cek header
-                                part = part.slice(2).trim()
-                                const textHeader = document.createElement('h2')
-                                textHeader.style = "font-weight: bold; font-size:16px"
-                                textHeader.textContent = part
-                                messageContent.appendChild(textHeader)
-                            } else if (part.startsWith('#')) {
-                                // Cek header
-                                part = part.slice(1).trim()
-                                const textHeader = document.createElement('h1')
-                                textHeader.style = "font-weight: bold; font-size:18px"
-                                textHeader.textContent = part
-                                messageContent.appendChild(textHeader)
-                            } else if (part.startsWith('- ')) {
-                                // Cek list
-                                const listItem = part.slice(2)
-
-                                const partsList = listItem.split(/(\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|###.*|##.*|#.*|^- .*)/gm)
-
-                                const textLi = document.createElement('li')
-
-                                partsList.filter(partList => partList).map((partList, i2) => {
-                                    if (partList.startsWith('**') && partList.endsWith('**')) {
-                                        partList = partList.slice(2, -2)
-                                        const textStrong = document.createElement('strong')
-                                        textStrong.textContent = partList
-                                        textLi.appendChild(textStrong)
-                                    } else {
-                                        const text = document.createElement('span')
-                                        text.textContent = partList
-                                        textLi.appendChild(text)
-                                    }
-                                })
-                                messageContent.appendChild(textLi)
-
-
-                            } else if (part.startsWith('_') && part.endsWith('_')) {
-                                const italicText = part.slice(1, -1)
-
-                                const textEm = document.createElement('em')
-                                textEm.textContent = italicText
-                                messageContent.appendChild(textEm)
-                            } else if (part.startsWith('*"') && part.startsWith('*')) {
-                                const quoteText = part.slice(1, -1).trim()
-                                const quote = document.createElement('div')
-                                quote.className = "border-l-4 border-gray-500 pl-4 italic"
-                                quote.textContent = quoteText
-                                messageContent.appendChild(quote)
-                            } else if (part.startsWith('>')) {
-                                const quoteText = part.slice(1).trim()
-                                const quote = document.createElement('div')
-                                quote.className = "border-l-4 border-gray-500 pl-4 italic"
-                                quote.textContent = quoteText
-                                messageContent.appendChild(quote)
-                            } else if (/\[.*?\]\(.*?\)/.test(part)) {
-                                const linkMatch = part.match(/\[(.*?)\]\((.*?)\)/)
-                                if (linkMatch) {
-                                    const linkText = linkMatch[1]
-                                    const linkUrl = linkMatch[2]
-                                    const link = document.createElement('a')
-                                    quote.textContent = linkText
-                                    link.href = linkUrl
-                                    messageContent.appendChild(link)
-                                }
-                            } else {
-                                const textSpan = document.createElement('span')
-                                textSpan.textContent = part
-                                messageContent.appendChild(textSpan)
-                                if (messages.length - 1 == index) {
-                                    if (msg.role === 'assistant') {
-                                        talkDuration += part.length
-                                        talkMessage = `${talkMessage}. ${part}`
-                                    }
-                                }
-                            }
-                        })
-
-                        messageDiv.appendChild(messageContent)
-                        chatContainer.appendChild(messageDiv)
-                    }
-                })
-
-
-
-                content.appendChild(chatContainer)
-                content.scrollTop = content.scrollHeight
-                const messageInput = document.getElementById('messageInput')
-                messageInput.focus()
-            }
-
-            function displayMessagesAssistant(msg) {
-                const content = document.getElementById('content')
-
-                const chatContainer = document.createElement('div')
-                chatContainer.className = 'flex-grow overflow-y-auto p-4 bg-chat custom-scrollbar'
-                const parts = msg.content.split(/(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[file\][\s\S]*?\[file\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|####.*|###.*|##.*|#.*|^- .*)/gm)
-
-                const messageDiv = document.createElement('div')
-                messageDiv.className = `mb-2 flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`
-
-
-                const messageContent = document.createElement('div')
-                messageContent.className = `inline-block p-2 rounded-lg ${msg.role === 'user' ? 'bg-gray-500 text-white' : 'bg-grey text-grey-100'}`
-                messageContent.style.whiteSpace = 'pre-wrap'
-                messageContent.id = msg.uniqueId
-
-                parts.filter(part => part).forEach((part, i) => {
-                    if (part.startsWith('[selection]') && part.endsWith('[selection]')) {
-                        //skip
-                    } else if (part.startsWith('[fullcode]') && part.endsWith('[fullcode]')) {
-                        //skip
-                    } else if (part.startsWith('[labelInstruction]') && part.endsWith('[labelInstruction]')) {
-                        //skip
-                    } else if (part.startsWith('[files]') && part.endsWith('[files]')) {
-                        //skip
-                    } else if (part.startsWith('```') && part.endsWith('```')) {
-
-                        let codeContent = part.slice(3, -3).trim()
-
-                        const codeLines = codeContent.split('\n')
-                        const firstLine = codeLines[0].trim()
-                        const languageRegex = /^(nginx|dockerfile|javascript|js|typescript|ts|python|java|c\+\+|cpp|c#|cs|ruby|go|php|swift|kotlin|json|jsx|tsx|html|css|xml|c|rust|perl|r|bash|shell|cmd|powershell|yml|yaml|markdown|md|lua|dart|sql|ini|toml|env|vue|svelte|makefile|plaintext|text|txt)$/i
-
-                        if (languageRegex.test(firstLine)) {
-                            codeContent = codeLines.slice(1).join('\n').trim() // Remove the first line if it matches a language
-                        }
-
-                        const codeDiv = document.createElement('div')
-                        codeDiv.className = 'p-2 rounded-lg mb-2 wrap'
-
-                        const pre = document.createElement('pre')
-
-                        const code = document.createElement('code')
-                        code.className = `language-${firstLine}` // Menambahkan kelas bahasa
-                        code.textContent = codeContent
-                        pre.appendChild(code)
-
-                        codeDiv.appendChild(pre)
-
-                        Prism.highlightElement(code)
-
-                        const copyButton = document.createElement('button')
-                        copyButton.textContent = 'Copy'
-                        copyButton.className = 'mt-2 bg-blue-500 text-white px-2 py-1 rounded'
-                        copyButton.onclick = () => handleCopy(codeContent)
-                        codeDiv.appendChild(copyButton)
-
-                        const applyButton = document.createElement('button')
-                        applyButton.textContent = 'Apply'
-                        applyButton.className = 'mt-2 bg-blue-300 text-white px-2 py-1 rounded ml-2'
-                        applyButton.onclick = () => handleaApply(codeContent)
-                        codeDiv.appendChild(applyButton)
-
-                        messageContent.appendChild(codeDiv)
-                    } else if (part.startsWith('`') && part.endsWith('`')) {
-                        const inlineCode = part.slice(1, -1)
-                        const codeSpan = document.createElement('code')
-                        codeSpan.className = 'bg-gray-800 text-white p-1 rounded'
-                        codeSpan.textContent = inlineCode
-                        messageContent.appendChild(codeSpan)
-                        talkDuration += part.length
-                        talkMessage = `${talkMessage}. ${part}`
-                    } else if (part.startsWith('**') && part.endsWith('**')) {
-                        // Cek Bold
-                        part = part.slice(2, -2).trim()
-                        const textStrong = document.createElement('strong')
-                        textStrong.textContent = part
-                        messageContent.appendChild(textStrong)
-                    } else if (part.startsWith('###')) {
-                        // Cek header
-                        part = part.slice(3).trim()
-                        const textHeader = document.createElement('h3')
-                        textHeader.style = "font-weight: bold; font-size:14px"
-                        textHeader.textContent = part
-                        messageContent.appendChild(textHeader)
-                    } else if (part.startsWith('##')) {
-                        // Cek header
-                        part = part.slice(2).trim()
-                        const textHeader = document.createElement('h2')
-                        textHeader.style = "font-weight: bold; font-size:16px"
-                        textHeader.textContent = part
-                        messageContent.appendChild(textHeader)
-                    } else if (part.startsWith('#')) {
-                        // Cek header
-                        part = part.slice(1).trim()
-                        const textHeader = document.createElement('h1')
-                        textHeader.style = "font-weight: bold; font-size:18px"
-                        textHeader.textContent = part
-                        messageContent.appendChild(textHeader)
-                    } else if (part.startsWith('- ')) {
-                        // Cek list
-                        const listItem = part.slice(2)
-
-                        const partsList = listItem.split(/(\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|###.*|##.*|#.*|^- .*)/gm)
-
-                        const textLi = document.createElement('li')
-
-                        partsList.filter(partList => partList).map((partList, i2) => {
-                            if (partList.startsWith('**') && partList.endsWith('**')) {
-                                partList = partList.slice(2, -2)
-                                const textStrong = document.createElement('strong')
-                                textStrong.textContent = partList
-                                textLi.appendChild(textStrong)
-                            } else {
-                                const text = document.createElement('span')
-                                text.textContent = partList
-                                textLi.appendChild(text)
-                            }
-                        })
-                        messageContent.appendChild(textLi)
-
-
-                    } else if (part.startsWith('_') && part.endsWith('_')) {
-                        const italicText = part.slice(1, -1)
-
-                        const textEm = document.createElement('em')
-                        textEm.textContent = italicText
-                        messageContent.appendChild(textEm)
-                    } else if (part.startsWith('*"') && part.startsWith('*')) {
-                        const quoteText = part.slice(1, -1).trim()
-                        const quote = document.createElement('div')
-                        quote.className = "border-l-4 border-gray-500 pl-4 italic"
-                        quote.textContent = quoteText
-                        messageContent.appendChild(quote)
-                    } else if (part.startsWith('>')) {
-                        const quoteText = part.slice(1).trim()
-                        const quote = document.createElement('div')
-                        quote.className = "border-l-4 border-gray-500 pl-4 italic"
-                        quote.textContent = quoteText
-                        messageContent.appendChild(quote)
-                    } else if (/\[.*?\]\(.*?\)/.test(part)) {
-                        const linkMatch = part.match(/\[(.*?)\]\((.*?)\)/)
-                        if (linkMatch) {
-                            const linkText = linkMatch[1]
-                            const linkUrl = linkMatch[2]
-                            const link = document.createElement('a')
-                            quote.textContent = linkText
-                            link.href = linkUrl
-                            messageContent.appendChild(link)
-                        }
-                    } else {
-                        const textSpan = document.createElement('span')
-                        textSpan.textContent = part
-                        messageContent.appendChild(textSpan)
-                        talkDuration += part.length
-                        talkMessage = `${talkMessage}. ${part}`
-                    }
-                })
-
-                messageDiv.appendChild(messageContent)
-                chatContainer.appendChild(messageDiv)
-                content.appendChild(chatContainer)
-                content.scrollTop = content.scrollHeight
-                const messageInput = document.getElementById('messageInput')
-                messageInput.focus()
-            }
-
-            function updateMessagesAssistant(msg) {
-
-                const parts = msg.content.split(/(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[file\][\s\S]*?\[file\]|\[status\][\s\S]*?\[\/status\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|####.*|###.*|##.*|#.*|^- .*)/gm)
-
-
-                const messageContent = document.getElementById(msg.uniqueId)
-                messageContent.innerHTML = ''
-                parts.filter(part => part).forEach((part, i) => {
-                    if (part.startsWith('[selection]') && part.endsWith('[selection]')) {
-                        //skip
-                    } else if (part.startsWith('[fullcode]') && part.endsWith('[fullcode]')) {
-                        //skip
-                    } else if (part.startsWith('[labelInstruction]') && part.endsWith('[labelInstruction]')) {
-                        //skip
-                    } else if (part.startsWith('[files]') && part.endsWith('[files]')) {
-                        //skip
-                    } else if (part.startsWith('[status]') && part.endsWith('[/status]')) {
-                        const statusContent = part.slice(8, -9).trim()
-                        const statusDiv = document.createElement('div')
-                        statusDiv.className = "bg-gray-800 border-l-2 border-blue-500 p-2 mb-2 text-sm text-gray-300"
-                        statusDiv.innerHTML = `<div class="font-bold text-xs text-blue-400 mb-1">AGENTS THINKING</div>${statusContent}`
-                        messageContent.appendChild(statusDiv)
-                    } else if (part.startsWith('[file]') && part.endsWith('[file]')) {
-                        const textSpan = document.createElement('span')
-                        textSpan.textContent = '--File--'
-                        messageContent.appendChild(textSpan)
-                    } else if (part.startsWith('```') && part.endsWith('```')) {
-
-                        let codeContent = part.slice(3, -3).trim()
-
-                        const codeLines = codeContent.split('\n')
-                        const firstLine = codeLines[0].trim()
-                        const languageRegex = /^(nginx|dockerfile|javascript|js|typescript|ts|python|java|c\+\+|cpp|c#|cs|ruby|go|php|swift|kotlin|json|jsx|tsx|html|css|xml|c|rust|perl|r|bash|shell|cmd|powershell|yml|yaml|markdown|md|lua|dart|sql|ini|toml|env|vue|svelte|makefile|plaintext|text|txt)$/i
-
-                        if (languageRegex.test(firstLine)) {
-                            codeContent = codeLines.slice(1).join('\n').trim() // Remove the first line if it matches a language
-                        }
-
-                        const codeDiv = document.createElement('div')
-                        codeDiv.className = 'p-2 rounded-lg mb-2 wrap'
-
-                        const pre = document.createElement('pre')
-
-                        const code = document.createElement('code')
-                        code.className = `language-${firstLine}` // Menambahkan kelas bahasa
-                        code.textContent = codeContent
-                        pre.appendChild(code)
-
-                        codeDiv.appendChild(pre)
-
-                        Prism.highlightElement(code)
-
-                        const copyButton = document.createElement('button')
-                        copyButton.textContent = 'Copy'
-                        copyButton.className = 'mt-2 bg-blue-500 text-white px-2 py-1 rounded'
-                        copyButton.onclick = () => handleCopy(codeContent)
-                        codeDiv.appendChild(copyButton)
-
-                        const applyButton = document.createElement('button')
-                        applyButton.textContent = 'Apply'
-                        applyButton.className = 'mt-2 bg-blue-300 text-white px-2 py-1 rounded ml-2'
-                        applyButton.onclick = () => handleaApply(codeContent)
-                        codeDiv.appendChild(applyButton)
-
-                        messageContent.appendChild(codeDiv)
-                    } else if (part.startsWith('`') && part.endsWith('`')) {
-                        const inlineCode = part.slice(1, -1)
-                        const codeSpan = document.createElement('code')
-                        codeSpan.className = 'bg-gray-800 text-white p-1 rounded'
-                        codeSpan.textContent = inlineCode
-                        messageContent.appendChild(codeSpan)
-                        talkDuration += part.length
-                        talkMessage = `${talkMessage}. ${part}`
-                    } else if (part.startsWith('**') && part.endsWith('**')) {
-                        // Cek Bold
-                        part = part.slice(2, -2).trim()
-                        const textStrong = document.createElement('strong')
-                        textStrong.textContent = part
-                        messageContent.appendChild(textStrong)
-                    } else if (part.startsWith('###')) {
-                        // Cek header
-                        part = part.slice(3).trim()
-                        const textHeader = document.createElement('h3')
-                        textHeader.style = "font-weight: bold; font-size:14px"
-                        textHeader.textContent = part
-                        messageContent.appendChild(textHeader)
-                    } else if (part.startsWith('##')) {
-                        // Cek header
-                        part = part.slice(2).trim()
-                        const textHeader = document.createElement('h2')
-                        textHeader.style = "font-weight: bold; font-size:16px"
-                        textHeader.textContent = part
-                        messageContent.appendChild(textHeader)
-                    } else if (part.startsWith('#')) {
-                        // Cek header
-                        part = part.slice(1).trim()
-                        const textHeader = document.createElement('h1')
-                        textHeader.style = "font-weight: bold; font-size:18px"
-                        textHeader.textContent = part
-                        messageContent.appendChild(textHeader)
-                    } else if (part.startsWith('- ')) {
-                        // Cek list
-                        const listItem = part.slice(2)
-
-                        const partsList = listItem.split(/(\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|###.*|##.*|#.*|^- .*)/gm)
-
-                        const textLi = document.createElement('li')
-
-                        partsList.filter(partList => partList).map((partList, i2) => {
-                            if (partList.startsWith('**') && partList.endsWith('**')) {
-                                partList = partList.slice(2, -2)
-                                const textStrong = document.createElement('strong')
-                                textStrong.textContent = partList
-                                textLi.appendChild(textStrong)
-                            } else {
-                                const text = document.createElement('span')
-                                text.textContent = partList
-                                textLi.appendChild(text)
-                            }
-                        })
-                        messageContent.appendChild(textLi)
-
-
-                    } else if (part.startsWith('_') && part.endsWith('_')) {
-                        const italicText = part.slice(1, -1)
-
-                        const textEm = document.createElement('em')
-                        textEm.textContent = italicText
-                        messageContent.appendChild(textEm)
-                    } else if (part.startsWith('*"') && part.startsWith('*')) {
-                        const quoteText = part.slice(1, -1).trim()
-                        const quote = document.createElement('div')
-                        quote.className = "border-l-4 border-gray-500 pl-4 italic"
-                        quote.textContent = quoteText
-                        messageContent.appendChild(quote)
-                    } else if (part.startsWith('>')) {
-                        const quoteText = part.slice(1).trim()
-                        const quote = document.createElement('div')
-                        quote.className = "border-l-4 border-gray-500 pl-4 italic"
-                        quote.textContent = quoteText
-                        messageContent.appendChild(quote)
-                    } else if (/\[.*?\]\(.*?\)/.test(part)) {
-                        const linkMatch = part.match(/\[(.*?)\]\((.*?)\)/)
-                        if (linkMatch) {
-                            const linkText = linkMatch[1]
-                            const linkUrl = linkMatch[2]
-                            const link = document.createElement('a')
-                            quote.textContent = linkText
-                            link.href = linkUrl
-                            messageContent.appendChild(link)
-                        }
-                    } else {
-                        const textSpan = document.createElement('span')
-                        textSpan.textContent = part
-                        messageContent.appendChild(textSpan)
-                        talkDuration += part.length
-                        talkMessage = `${talkMessage}. ${part}`
-                    }
-                })
-
-
-            }
-
-            function handleCopy(code) {
-                navigator.clipboard.writeText(code).then(() => {
-                    alert('Copied!')
-                })
-            }
-            function handleaApply(code, filePath = null) {
-                vscode.postMessage({
-                    command: 'applyCodeSelection',
-                    code: code,
-                    filePath: filePath
-                })
-            }
-
-            function logout() {
-                console.log('Logging out...')
-                localStorage.removeItem('token')
-                localStorage.removeItem('userId')
-                const allCodeStorageKey = 'allCodeStorage'
-                const codingStorageKey = 'codingStorage'
-                localStorage.removeItem(allCodeStorageKey)
-                localStorage.removeItem(codingStorageKey)
-
-                // Clear state
-                vscode.setState(undefined)
-
-                // Clear message array and content
-                messageArray = []
-                document.getElementById('content').innerHTML = ''
-
-                // Reset persisted state explicitly
-                if (persistedState) {
-                    persistedState.messagesHTML = ''
-                    persistedState.input = ''
-                    persistedState.messages = []
-                }
-
-                showLoginForm()
-            }
-
-
-
-
-        </script>
-        <script src="%PRISMJS_PATH%"></script> <!-- Include the Prism JS for syntax highlighting functionality -->
-
-
-    </body>
-
+          });
+      }
+
+      function handleCopy(code) {
+        navigator.clipboard.writeText(code).then(() => {
+          alert("Copied!");
+        });
+      }
+      function handleaApply(code, filePath = null) {
+        vscode.postMessage({
+          command: "applyCodeSelection",
+          code: code,
+          filePath: filePath,
+        });
+      }
+
+      function logout() {
+        console.log("Logging out...");
+        localStorage.removeItem("token");
+        localStorage.removeItem("userId");
+        const allCodeStorageKey = "allCodeStorage";
+        const codingStorageKey = "codingStorage";
+        localStorage.removeItem(allCodeStorageKey);
+        localStorage.removeItem(codingStorageKey);
+
+        // Clear state
+        vscode.setState(undefined);
+
+        // Clear message array and content
+        messageArray = [];
+        document.getElementById("content").innerHTML = "";
+
+        // Reset persisted state explicitly
+        if (persistedState) {
+          persistedState.messagesHTML = "";
+          persistedState.input = "";
+          persistedState.messages = [];
+        }
+
+        showLoginForm();
+      }
+
+      window.fileContentMap = new Map();
+      window.openDiff = function (path) {
+        const code = window.fileContentMap.get(path);
+        if (code) {
+          handleaApply(code, path);
+        } else {
+          console.log("Diff content not found for " + path);
+        }
+      };
+    </script>
+    <script src="%PRISMJS_PATH%"></script>
+    <!-- Include the Prism JS for syntax highlighting functionality -->
+  </body>
 </html>
