@@ -75,6 +75,7 @@ let currentAbortController = null;
 let lastRequestLine = null;
 let lastRequestPrefix = null;
 let lastTypedAt = Date.now();
+let lastWasNewLine = false;
 async function fetchSuggestions(context, editor) {
     if (!isInlineEnabled())
         return;
@@ -97,6 +98,7 @@ async function fetchSuggestions(context, editor) {
         return;
     // 👉 Inline muncul di posisi cursor (bisa baris kosong)
     const isNewLine = cursorLine !== sourceLine;
+    lastWasNewLine = isNewLine;
     lastRequestLine = cursorLine;
     lastRequestPrefix = isNewLine ? "" : cleanedInput;
     lastLinePrefix = lineText;
@@ -105,8 +107,12 @@ async function fetchSuggestions(context, editor) {
         vscode.window.showErrorMessage("Vibe Coding token is missing. Please login first.");
         return;
     }
-    // 🔥 Ambil konteks sekitar baris sumber (hemat token + relevan)
-    const CONTEXT_RADIUS = 40;
+    const lang = editor.document.languageId;
+    const file = path.basename(editor.document.fileName);
+    let CONTEXT_RADIUS = 40;
+    if (lang === "python" || file.endsWith(".py")) {
+        CONTEXT_RADIUS = 80;
+    }
     const contextCenterLine = sourceLine;
     const start = Math.max(0, contextCenterLine - CONTEXT_RADIUS);
     const end = Math.min(editor.document.lineCount - 1, contextCenterLine + CONTEXT_RADIUS);
@@ -120,13 +126,21 @@ async function fetchSuggestions(context, editor) {
         loadingStatusBarItem.text = "✨ Vibe Coding predicting next line...";
     }
     const showLoadingTimeout = setTimeout(() => loadingStatusBarItem.show(), 400);
-    const lang = editor.document.languageId;
-    const file = path.basename(editor.document.fileName);
+    const styleHints = deriveStyleHints(editor.document, lang);
+    const extraHeuristics = lang === "python"
+        ? "Avoid inserting closing parentheses, colons, or next-line indentation."
+        : lang === "javascript" || lang === "typescript"
+            ? "Match the file's quote and semicolon style."
+            : lang === "html"
+                ? "For HTML/XML contexts: produce a complete, syntactically valid element or a closing tag when appropriate. Never output a bare attribute. When starting a new line, begin with '<' or '</'."
+                : "";
     const body = {
         userId: "vscode-user",
         message: `File: ${file}\n` +
             `Language: ${lang}\n` +
             `Follow ${lang} best practices and syntax.\n` +
+            (styleHints ? `Coding style hints: ${styleHints}\n` : "") +
+            (extraHeuristics ? `${extraHeuristics}\n` : "") +
             `Here is the surrounding code context:\n${contextCode}\n\n` +
             (isNewLine
                 ? `The user just pressed Enter and is starting a new line.\n` +
@@ -162,6 +176,16 @@ async function fetchSuggestions(context, editor) {
         // ❌ Kalau user pindah baris, skip
         if (editor.selection.active.line !== requestLine)
             return;
+        // Filter khusus HTML agar tidak menyarankan atribut tunggal saat new line
+        if (lastWasNewLine &&
+            (lang === "html" || file.toLowerCase().endsWith(".html"))) {
+            const candidate = (suggestions?.message ?? "").trim();
+            if (candidate &&
+                (!candidate.startsWith("<") || !candidate.includes(">"))) {
+                console.log("Drop invalid HTML new-line suggestion:", candidate);
+                return;
+            }
+        }
         const freshLine = editor.document.lineAt(requestLine).text;
         presentSuggestions(suggestions.message, freshLine);
         await vscode.commands.executeCommand("editor.action.inlineSuggest.hide");
@@ -188,6 +212,41 @@ function isInlineEnabled() {
 }
 function normalizeInlineSuggestion(text) {
     return text.replace(/\n/g, "").replace(/\r/g, "").slice(0, 120);
+}
+function deriveStyleHints(document, lang) {
+    const text = document.getText();
+    if (lang === "javascript" || lang === "typescript") {
+        const semicolonLineMatches = text.match(/;\s*$/gm) || [];
+        const usesSemicolons = semicolonLineMatches.length > document.lineCount * 0.1;
+        const singleQuotes = (text.match(/'[^'\\\n]*(?:\\.[^'\\\n]*)*'/g) || [])
+            .length;
+        const doubleQuotes = (text.match(/"[^"\\\n]*(?:\\.[^"\\\n]*)*"/g) || [])
+            .length;
+        const prefersSingle = singleQuotes >= doubleQuotes;
+        const tabMatches = text.match(/^\t+/gm) || [];
+        const spaceMatches = text.match(/^ +/gm) || [];
+        const tabs = tabMatches.length;
+        const spaces = spaceMatches.length;
+        let indent = "";
+        if (tabs > spaces)
+            indent = "use tabs";
+        else {
+            const spaceIndents = spaceMatches
+                .map((m) => m.length)
+                .filter((n) => n >= 2);
+            let two = 0;
+            let four = 0;
+            for (const n of spaceIndents) {
+                if (n % 4 === 0)
+                    four++;
+                else if (n % 2 === 0)
+                    two++;
+            }
+            indent = four >= two ? "use 4-space indent" : "use 2-space indent";
+        }
+        return `${usesSemicolons ? "use semicolons" : "no semicolons"}; ${prefersSingle ? "prefer single quotes" : "prefer double quotes"}; ${indent}`;
+    }
+    return "";
 }
 async function presentSuggestions(suggestion, linePrefix) {
     console.log("Presenting suggestion:", suggestion);
@@ -603,12 +662,24 @@ async function triggerCodeCompletion(context, comment, allCode) {
     const token = context.globalState.get("token");
     const editor = vscode.window.activeTextEditor;
     if (editor) {
+        const lang = editor.document.languageId;
+        const file = path.basename(editor.document.fileName);
+        const styleHints = deriveStyleHints(editor.document, lang);
+        const extraHeuristics = lang === "python"
+            ? "Avoid inserting closing parentheses, colons, or next-line indentation."
+            : lang === "javascript" || lang === "typescript"
+                ? "Match the file's quote and semicolon style."
+                : "";
         const body = {
-            userId: "vscode-user", // Ganti dengan ID pengguna yang sesuai,
+            userId: "vscode-user",
             token: token,
-            message: `The full code is:\n${allCode}\n\n` +
+            message: `File: ${file}\n` +
+                `Language: ${lang}\n` +
+                (styleHints ? `Coding style hints: ${styleHints}\n` : "") +
+                (extraHeuristics ? `${extraHeuristics}\n` : "") +
+                `Here is the surrounding code context:\n${allCode}\n\n` +
                 `The user is currently typing this line: "${comment}".\n` +
-                `Continue this line naturally. Do NOT repeat existing text, and do NOT add braces, semicolons, or syntax that already exists later in the file.`,
+                `Return a SINGLE LINE continuation only. Do NOT add new lines or multiple statements. Do NOT repeat existing text from the line. Do NOT add braces, semicolons, or syntax that already exists later in the file. Return ONLY the continuation text without explanations.`,
         };
         // Buat StatusBarItem untuk loading
         loadingStatusBarItem.text = "🔄 Vibe Coding loading...";

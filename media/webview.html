@@ -51,15 +51,12 @@
     <div id="messageInputContainer" class="p-4 bg-black shadow-md">
       <div class="flex items-center mb-2 justify-between">
         <div class="flex items-center">
-          <label for="modeSelect" class="text-white text-sm mr-2 select-none"
-            >Mode:</label
-          >
           <select
             id="modeSelect"
             class="bg-gray-800 text-white text-sm border border-gray-600 rounded p-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
-            <option value="agent">Agent Mode</option>
-            <option value="chat">Chat Mode</option>
+            <option value="agent">🧠 Agent Mode</option>
+            <option value="chat">💬 Chat Mode</option>
           </select>
         </div>
       </div>
@@ -98,8 +95,9 @@
         </button>
         <textarea
           id="messageInput"
-          placeholder="Ask Vibe Coding"
-          class="flex-grow p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 h-6 bg-black text-white"
+          placeholder="Describe a task for the Agent…"
+          class="flex-grow p-2 border-0 focus:outline-none h-6 bg-black text-white"
+          style="border: none; outline: none; box-shadow: none"
         >
         </textarea>
         <button
@@ -137,12 +135,14 @@
       var isLoading = false;
       var messageArray = [];
       var pendingMessage = null;
+      var pendingAttachments = null;
       var isWorkspaceDirty = false;
       var talkDuration = 0;
       var talkMessage = "";
       var workspaces = "";
       var lastSentMessage = "";
       var abortController = null;
+      var agentAbortController = null;
 
       var attachments = [];
 
@@ -163,6 +163,20 @@
       document.addEventListener("DOMContentLoaded", function () {
         const token = localStorage.getItem("token");
         const userId = localStorage.getItem("userId");
+        const modeSelect = document.getElementById("modeSelect");
+        const messageInput = document.getElementById("messageInput");
+        function updatePlaceholder() {
+          const mode = modeSelect ? modeSelect.value : "agent";
+          if (mode === "agent") {
+            messageInput.placeholder = "Describe a task for the Agent…";
+          } else {
+            messageInput.placeholder = "Ask a question or start chatting…";
+          }
+        }
+        if (modeSelect) {
+          modeSelect.addEventListener("change", updatePlaceholder);
+        }
+        updatePlaceholder();
         if (token && userId) {
           vscode.postMessage({ type: "validateToken", token, userId });
         } else {
@@ -441,7 +455,7 @@
           } else {
             const span = document.createElement("div");
             span.className =
-              "h-8 w-8 flex items-center justify-center text-xs text-center overflow-hidden p-1 break-all text-white";
+              "h-8 w-8 flex items-center justify-center text-xs text-center rounded overflow-hidden p-1 break-all text-white";
             span.textContent = att.name;
             div.appendChild(span);
           }
@@ -538,6 +552,12 @@
           abortController.abort();
           abortController = null;
         }
+        if (agentAbortController) {
+          try {
+            agentAbortController.abort();
+          } catch (e) {}
+          agentAbortController = null;
+        }
         isLoading = false;
 
         const sendMessageButton = document.getElementById("button-send");
@@ -579,6 +599,9 @@
         const uniqueId = Date.now() + Math.random();
 
         // Clone attachments for this message
+        if (isRetry && pendingAttachments) {
+          attachments = pendingAttachments;
+        }
         const currentAttachments = [...attachments];
         const normalizedAttachments = normalizeAttachments(currentAttachments);
         try {
@@ -594,9 +617,15 @@
 
         let displayMessage = message;
         if (currentAttachments.length > 0) {
-          displayMessage +=
-            "\n\n" +
-            currentAttachments.map((a) => `[Attachment: ${a.name}]`).join("\n");
+          const tokens = currentAttachments.map((a) => {
+            const isImg = (a.type || "").startsWith("image/");
+            const src = a.contentDataUrl || a.content || "";
+            if (isImg && src) {
+              return `[att-img name="${a.name.replace(/"/g, "")}" src="${src.replace(/"/g, "%22")}"]`;
+            }
+            return `[att-file name="${a.name.replace(/"/g, "")}"]`;
+          });
+          displayMessage += "\n\n" + tokens.join(" ");
         }
 
         if (!isRetry) {
@@ -628,6 +657,7 @@
           // Show a temporary bubble or just the loader?
           // Let's use the pending message logic
           pendingMessage = message;
+          pendingAttachments = currentAttachments;
 
           // Remove the user bubble we just added to avoid duplication on retry?
           // Actually, if we just stop here, the user bubble is already in messageArray.
@@ -643,10 +673,13 @@
         }
 
         if (mode === "agent") {
-          await handleAgentWorkflow(message, uniqueId, normalizedAttachments);
-          // Clear attachments
+          // Clear attachments immediately after sending (but keep snapshot for this request)
+          const snapshot = normalizedAttachments;
           attachments = [];
           renderAttachments();
+          // Setup AbortController for agent workflow
+          agentAbortController = new AbortController();
+          await handleAgentWorkflow(message, uniqueId, snapshot);
           return;
         }
 
@@ -685,6 +718,7 @@
                 if (bubble) bubble.parentElement.remove();
 
                 pendingMessage = message; // Save for retry
+                pendingAttachments = currentAttachments;
                 await updateWorkspaces(true); // Call with silent=true
                 return;
               }
@@ -789,6 +823,7 @@
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({ userId, token, message, attachments }),
+              signal: agentAbortController?.signal,
             },
           );
 
@@ -841,6 +876,14 @@
             attachments,
           );
         } catch (err) {
+          if (err.name === "AbortError") {
+            updateMessagesAssistant({
+              uniqueId: `assistant-${uniqueId}`,
+              content: "Stopped.",
+            });
+            resetUI();
+            return;
+          }
           console.error(err);
           updateMessagesAssistant({
             uniqueId: `assistant-${uniqueId}`,
@@ -893,6 +936,7 @@
                   mode: "think",
                   attachments,
                 }),
+                signal: agentAbortController?.signal,
               },
             );
 
@@ -1007,6 +1051,7 @@
                   mode: "execute",
                   attachments,
                 }),
+                signal: agentAbortController?.signal,
               },
             );
 
@@ -1198,6 +1243,14 @@
             // Re-inject modified files diff buttons at the end of EACH step to ensure they are available
             // This is optional but helps if user wants to see diffs incrementally
           } catch (err) {
+            if (err.name === "AbortError") {
+              updateMessagesAssistant({
+                uniqueId: `assistant-${uniqueId}`,
+                content: planMarkdown + `\n  > *Stopped by user.*`,
+              });
+              resetUI();
+              return;
+            }
             planMarkdown = planMarkdown.replace(
               `- [🔄] Step ${step.step}`,
               `- [❌] Step ${step.step}`,
@@ -1259,7 +1312,6 @@
             <div class="login-wrapper">
                 <div class="login-container">
                     <img src="%LOGO_PATH%" alt="Logo" class="login-logo">
-                    <h2 style="text-align: center; margin-bottom: 20px; color: #fff;">Login</h2>
                     <form id="loginForm" action="#" method="post">
                         <input type="text" name="email" placeholder="Enter username" required />
                         <button type="submit">Login ➜</button>
@@ -1433,8 +1485,13 @@
 
           if (pendingMessage) {
             const msg = pendingMessage;
+            const atts = pendingAttachments;
             pendingMessage = null;
             console.log("Retrying pending message...");
+            if (atts) {
+              attachments = atts;
+              pendingAttachments = null;
+            }
             sendMessageToApi(msg, true);
           }
         } catch (error) {
@@ -1607,7 +1664,7 @@
 
       function renderMessageParts(content, container) {
         const parts = content.split(
-          /(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[file name=".*?"\][\s\S]*?\[\/file\]|\[openDiff path=".*?"\]|\[file\][\s\S]*?\[file\]|\[status\][\s\S]*?\[\/status\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|####.*|###.*|##.*|#.*|^- .*)/gm,
+          /(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[file name=".*?"\][\s\S]*?\[\/file\]|\[openDiff path=".*?"\]|\[att-img .*?\]|\[att-file .*?\]|\[file\][\s\S]*?\[file\]|\[status\][\s\S]*?\[\/status\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|####.*|###.*|##.*|#.*|^- .*)/gm,
         );
 
         parts
@@ -1632,6 +1689,35 @@
                 btn.className = "btn-diff";
                 btn.innerHTML = `<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"></path></svg> Open Diff: ${match[1]}`;
                 btn.onclick = () => window.openDiff(match[1]);
+                container.appendChild(btn);
+              }
+            } else if (part.startsWith("[att-img ")) {
+              const match = part.match(/\[att-img name="(.*?)" src="(.*?)"\]/);
+              if (match) {
+                const wrapper = document.createElement("div");
+                wrapper.style.display = "inline-block";
+                wrapper.style.width = "60px";
+                wrapper.style.height = "60px";
+                wrapper.style.overflow = "hidden";
+                wrapper.style.borderRadius = "6px";
+                wrapper.style.border = "1px solid #e5e7eb";
+                wrapper.style.marginRight = "8px";
+                const img = document.createElement("img");
+                img.src = match[2];
+                img.alt = match[1];
+                img.style.width = "100%";
+                img.style.height = "100%";
+                img.style.objectFit = "cover";
+                wrapper.appendChild(img);
+                container.appendChild(wrapper);
+              }
+            } else if (part.startsWith("[att-file ")) {
+              const match = part.match(/\[att-file name="(.*?)"\]/);
+              if (match) {
+                const btn = document.createElement("button");
+                btn.className = "btn-diff";
+                btn.style.marginRight = "8px";
+                btn.innerHTML = `<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 3h6l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z" /></svg> Attachment: ${match[1]}`;
                 container.appendChild(btn);
               }
             } else if (
