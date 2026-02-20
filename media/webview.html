@@ -327,11 +327,11 @@
           if (messageEvent.command == "updateFileInfo") {
             if (messageEvent.filePath) {
               document.getElementById("div-code-selected").innerHTML = `
-                                  <div id="fileOpen"
-                                      class="flex file-open p-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                      <span id="filePath"></span><span class="fs-6" id="selectedLine"></span>
-                                      <span id="svg-eye"></span>
-                                  </div>`;
+                                        <div id="fileOpen"
+                                            class="flex file-open p-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                            <span id="filePath"></span><span class="fs-6" id="selectedLine"></span>
+                                            <span id="svg-eye"></span>
+                                        </div>`;
 
               document.getElementById("filePath").textContent =
                 messageEvent.filePath;
@@ -339,10 +339,10 @@
                 ": " + messageEvent.selectedLine + " Current file";
               document.getElementById("svg-eye").innerHTML =
                 `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" id="eye" fill="white" class="icon">
-                                      <path
-                                          d="M21.92,11.6C19.9,6.91,16.1,4,12,4S4.1,6.91,2.08,11.6a1,1,0,0,0,0,.8C4.1,17.09,7.9,20,12,20s7.9-2.91,9.92-7.6A1,1,0,0,0,21.92,11.6ZM12,18c-3.17,0-6.17-2.29-7.9-6C5.83,8.29,8.83,6,12,6s6.17,2.29,7.9,6C18.17,15.71,15.17,18,12,18ZM12,8a4,4,0,1,0,4,4A4,4,0,0,0,12,8Zm0,6a2,2,0,1,1,2-2A2,2,0,0,1,12,14Z">
-                                      </path>
-                                  </svg>`;
+                                            <path
+                                                d="M21.92,11.6C19.9,6.91,16.1,4,12,4S4.1,6.91,2.08,11.6a1,1,0,0,0,0,.8C4.1,17.09,7.9,20,12,20s7.9-2.91,9.92-7.6A1,1,0,0,0,21.92,11.6ZM12,18c-3.17,0-6.17-2.29-7.9-6C5.83,8.29,8.83,6,12,6s6.17,2.29,7.9,6C18.17,15.71,15.17,18,12,18ZM12,8a4,4,0,1,0,4,4A4,4,0,0,0,12,8Zm0,6a2,2,0,1,1,2-2A2,2,0,0,1,12,14Z">
+                                            </path>
+                                        </svg>`;
             } else {
               document.getElementById("div-code-selected").innerHTML = "";
               document.getElementById("filePath").textContent = "";
@@ -486,7 +486,7 @@
           // Menghapus spasi di awal dan akhir pada load
 
           let message = messageInput.value.trim();
-          if (coding) {
+          if (coding && mode !== "agent") {
             message =
               "[labelInstruction]Instruction: [labelInstruction]" +
               message +
@@ -494,7 +494,7 @@
               coding +
               "[selection]";
           }
-          if (allCode) {
+          if (allCode && mode !== "agent") {
             message = "[fullcode]" + allCode + "[fullcode]" + message;
           }
           console.log("send message to API");
@@ -1077,6 +1077,7 @@
         let context = "";
         let planMarkdown = initialMarkdown;
         let modifiedFiles = new Set();
+        let autoFixTriggered = false;
 
         for (const step of plan) {
           // Update to In Progress - use more flexible regex
@@ -1353,7 +1354,7 @@
                 });
 
                 // Request execution and wait for completion
-                await new Promise((resolve) => {
+                const exitCode = await new Promise((resolve) => {
                   const handleMessage = (event) => {
                     if (event.data.command === "commandOutput") {
                       terminalOutput += event.data.output;
@@ -1386,7 +1387,7 @@
                         content: planMarkdown + terminalOutput + "\n\`\`\`",
                       });
 
-                      resolve();
+                      resolve(event.data.exitCode);
                     }
                   };
                   window.addEventListener("message", handleMessage);
@@ -1394,8 +1395,62 @@
                 });
 
                 planMarkdown += terminalOutput + "\n\`\`\`\n";
+
+                // Auto-Terminal-Fixing Logic
+                if (exitCode !== 0) {
+                  autoFixTriggered = true;
+                  const fixMessage = `The terminal command failed with exit code ${exitCode}.
+      Command: ${command}
+      Output:
+      \`\`\`
+      ${terminalOutput}
+      \`\`\`
+      Please analyze the error and fix it. Common fixes include installing missing dependencies, correcting syntax, or fixing file paths. 
+      
+      CRITICAL INSTRUCTION:
+      1. FIX the error.
+      2. THEN, CONTINUE with the ORIGINAL REQUEST.
+      
+      Original Request:
+      """
+      ${(typeof message === "string" ? message : JSON.stringify(message || "")).replace(/\`/g, "'")}
+      """
+      
+      Analyze what was left unfinished in the previous plan and finish it.`;
+
+                  planMarkdown += `\n> *⚠️ Command failed. Delegating to Auto-Fix Agent...*\n`;
+                  updateMessagesAssistant({
+                    uniqueId: `assistant-${uniqueId}`,
+                    content: planMarkdown,
+                  });
+
+                  // Recursively call agent to fix
+                  await handleAgentWorkflow(
+                    fixMessage,
+                    Date.now() + Math.random(),
+                    attachments,
+                    true, // isRetry/isFix
+                  );
+
+                  const errorRegex = new RegExp(
+                    `^\\s*-\\s*\\[🔄\\]\\s*(Step\\s+${step.step}:)`,
+                    "gm",
+                  );
+                  planMarkdown = planMarkdown.replace(errorRegex, `- [❌] $1`);
+                  planMarkdown += `\n  > *Step ${step.step} Failed. Auto-Fix workflow initiated above.*\n`;
+
+                  updateMessagesAssistant({
+                    uniqueId: `assistant-${uniqueId}`,
+                    content: planMarkdown,
+                  });
+
+                  // Stop this plan (since we delegated to a new agent instance)
+                  break;
+                }
               }
             }
+            // After loop
+            if (autoFixTriggered) break;
 
             // Update to Done - use more flexible regex
             const doneRegex = new RegExp(
@@ -1456,7 +1511,9 @@
           });
         }
 
-        planMarkdown += `\n\n**All steps completed.**`;
+        if (!autoFixTriggered) {
+          planMarkdown += `\n\n**All steps completed.**`;
+        }
         updateMessagesAssistant({
           uniqueId: `assistant-${uniqueId}`,
           content: planMarkdown,
@@ -1490,10 +1547,10 @@
         if (planButton) {
           planButton.style.display = "inline-block";
           const testPlanMarkdown = `- [ ] Step 1: Initialize project
-      - [✅] Step 2: Setup configuration
-      - [✅] Step 3: Create components
-      - [ ] Step 4: Add styling
-      - [ ] Step 5: Test application`;
+            - [✅] Step 2: Setup configuration
+            - [✅] Step 3: Create components
+            - [ ] Step 4: Add styling
+            - [ ] Step 5: Test application`;
 
           // Debug the counting logic
           console.log("Test markdown:", testPlanMarkdown);
@@ -1526,8 +1583,8 @@
 
         // Test with a realistic progression
         let testMarkdown = `- [ ] Step 1: Initialize project
-      - [ ] Step 2: Setup configuration
-      - [ ] Step 3: Create components`;
+            - [ ] Step 2: Setup configuration
+            - [ ] Step 3: Create components`;
 
         console.log("=== Initial State ===");
         console.log("Markdown:", testMarkdown);
@@ -1717,16 +1774,16 @@
 
         const content = document.getElementById("content");
         content.innerHTML = `
-                  <div class="login-wrapper">
-                      <div class="login-container">
-                          <img src="%LOGO_PATH%" alt="Logo" class="login-logo">
-                          <form id="loginForm" action="#" method="post">
-                              <input type="text" name="email" placeholder="Enter username" required />
-                              <button type="submit">Login ➜</button>
-                          </form>
-                      </div>
-                  </div>
-              `;
+                        <div class="login-wrapper">
+                            <div class="login-container">
+                                <img src="%LOGO_PATH%" alt="Logo" class="login-logo">
+                                <form id="loginForm" action="#" method="post">
+                                    <input type="text" name="email" placeholder="Enter username" required />
+                                    <button type="submit">Login ➜</button>
+                                </form>
+                            </div>
+                        </div>
+                    `;
 
         const form = document.getElementById("loginForm");
         form.addEventListener("submit", login);
@@ -1744,13 +1801,13 @@
 
           if (isLoading) return;
           loginForm.innerHTML = `
-                              <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
-                              <button type="submit" disabled>
-                                  <svg class="loader-button" viewBox="0 0 24 24" width="16" height="16"> <!-- Adjust width and height -->
-                                      <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
-                                  </svg>
-                              </button>
-                          `;
+                                    <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
+                                    <button type="submit" disabled>
+                                        <svg class="loader-button" viewBox="0 0 24 24" width="16" height="16"> <!-- Adjust width and height -->
+                                            <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
+                                        </svg>
+                                    </button>
+                                `;
           isLoading = true;
           console.log("findFiles");
           vscode.postMessage({ type: "findFiles", email: formEmail });
@@ -1759,9 +1816,9 @@
           messageDiv.className = "message error";
           isLoading = false;
           loginForm.innerHTML = `
-                                  <input type="text" name="email" placeholder="Enter username" value="${email}" required />
-                                  <button type="submit">➜]</button>
-                              `;
+                                        <input type="text" name="email" placeholder="Enter username" value="${email}" required />
+                                        <button type="submit">➜]</button>
+                                    `;
         }
       }
 
@@ -1773,13 +1830,13 @@
           // Send a message to the extension to find files
 
           loginForm.innerHTML = `
-                              <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
-                              <button type="submit" disabled>
-                                  <svg class="loader-button" viewBox="0 0 24 24" width="16" height="16"> <!-- Adjust width and height -->
-                                      <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
-                                  </svg>
-                              </button>
-                          `;
+                                    <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
+                                    <button type="submit" disabled>
+                                        <svg class="loader-button" viewBox="0 0 24 24" width="16" height="16"> <!-- Adjust width and height -->
+                                            <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
+                                        </svg>
+                                    </button>
+                                `;
 
           const response = await fetch("http://localhost:13100/api/login", {
             method: "POST",
@@ -1798,9 +1855,9 @@
             messageDiv.className = "message error";
             isLoading = false;
             loginForm.innerHTML = `
-                                  <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
-                                  <button type="submit">➜]</button>
-                              `;
+                                        <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
+                                        <button type="submit">➜]</button>
+                                    `;
             throw new Error("Login gagal");
           }
 
@@ -1821,9 +1878,9 @@
           setTimeout(() => {
             updateWorkspaces();
             loginForm.innerHTML = `
-                                  <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
-                                  <button type="submit">➜]</button>
-                              `;
+                                        <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
+                                        <button type="submit">➜]</button>
+                                    `;
           }, 3000);
 
           messageDiv.textContent = "";
@@ -1844,9 +1901,9 @@
           messageDiv.className = "message error";
           isLoading = false;
           loginForm.innerHTML = `
-                                  <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
-                                  <button type="submit">➜]</button>
-                              `;
+                                        <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
+                                        <button type="submit">➜]</button>
+                                    `;
         }
       }
 
@@ -1856,10 +1913,10 @@
 
         const btnWorkspace = document.getElementById("button-workspace");
         btnWorkspace.innerHTML = `
-                          <svg class="loader-button" viewBox="0 0 24 24" width="16" height="16"> <!-- Adjust width and height -->
-                              <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
-                          </svg>
-                      `;
+                                <svg class="loader-button" viewBox="0 0 24 24" width="16" height="16"> <!-- Adjust width and height -->
+                                    <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
+                                </svg>
+                            `;
         vscode.postMessage({ type: "updateWorkspaces", silent });
       }
 

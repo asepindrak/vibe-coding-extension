@@ -369,6 +369,18 @@ class SidebarProvider {
     async getAllWorkspaceFiles() {
         try {
             const files = await vscode.workspace.findFiles("**/*", "{**/node_modules/**,**/dist/**,**/build/**,**/out/**,**/.git/**,**/.svn/**,**/.hg/**,**/.next/**,**/.nuxt/**,**/.expo/**,**/vendor/**,**/__pycache__/**,**/.pytest_cache/**,**/venv/**,**/.venv/**,**/.idea/**,**/.vscode/**,**/.vs/**,**/coverage/**,**/bin/**,**/obj/**,**/target/**,**/Pods/**,**/env/**,**/.env/**,**/tmp/**,**/temp/**,**/*.log,**/*.lock,**/*.zip,**/*.png,**/*.jpg,**/*.jpeg,**/*.gif,**/*.exe,**/*.dll,**/*.bin,**/*.class,**/*.so,**/*.o,**/*.a}");
+            // Generate a lightweight file tree/list so the agent knows the structure
+            // even if file contents are truncated.
+            const filePaths = files.map((f) => vscode.workspace.asRelativePath(f));
+            // Sort for consistent view
+            filePaths.sort();
+            const structureHeader = "// ===== PROJECT STRUCTURE (Tree View) =====\n";
+            // Limit to first 500 files to save tokens, but gives good overview
+            const structureContent = filePaths
+                .slice(0, 500)
+                .map((p) => `// ${p}`)
+                .join("\n");
+            const structureSection = structureHeader + structureContent + "\n\n";
             const folderBuckets = {};
             for (const file of files) {
                 if (!this.isTextFile(file.fsPath))
@@ -432,8 +444,8 @@ class SidebarProvider {
                 grouped[folderKey].push(f);
             }
             // Gabungkan hasil dengan batas ukuran
-            let allCode = "";
-            let totalSize = 0;
+            let allCode = structureSection; // Start with the structure!
+            let totalSize = allCode.length;
             console.log("=== FILES SELECTED TO SEND ===");
             for (const folder of Object.keys(grouped)) {
                 const folderHeader = `\n\n// ===== Folder: ${folder} =====\n`;
