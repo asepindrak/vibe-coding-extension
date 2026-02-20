@@ -38,6 +38,7 @@ const vscode = __importStar(require("vscode"));
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const os = __importStar(require("os"));
+const crypto = __importStar(require("crypto"));
 class DiffManager {
     static instance;
     pendingDiffs = new Map();
@@ -83,7 +84,12 @@ class DiffManager {
             const data = Buffer.from(newContent, "utf8");
             await vscode.workspace.fs.writeFile(fileUri, data);
             // 3. Write OLD content to Temp (for Diff Left Side)
-            const tempFilePath = path.join(tempDir, `vico_backup_${Date.now()}_${fileName}`);
+            // Use hash of file path to ensure only one diff tab per file
+            const fileHash = crypto
+                .createHash("md5")
+                .update(fileUri.fsPath)
+                .digest("hex");
+            const tempFilePath = path.join(tempDir, `vico_backup_${fileHash}_${fileName}`);
             fs.writeFileSync(tempFilePath, oldContent);
             const tempUri = vscode.Uri.file(tempFilePath);
             // 4. Register in Map
@@ -107,6 +113,12 @@ class DiffManager {
         catch (err) {
             vscode.window.showErrorMessage("Failed to write file: " + (err.message || err.toString()));
             return false;
+        }
+    }
+    async acceptFile(fileUri) {
+        const entry = this.findEntry(fileUri);
+        if (entry) {
+            this.cleanup(entry);
         }
     }
     async acceptDiff() {

@@ -48,7 +48,8 @@
     </div>
     <div id="content" class="content custom-scrollbar"></div>
     <div id="message" class="message"></div>
-    <div id="messageInputContainer" class="p-4 bg-black shadow-md">
+    <!-- Removed fixed positioning, now part of flex flow -->
+    <div id="messageInputContainer" class="message-input-container">
       <div class="flex items-center mb-2 justify-between">
         <div class="flex items-center">
           <select
@@ -58,6 +59,33 @@
             <option value="agent">🧠 Agent Mode</option>
             <option value="chat">💬 Chat Mode</option>
           </select>
+          <button
+            id="planButton"
+            style="
+              margin-left: 8px;
+              background-color: #21262d;
+              color: #c9d1d9;
+              font-size: 0.875rem;
+              border: 1px solid #30363d;
+              border-radius: 6px;
+              padding: 4px 8px;
+              cursor: pointer;
+              display: none;
+            "
+            onmouseover="this.style.backgroundColor = '#30363d'"
+            onmouseout="this.style.backgroundColor = '#21262d'"
+            onfocus="
+              this.style.boxShadow = '0 0 0 3px rgba(88, 166, 255, 0.15)';
+              this.style.borderColor = '#58a6ff';
+            "
+            onblur="
+              this.style.boxShadow = 'none';
+              this.style.borderColor = '#30363d';
+            "
+            title="Show Plan Status"
+          >
+            📋 Plan
+          </button>
         </div>
       </div>
       <div
@@ -96,8 +124,15 @@
         <textarea
           id="messageInput"
           placeholder="Describe a task for the Agent…"
-          class="flex-grow p-2 border-0 focus:outline-none h-6 bg-black text-white"
-          style="border: none; outline: none; box-shadow: none"
+          class="flex-grow p-2 border-0 focus:outline-none bg-black text-white"
+          style="
+            border: none;
+            outline: none;
+            box-shadow: none;
+            resize: none;
+            overflow-y: auto;
+          "
+          rows="1"
         >
         </textarea>
         <button
@@ -131,6 +166,25 @@
         <div id="generating" class="mt-2 ml-2 border border-1 p-2"></div>
       </div>
     </div>
+    <!-- Plan Status Popup -->
+    <div
+      id="planPopup"
+      style="
+        position: fixed;
+        background-color: #1a1d23;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        padding: 8px;
+        max-width: 320px;
+        max-height: 256px;
+        overflow-y: auto;
+        display: none;
+        z-index: 9999;
+      "
+    >
+      <div id="planContent" style="font-size: 0.875rem; color: #c9d1d9"></div>
+    </div>
     <script type="module">
       var isLoading = false;
       var messageArray = [];
@@ -159,6 +213,17 @@
           mode: document.getElementById("modeSelect")?.value ?? "agent",
         });
       }
+
+      // Auto-resize textarea
+      const messageInput = document.getElementById("messageInput");
+      messageInput.addEventListener("input", function () {
+        this.style.height = "auto";
+        this.style.height = this.scrollHeight + "px";
+        // Max height constraint handled by CSS
+        if (this.value === "") {
+          this.style.height = "auto";
+        }
+      });
 
       document.addEventListener("DOMContentLoaded", function () {
         const token = localStorage.getItem("token");
@@ -190,6 +255,26 @@
         btnWorkspace.addEventListener("click", updateWorkspaces);
         const logoutButton = document.getElementById("logoutButton");
         logoutButton.addEventListener("click", logout);
+
+        // Plan Button Logic
+        const planButton = document.getElementById("planButton");
+        const planPopup = document.getElementById("planPopup");
+        const planContent = document.getElementById("planContent");
+
+        if (planButton && planPopup && planContent) {
+          planButton.addEventListener("click", togglePlanPopup);
+
+          // Close popup when clicking outside
+          document.addEventListener("click", (e) => {
+            if (
+              planPopup &&
+              !planPopup.contains(e.target) &&
+              e.target !== planButton
+            ) {
+              hidePlanPopup();
+            }
+          });
+        }
 
         messageInput.value = messageInput.value.trim();
 
@@ -242,11 +327,11 @@
           if (messageEvent.command == "updateFileInfo") {
             if (messageEvent.filePath) {
               document.getElementById("div-code-selected").innerHTML = `
-                            <div id="fileOpen"
-                                class="flex file-open p-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                <span id="filePath"></span><span class="fs-6" id="selectedLine"></span>
-                                <span id="svg-eye"></span>
-                            </div>`;
+                                  <div id="fileOpen"
+                                      class="flex file-open p-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                      <span id="filePath"></span><span class="fs-6" id="selectedLine"></span>
+                                      <span id="svg-eye"></span>
+                                  </div>`;
 
               document.getElementById("filePath").textContent =
                 messageEvent.filePath;
@@ -254,10 +339,10 @@
                 ": " + messageEvent.selectedLine + " Current file";
               document.getElementById("svg-eye").innerHTML =
                 `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" id="eye" fill="white" class="icon">
-                                <path
-                                    d="M21.92,11.6C19.9,6.91,16.1,4,12,4S4.1,6.91,2.08,11.6a1,1,0,0,0,0,.8C4.1,17.09,7.9,20,12,20s7.9-2.91,9.92-7.6A1,1,0,0,0,21.92,11.6ZM12,18c-3.17,0-6.17-2.29-7.9-6C5.83,8.29,8.83,6,12,6s6.17,2.29,7.9,6C18.17,15.71,15.17,18,12,18ZM12,8a4,4,0,1,0,4,4A4,4,0,0,0,12,8Zm0,6a2,2,0,1,1,2-2A2,2,0,0,1,12,14Z">
-                                </path>
-                            </svg>`;
+                                      <path
+                                          d="M21.92,11.6C19.9,6.91,16.1,4,12,4S4.1,6.91,2.08,11.6a1,1,0,0,0,0,.8C4.1,17.09,7.9,20,12,20s7.9-2.91,9.92-7.6A1,1,0,0,0,21.92,11.6ZM12,18c-3.17,0-6.17-2.29-7.9-6C5.83,8.29,8.83,6,12,6s6.17,2.29,7.9,6C18.17,15.71,15.17,18,12,18ZM12,8a4,4,0,1,0,4,4A4,4,0,0,0,12,8Zm0,6a2,2,0,1,1,2-2A2,2,0,0,1,12,14Z">
+                                      </path>
+                                  </svg>`;
             } else {
               document.getElementById("div-code-selected").innerHTML = "";
               document.getElementById("filePath").textContent = "";
@@ -283,6 +368,10 @@
             // console.log(`Files found webview: ${messageEvent.files}`)
             workspaces = messageEvent.files;
             await updateWorkspacesAPI(workspaces);
+            if (window.resolveWorkspaceUpdate) {
+              window.resolveWorkspaceUpdate();
+              window.resolveWorkspaceUpdate = null;
+            }
             return;
             // Handle the list of files as needed
           } else if (messageEvent.command === "error") {
@@ -334,6 +423,9 @@
               // Scroll to the bottom of the content
               content.scrollTop = content.scrollHeight;
               const messageInput = document.getElementById("messageInput");
+              // Trigger resize
+              messageInput.style.height = "auto";
+              messageInput.style.height = messageInput.scrollHeight + "px";
               messageInput.focus();
             } else {
               fetchHistory();
@@ -570,6 +662,8 @@
         loader.classList.add("hidden");
 
         messageInput.value = lastSentMessage;
+        messageInput.style.height = "auto";
+        messageInput.style.height = messageInput.scrollHeight + "px";
         messageInput.disabled = false;
         messageInput.focus();
 
@@ -591,6 +685,7 @@
         // Clear input immediately
         if (!isRetry) {
           messageInput.value = "";
+          messageInput.style.height = "auto";
         }
 
         messageInput.disabled = true;
@@ -794,7 +889,12 @@
         }
       }
 
-      async function handleAgentWorkflow(message, uniqueId, attachments) {
+      async function handleAgentWorkflow(
+        message,
+        uniqueId,
+        attachments,
+        isRetry = false,
+      ) {
         const token = localStorage.getItem("token");
         const userId = localStorage.getItem("userId");
         try {
@@ -866,6 +966,15 @@
             content: planMarkdown,
           });
 
+          // Show plan button and update popup
+          const planButton = document.getElementById("planButton");
+          if (planButton) {
+            planButton.style.display = "inline-block";
+            updatePlanButtonTitle(planMarkdown);
+          }
+          updatePlanPopup(planMarkdown);
+          updatePlanButtonTitle(planMarkdown);
+
           // Execute Plan
           await executePlan(
             planData.plan,
@@ -875,6 +984,70 @@
             planMarkdown,
             attachments,
           );
+
+          // Auto-retry if plan was just an analysis step
+          if (!isRetry && planData.plan.length <= 2) {
+            const stepDesc = planData.plan[0].description.toLowerCase();
+            if (
+              stepDesc.includes("check") ||
+              stepDesc.includes("analy") ||
+              stepDesc.includes("identif") ||
+              stepDesc.includes("ls ") ||
+              stepDesc.includes("verif") ||
+              stepDesc.includes("detect")
+            ) {
+              console.log("Auto-retrying plan after analysis step...");
+
+              // Mark previous plan as done/analysis phase
+              updateMessagesAssistant({
+                uniqueId: `assistant-${uniqueId}`,
+                content:
+                  planMarkdown +
+                  `\n\n> *Analysis complete. Proceeding to implementation planning...*`,
+              });
+
+              // Create NEW bubble for the next phase
+              const newUniqueId = Date.now() + Math.random();
+
+              // Add an empty “assistant” bubble that we’ll update
+              displayMessagesAssistant({
+                role: "assistant",
+                content: "",
+                uniqueId: `assistant-${newUniqueId}`,
+              });
+
+              // Trigger workspace update and wait for tech stack to be refreshed
+              console.log(
+                "Triggering workspace update for tech stack refresh...",
+              );
+              updateWorkspaces(true);
+
+              await new Promise((resolve) => {
+                window.resolveWorkspaceUpdate = resolve;
+                setTimeout(() => {
+                  if (window.resolveWorkspaceUpdate) {
+                    console.log(
+                      "Workspace update timed out, proceeding anyway...",
+                    );
+                    window.resolveWorkspaceUpdate = null;
+                    resolve();
+                  }
+                }, 5000);
+              });
+
+              // Recursively call handleAgentWorkflow with new ID and isRetry=true
+              const retryMessage =
+                message +
+                " (Safety check complete. Proceed with full implementation immediately.)";
+              await handleAgentWorkflow(
+                retryMessage,
+                newUniqueId,
+                attachments,
+                true,
+              );
+              return;
+            }
+          }
         } catch (err) {
           if (err.name === "AbortError") {
             updateMessagesAssistant({
@@ -906,15 +1079,17 @@
         let modifiedFiles = new Set();
 
         for (const step of plan) {
-          // Update to In Progress
-          planMarkdown = planMarkdown.replace(
-            `- [ ] Step ${step.step}`,
-            `- [🔄] Step ${step.step}`,
+          // Update to In Progress - use more flexible regex
+          const inProgressRegex = new RegExp(
+            `^\\s*-\\s*\\[\\s*\\]\\s*(Step\\s+${step.step}:)`,
+            "gm",
           );
+          planMarkdown = planMarkdown.replace(inProgressRegex, `- [🔄] $1`);
           updateMessagesAssistant({
             uniqueId: `assistant-${uniqueId}`,
             content: planMarkdown,
           });
+          updatePlanPopup(planMarkdown);
 
           try {
             // --- PHASE 1: THINKING ---
@@ -1107,6 +1282,8 @@
 
             // Let's just remove the "Executing..." line from planMarkdown before adding the final result.
             planMarkdown = planMarkdown.replace(`\n  > *Executing...*\n`, "");
+            updatePlanPopup(planMarkdown);
+            updatePlanButtonTitle(planMarkdown);
 
             // Append output to context for next steps
             context += `\nStep ${step.step} Output:\n${stepOutput}\n`;
@@ -1220,11 +1397,13 @@
               }
             }
 
-            // Update to Done
-            planMarkdown = planMarkdown.replace(
-              `- [🔄] Step ${step.step}`,
-              `- [✅] Step ${step.step}`,
+            // Update to Done - use more flexible regex
+            const doneRegex = new RegExp(
+              `^\\s*-\\s*\\[🔄\\]\\s*(Step\\s+${step.step}:)`,
+              "gm",
             );
+            planMarkdown = planMarkdown.replace(doneRegex, `- [✅] $1`);
+            updatePlanPopup(planMarkdown);
 
             // Extract reasoning
             const reasoningMatch = stepOutput.match(
@@ -1239,6 +1418,7 @@
               uniqueId: `assistant-${uniqueId}`,
               content: planMarkdown,
             });
+            updatePlanPopup(planMarkdown);
 
             // Re-inject modified files diff buttons at the end of EACH step to ensure they are available
             // This is optional but helps if user wants to see diffs incrementally
@@ -1251,21 +1431,26 @@
               resetUI();
               return;
             }
-            planMarkdown = planMarkdown.replace(
-              `- [🔄] Step ${step.step}`,
-              `- [❌] Step ${step.step}`,
+            const errorRegex = new RegExp(
+              `^\\s*-\\s*\\[🔄\\]\\s*(Step\\s+${step.step}:)`,
+              "gm",
             );
+            planMarkdown = planMarkdown.replace(errorRegex, `- [❌] $1`);
             planMarkdown += `\n  > *Step ${step.step} Error:* ${err.message}\n`;
             updateMessagesAssistant({
               uniqueId: `assistant-${uniqueId}`,
               content: planMarkdown,
             });
+            updatePlanPopup(planMarkdown);
+            updatePlanButtonTitle(planMarkdown);
             break; // Stop execution on error
           }
         }
 
         if (modifiedFiles.size > 0) {
           planMarkdown += `\n\n**Modified Files:**\n`;
+          const filesList = Array.from(modifiedFiles).join(",");
+          planMarkdown += `\n[keepAllFiles files="${filesList}"]\n`;
           modifiedFiles.forEach((file) => {
             planMarkdown += `\n[openDiff path="${file}"]`;
           });
@@ -1276,6 +1461,8 @@
           uniqueId: `assistant-${uniqueId}`,
           content: planMarkdown,
         });
+        updatePlanPopup(planMarkdown);
+        updatePlanButtonTitle(planMarkdown);
 
         // Finalize
         messageArray.push({ role: "assistant", content: planMarkdown });
@@ -1283,11 +1470,232 @@
         resetUI();
       }
 
+      // Plan-related functions
+      function togglePlanPopup() {
+        const planPopup = document.getElementById("planPopup");
+        const planButton = document.getElementById("planButton");
+        console.log("togglePlanPopup called, planButton:", planButton);
+        console.log("planPopup hidden:", planPopup.style.display === "none");
+        if (planPopup.style.display === "none") {
+          showPlanPopup();
+        } else {
+          hidePlanPopup();
+        }
+      }
+
+      // Test function to manually trigger plan button visibility
+      function testPlanButton() {
+        console.log("Testing plan button...");
+        const planButton = document.getElementById("planButton");
+        if (planButton) {
+          planButton.style.display = "inline-block";
+          const testPlanMarkdown = `- [ ] Step 1: Initialize project
+      - [✅] Step 2: Setup configuration
+      - [✅] Step 3: Create components
+      - [ ] Step 4: Add styling
+      - [ ] Step 5: Test application`;
+
+          // Debug the counting logic
+          console.log("Test markdown:", testPlanMarkdown);
+          const totalTasks = (
+            testPlanMarkdown.match(/^\s*-\s*\[[ x🔄✅❌]\]\s*Step\s+\d+:/gm) ||
+            []
+          ).length;
+          const completedTasks = (
+            testPlanMarkdown.match(/^\s*-\s*\[✅\]\s*Step\s+\d+:/gm) || []
+          ).length;
+          console.log("Debug - Total tasks:", totalTasks);
+          console.log("Debug - Completed tasks:", completedTasks);
+          console.log(
+            "Debug - All matches:",
+            testPlanMarkdown.match(/^\s*-\s*\[[\s\w]*\]\s*Step\s+\d+:/gm),
+          );
+          console.log(
+            "Debug - Completed matches:",
+            testPlanMarkdown.match(/^\s*-\s*\[✅\]\s*Step\s+\d+:/gm),
+          );
+
+          updatePlanButtonTitle(testPlanMarkdown);
+          updatePlanPopup(testPlanMarkdown);
+          console.log("Plan button should be visible with test data");
+        }
+      }
+
+      function testTaskProgression() {
+        console.log("Testing task progression...");
+
+        // Test with a realistic progression
+        let testMarkdown = `- [ ] Step 1: Initialize project
+      - [ ] Step 2: Setup configuration
+      - [ ] Step 3: Create components`;
+
+        console.log("=== Initial State ===");
+        console.log("Markdown:", testMarkdown);
+        updatePlanButtonTitle(testMarkdown);
+        updatePlanPopup(testMarkdown);
+
+        // Mark first task as in progress
+        const inProgressRegex = new RegExp(
+          `^\\s*-\s*\\[\\s*\\]\\s*(Step\\s+1:)`,
+          "gm",
+        );
+        testMarkdown = testMarkdown.replace(inProgressRegex, `- [🔄] $1`);
+
+        console.log("=== After marking Step 1 as in progress ===");
+        console.log("Markdown:", testMarkdown);
+        updatePlanButtonTitle(testMarkdown);
+        updatePlanPopup(testMarkdown);
+
+        // Complete first task
+        const doneRegex = new RegExp(`^\\s*-\s*\\[🔄\\]\\s*(Step\\s+1:)`, "gm");
+        testMarkdown = testMarkdown.replace(doneRegex, `- [✅] $1`);
+
+        console.log("=== After completing Step 1 ===");
+        console.log("Markdown:", testMarkdown);
+        updatePlanButtonTitle(testMarkdown);
+        updatePlanPopup(testMarkdown);
+
+        console.log("=== Test completed ===");
+      }
+
+      function showPlanPopup() {
+        const planPopup = document.getElementById("planPopup");
+        const planButton = document.getElementById("planButton");
+        const messageInputContainer = document.getElementById(
+          "messageInputContainer",
+        );
+        console.log("showPlanPopup called");
+        console.log("planPopup:", planPopup);
+        console.log("planButton:", planButton);
+        console.log("messageInputContainer:", messageInputContainer);
+        if (planPopup && planButton && messageInputContainer) {
+          // First, make popup visible to get dimensions
+          planPopup.style.display = "block";
+
+          // Position popup above the message input container
+          const rect = messageInputContainer.getBoundingClientRect();
+          console.log("Container rect:", rect);
+          console.log("Popup offsetHeight:", planPopup.offsetHeight);
+
+          // Calculate position - ensure it's visible on screen
+          let top = rect.top - planPopup.offsetHeight - 5;
+          let left = rect.left;
+
+          // Ensure popup doesn't go off the top of the screen
+          if (top < 10) {
+            top = 10;
+          }
+
+          // Ensure popup doesn't go off the left side
+          if (left < 10) {
+            left = 10;
+          }
+
+          planPopup.style.top = top + "px";
+          planPopup.style.left = left + "px";
+          console.log("Popup positioned at:", top, left);
+          console.log("Popup should be visible now");
+        } else {
+          // Fallback: just show the popup with default positioning
+          console.log(
+            "Fallback positioning - showing popup with default position",
+          );
+          planPopup.style.top = "50px";
+          planPopup.style.left = "50px";
+          planPopup.style.display = "block";
+        }
+      }
+
+      function hidePlanPopup() {
+        const planPopup = document.getElementById("planPopup");
+        if (planPopup) {
+          planPopup.style.display = "none";
+        }
+      }
+
+      function updatePlanButtonTitle(planMarkdown) {
+        console.log("updatePlanButtonTitle called with:", planMarkdown);
+        const planButton = document.getElementById("planButton");
+        if (planButton) {
+          // Count tasks by looking for the specific markdown pattern
+          const totalTasks = (
+            planMarkdown.match(/^\s*-\s*\[[ x🔄✅❌]\]\s*Step\s+\d+:/gm) || []
+          ).length;
+          const completedTasks = (
+            planMarkdown.match(/^\s*-\s*\[✅\]\s*Step\s+\d+:/gm) || []
+          ).length;
+
+          console.log(
+            `Total tasks: ${totalTasks}, Completed: ${completedTasks}`,
+          );
+          console.log(
+            "All task matches:",
+            planMarkdown.match(/^\s*-\s*\[[ x🔄✅❌]\]\s*Step\s+\d+:/gm),
+          );
+          console.log(
+            "Completed task matches:",
+            planMarkdown.match(/^\s*-\s*\[✅\]\s*Step\s+\d+:/gm),
+          );
+
+          if (totalTasks > 0) {
+            // Update both title and button text
+            const progressText = `${completedTasks}/${totalTasks}`;
+            planButton.title = `Tasks ${progressText} done`;
+            planButton.innerHTML = `📋 Tasks ${progressText} done`;
+            console.log("Updated button title and text to:", progressText);
+          } else {
+            planButton.title = "Show Plan Status";
+            planButton.innerHTML = "📋 Plan";
+            console.log("Updated button title and text to default");
+          }
+        } else {
+          console.log("planButton not found!");
+        }
+      }
+
+      function updatePlanPopup(planMarkdown) {
+        const planContent = document.getElementById("planContent");
+        if (planContent) {
+          // Extract only the task list without thoughts or other content
+          const taskLines = planMarkdown
+            .split("\n")
+            .filter(
+              (line) =>
+                line.includes("Step ") &&
+                (line.includes("[ ]") ||
+                  line.includes("🔄") ||
+                  line.includes("✅") ||
+                  line.includes("❌")),
+            );
+
+          console.log("updatePlanPopup - Raw planMarkdown:", planMarkdown);
+          console.log("updatePlanPopup - Filtered taskLines:", taskLines);
+
+          let html = '<div style="font-size: 0.875rem;">';
+          taskLines.forEach((line) => {
+            if (line.includes("[ ] Step")) {
+              html += `<div style="display: flex; align-items: center; padding: 4px 8px; cursor: pointer;" onmouseover="this.style.backgroundColor='#30363d'" onmouseout="this.style.backgroundColor='transparent'"><span style="color: #8b949e; margin-right: 8px;">◻</span><span style="color: #c9d1d9;">${line.replace("- [ ] Step ", "")}</span></div>`;
+            } else if (line.includes("[🔄] Step")) {
+              html += `<div style="display: flex; align-items: center; padding: 4px 8px; cursor: pointer;" onmouseover="this.style.backgroundColor='#30363d'" onmouseout="this.style.backgroundColor='transparent'"><span style="color: #d29922; margin-right: 8px;">🔄</span><span style="color: #d29922;">${line.replace("- [🔄] Step ", "")}</span></div>`;
+            } else if (line.includes("[✅] Step")) {
+              html += `<div style="display: flex; align-items: center; padding: 4px 8px; cursor: pointer;" onmouseover="this.style.backgroundColor='#30363d'" onmouseout="this.style.backgroundColor='transparent'"><span style="color: #3fb950; margin-right: 8px;">✅</span><span style="color: #3fb950;">${line.replace("- [✅] Step ", "")}</span></div>`;
+            } else if (line.includes("[❌] Step")) {
+              html += `<div style="display: flex; align-items: center; padding: 4px 8px; cursor: pointer;" onmouseover="this.style.backgroundColor='#30363d'" onmouseout="this.style.backgroundColor='transparent'"><span style="color: #f85149; margin-right: 8px;">❌</span><span style="color: #f85149;">${line.replace("- [❌] Step ", "")}</span></div>`;
+            }
+          });
+          html += "</div>";
+
+          planContent.innerHTML = html;
+        }
+      }
+
       function resetUI() {
         const loader = document.getElementById("loader");
         const sendBtn = document.getElementById("button-send");
+        const stopBtn = document.getElementById("button-stop");
         loader.classList.add("hidden");
         sendBtn.classList.remove("hidden");
+        stopBtn.classList.add("hidden");
         document.getElementById("generating").innerHTML = "";
         isLoading = false;
         document.getElementById("messageInput").disabled = false;
@@ -1309,16 +1717,16 @@
 
         const content = document.getElementById("content");
         content.innerHTML = `
-            <div class="login-wrapper">
-                <div class="login-container">
-                    <img src="%LOGO_PATH%" alt="Logo" class="login-logo">
-                    <form id="loginForm" action="#" method="post">
-                        <input type="text" name="email" placeholder="Enter username" required />
-                        <button type="submit">Login ➜</button>
-                    </form>     
-                </div>
-            </div>
-        `;
+                  <div class="login-wrapper">
+                      <div class="login-container">
+                          <img src="%LOGO_PATH%" alt="Logo" class="login-logo">
+                          <form id="loginForm" action="#" method="post">
+                              <input type="text" name="email" placeholder="Enter username" required />
+                              <button type="submit">Login ➜</button>
+                          </form>
+                      </div>
+                  </div>
+              `;
 
         const form = document.getElementById("loginForm");
         form.addEventListener("submit", login);
@@ -1336,13 +1744,13 @@
 
           if (isLoading) return;
           loginForm.innerHTML = `
-                        <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
-                        <button type="submit" disabled>
-                            <svg class="loader-button" viewBox="0 0 24 24" width="16" height="16"> <!-- Adjust width and height -->
-                                <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
-                            </svg>
-                        </button>
-                    `;
+                              <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
+                              <button type="submit" disabled>
+                                  <svg class="loader-button" viewBox="0 0 24 24" width="16" height="16"> <!-- Adjust width and height -->
+                                      <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
+                                  </svg>
+                              </button>
+                          `;
           isLoading = true;
           console.log("findFiles");
           vscode.postMessage({ type: "findFiles", email: formEmail });
@@ -1351,9 +1759,9 @@
           messageDiv.className = "message error";
           isLoading = false;
           loginForm.innerHTML = `
-                            <input type="text" name="email" placeholder="Enter username" value="${email}" required />
-                            <button type="submit">➜]</button>
-                        `;
+                                  <input type="text" name="email" placeholder="Enter username" value="${email}" required />
+                                  <button type="submit">➜]</button>
+                              `;
         }
       }
 
@@ -1365,13 +1773,13 @@
           // Send a message to the extension to find files
 
           loginForm.innerHTML = `
-                        <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
-                        <button type="submit" disabled>
-                            <svg class="loader-button" viewBox="0 0 24 24" width="16" height="16"> <!-- Adjust width and height -->
-                                <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
-                            </svg>
-                        </button>
-                    `;
+                              <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
+                              <button type="submit" disabled>
+                                  <svg class="loader-button" viewBox="0 0 24 24" width="16" height="16"> <!-- Adjust width and height -->
+                                      <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
+                                  </svg>
+                              </button>
+                          `;
 
           const response = await fetch("http://localhost:13100/api/login", {
             method: "POST",
@@ -1390,9 +1798,9 @@
             messageDiv.className = "message error";
             isLoading = false;
             loginForm.innerHTML = `
-                            <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
-                            <button type="submit">➜]</button>
-                        `;
+                                  <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
+                                  <button type="submit">➜]</button>
+                              `;
             throw new Error("Login gagal");
           }
 
@@ -1413,9 +1821,9 @@
           setTimeout(() => {
             updateWorkspaces();
             loginForm.innerHTML = `
-                            <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
-                            <button type="submit">➜]</button>
-                        `;
+                                  <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
+                                  <button type="submit">➜]</button>
+                              `;
           }, 3000);
 
           messageDiv.textContent = "";
@@ -1436,9 +1844,9 @@
           messageDiv.className = "message error";
           isLoading = false;
           loginForm.innerHTML = `
-                            <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
-                            <button type="submit">➜]</button>
-                        `;
+                                  <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
+                                  <button type="submit">➜]</button>
+                              `;
         }
       }
 
@@ -1448,10 +1856,10 @@
 
         const btnWorkspace = document.getElementById("button-workspace");
         btnWorkspace.innerHTML = `
-                    <svg class="loader-button" viewBox="0 0 24 24" width="16" height="16"> <!-- Adjust width and height -->
-                        <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
-                    </svg>
-                `;
+                          <svg class="loader-button" viewBox="0 0 24 24" width="16" height="16"> <!-- Adjust width and height -->
+                              <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
+                          </svg>
+                      `;
         vscode.postMessage({ type: "updateWorkspaces", silent });
       }
 
@@ -1662,9 +2070,28 @@
         renderMessageParts(msg.content, messageContent);
       }
 
+      window.keepAllModifiedFiles = (filePaths) => {
+        const filesData = [];
+        filePaths.forEach((path) => {
+          const content = window.fileContentMap.get(path);
+          if (content) {
+            filesData.push({ filePath: path, code: content });
+          }
+        });
+
+        if (filesData.length > 0) {
+          vscode.postMessage({
+            command: "keepAllModifiedFiles",
+            files: filesData,
+          });
+        } else {
+          console.error("No content found for files:", filePaths);
+        }
+      };
+
       function renderMessageParts(content, container) {
         const parts = content.split(
-          /(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[file name=".*?"\][\s\S]*?\[\/file\]|\[openDiff path=".*?"\]|\[att-img .*?\]|\[att-file .*?\]|\[file\][\s\S]*?\[file\]|\[status\][\s\S]*?\[\/status\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|####.*|###.*|##.*|#.*|^- .*)/gm,
+          /(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[file name=".*?"\][\s\S]*?\[\/file\]|\[openDiff path=".*?"\]|\[keepAllFiles files=".*?"\]|\[att-img .*?\]|\[att-file .*?\]|\[file\][\s\S]*?\[file\]|\[status\][\s\S]*?\[\/status\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|####.*|###.*|##.*|#.*|^- .*)/gm,
         );
 
         parts
@@ -1681,6 +2108,19 @@
               );
               if (match) {
                 window.fileContentMap.set(match[1], match[2]);
+              }
+            } else if (part.startsWith('[keepAllFiles files="')) {
+              const match = part.match(/\[keepAllFiles files="(.*?)"\]/);
+              if (match) {
+                const filePaths = match[1].split(",");
+                const btn = document.createElement("button");
+                btn.className = "btn-diff";
+                btn.style.backgroundColor = "#238636";
+                btn.style.color = "white";
+                btn.style.marginBottom = "10px";
+                btn.innerHTML = `<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Keep All Modified Files`;
+                btn.onclick = () => window.keepAllModifiedFiles(filePaths);
+                container.appendChild(btn);
               }
             } else if (part.startsWith('[openDiff path="')) {
               const match = part.match(/\[openDiff path="(.*?)"\]/);
@@ -1851,28 +2291,34 @@
               textHeader.textContent = part;
               container.appendChild(textHeader);
             } else if (part.startsWith("- ")) {
-              // Cek list
               const listItem = part.slice(2);
-              const partsList = listItem.split(
-                /(\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|###.*|##.*|#.*|^- .*)/gm,
-              );
+              if (listItem.match(/^\[[ x🔄✅❌]\]\s*Step\s+\d+:/)) {
+                const textSpan = document.createElement("span");
+                textSpan.textContent = part;
+                container.appendChild(textSpan);
+                container.appendChild(document.createElement("br"));
+              } else {
+                const partsList = listItem.split(
+                  /(\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|###.*|##.*|#.*|^- .*)/gm,
+                );
 
-              const textLi = document.createElement("li");
-              partsList
-                .filter((partList) => partList)
-                .map((partList, i2) => {
-                  if (partList.startsWith("**") && partList.endsWith("**")) {
-                    partList = partList.slice(2, -2);
-                    const textStrong = document.createElement("strong");
-                    textStrong.textContent = partList;
-                    textLi.appendChild(textStrong);
-                  } else {
-                    const text = document.createElement("span");
-                    text.textContent = partList;
-                    textLi.appendChild(text);
-                  }
-                });
-              container.appendChild(textLi);
+                const textLi = document.createElement("li");
+                partsList
+                  .filter((partList) => partList)
+                  .map((partList, i2) => {
+                    if (partList.startsWith("**") && partList.endsWith("**")) {
+                      partList = partList.slice(2, -2);
+                      const textStrong = document.createElement("strong");
+                      textStrong.textContent = partList;
+                      textLi.appendChild(textStrong);
+                    } else {
+                      const text = document.createElement("span");
+                      text.textContent = partList;
+                      textLi.appendChild(text);
+                    }
+                  });
+                container.appendChild(textLi);
+              }
             } else if (part.startsWith("_") && part.endsWith("_")) {
               const italicText = part.slice(1, -1);
               const textEm = document.createElement("em");
@@ -1950,6 +2396,21 @@
       }
 
       window.fileContentMap = new Map();
+      window.keepAllModifiedFiles = function (filePaths) {
+        // Collect files and their content
+        const files = filePaths.map((path) => {
+          return {
+            filePath: path,
+            code: window.fileContentMap.get(path) || "",
+          };
+        });
+
+        // Send message to extension
+        vscode.postMessage({
+          command: "keepAllModifiedFiles",
+          files: files,
+        });
+      };
       window.openDiff = function (path) {
         const code = window.fileContentMap.get(path);
         if (code) {

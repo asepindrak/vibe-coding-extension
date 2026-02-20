@@ -160,6 +160,9 @@ class SidebarProvider {
             else if (message.command === "updateFileInfo") {
                 this.updateFileInfo(message.filePath, message.selectedLine);
             }
+            else if (message.command === "keepAllModifiedFiles") {
+                vscode.commands.executeCommand("vibe-coding.keepAllModifiedFiles", message);
+            }
         });
         webviewView.webview.html = this.getHtmlForWebview(webviewView.webview);
         webviewView.webview.onDidReceiveMessage(async (message) => {
@@ -365,7 +368,7 @@ class SidebarProvider {
     maxFilesPerFolder = 2;
     async getAllWorkspaceFiles() {
         try {
-            const files = await vscode.workspace.findFiles("**/*", "{**/node_modules/**,**/dist/**,**/build/**,**/out/**,**/.git/**,**/.svn/**,**/.hg/**,**/.next/**,**/.nuxt/**,**/.expo/**,**/vendor/**,**/__pycache__/**,**/.pytest_cache/**,**/.idea/**,**/.vscode/**,**/.vs/**,**/coverage/**,**/bin/**,**/obj/**,**/target/**,**/Pods/**,**/env/**,**/.env/**,**/tmp/**,**/temp/**,**/*.log,**/*.lock,**/*.zip,**/*.png,**/*.jpg,**/*.jpeg,**/*.gif,**/*.exe,**/*.dll,**/*.bin,**/*.class,**/*.so,**/*.o,**/*.a}");
+            const files = await vscode.workspace.findFiles("**/*", "{**/node_modules/**,**/dist/**,**/build/**,**/out/**,**/.git/**,**/.svn/**,**/.hg/**,**/.next/**,**/.nuxt/**,**/.expo/**,**/vendor/**,**/__pycache__/**,**/.pytest_cache/**,**/venv/**,**/.venv/**,**/.idea/**,**/.vscode/**,**/.vs/**,**/coverage/**,**/bin/**,**/obj/**,**/target/**,**/Pods/**,**/env/**,**/.env/**,**/tmp/**,**/temp/**,**/*.log,**/*.lock,**/*.zip,**/*.png,**/*.jpg,**/*.jpeg,**/*.gif,**/*.exe,**/*.dll,**/*.bin,**/*.class,**/*.so,**/*.o,**/*.a}");
             const folderBuckets = {};
             for (const file of files) {
                 if (!this.isTextFile(file.fsPath))
@@ -584,6 +587,21 @@ class SidebarProvider {
             ".env.example",
             "docker-compose",
             "Dockerfile",
+            "requirements.txt",
+            "pyproject.toml",
+            "setup.py",
+            "go.mod",
+            "go.sum",
+            "Cargo.toml",
+            "Cargo.lock",
+            "composer.json",
+            "composer.lock",
+            "Gemfile",
+            "Gemfile.lock",
+            "pom.xml",
+            "build.gradle",
+            "settings.gradle",
+            "Makefile",
         ];
         return configPatterns.some((p) => filePath.includes(p));
     }

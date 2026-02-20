@@ -45,6 +45,7 @@ const SidebarProvider_1 = require("./SidebarProvider");
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
 const os = __importStar(require("os"));
+const crypto = __importStar(require("crypto"));
 const vico_logger_1 = __importDefault(require("vico-logger"));
 const DiffManager_1 = require("./DiffManager");
 // This method is called when your extension is activated
@@ -305,7 +306,8 @@ async function writeFileVico(context, editor) {
             }
         }
         // 2. Parse [file name="path"]...[/file]
-        const fileRegex = /\[file name="([^"]+)"\]([\s\S]*?)\[\/file\]/g;
+        // Improved regex to handle newlines and various attributes robustly
+        const fileRegex = /\[file\s+name="([^"]+)"(?:\s+type="[^"]+")?\]([\s\S]*?)\[\/file\]/g;
         let fileMatch;
         let filesCreated = 0;
         while ((fileMatch = fileRegex.exec(contentToProcess)) !== null) {
@@ -320,10 +322,26 @@ async function writeFileVico(context, editor) {
             if (success)
                 filesCreated++;
         }
+        // Fallback: Check for XML-style tags <file path="...">...</file> (sometimes agents use this)
+        if (filesCreated === 0) {
+            const xmlRegex = /<file\s+path="([^"]+)">([\s\S]*?)<\/file>/g;
+            while ((fileMatch = xmlRegex.exec(contentToProcess)) !== null) {
+                const relativePath = fileMatch[1].trim();
+                const fileContent = fileMatch[2].trim();
+                const fileUri = vscode.Uri.joinPath(projectRoot, relativePath);
+                const dirUri = vscode.Uri.file(path.dirname(fileUri.fsPath));
+                await vscode.workspace.fs.createDirectory(dirUri);
+                const success = await handleDiff(fileUri, fileContent, relativePath, context);
+                if (success)
+                    filesCreated++;
+            }
+        }
         if (filesCreated > 0) {
             vscode.window.showInformationMessage(`🎉 Successfully created/updated ${filesCreated} files.`);
         }
         else {
+            // Log content to debug why regex failed
+            vico_logger_1.default.warn("No file blocks found. Content preview:", contentToProcess.substring(0, 200));
             vscode.window.showWarningMessage('No file blocks found to create. Format: [file name="path"]content[/file]');
         }
     }
@@ -362,7 +380,12 @@ function activate(context) {
         await vscode.workspace.fs.createDirectory(dirUri);
         const tempDir = os.tmpdir();
         const fileName = path.basename(fileUri.fsPath);
-        const tempFilePath = path.join(tempDir, `vico_diff_${Date.now()}_${fileName}`);
+        // Use hash of file path to ensure only one diff tab per file
+        const fileHash = crypto
+            .createHash("md5")
+            .update(fileUri.fsPath)
+            .digest("hex");
+        const tempFilePath = path.join(tempDir, `vico_diff_${fileHash}_${fileName}`);
         fs.writeFileSync(tempFilePath, args.code);
         const tempUri = vscode.Uri.file(tempFilePath);
         await vscode.commands.executeCommand("vscode.diff", fileUri, tempUri, `${fileName} ↔ Proposed Changes`, {
@@ -574,7 +597,11 @@ function activate(context) {
                 }
                 const tempDir = os.tmpdir();
                 const fileName = path.basename(document.fileName);
-                const tempFilePath = path.join(tempDir, `vico_diff_${Date.now()}_${fileName}`);
+                const fileHash = crypto
+                    .createHash("md5")
+                    .update(document.uri.fsPath)
+                    .digest("hex");
+                const tempFilePath = path.join(tempDir, `vico_diff_${fileHash}_${fileName}`);
                 fs.writeFileSync(tempFilePath, newText);
                 const tempUri = vscode.Uri.file(tempFilePath);
                 const originalUri = document.uri;
@@ -606,6 +633,51 @@ function activate(context) {
         catch (err) {
             console.error("Failed to open diff:", err);
             vscode.window.showErrorMessage("Failed to open diff view.");
+        }
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand("vibe-coding.keepAllModifiedFiles", async (args) => {
+        const files = args?.files;
+        if (!files || !Array.isArray(files) || files.length === 0) {
+            vscode.window.showErrorMessage("No files to keep.");
+            return;
+        }
+        if (!vscode.workspace.workspaceFolders) {
+            vscode.window.showErrorMessage("No workspace folder open!");
+            return;
+        }
+        const projectRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
+        const diffManager = DiffManager_1.DiffManager.getInstance(context);
+        let successCount = 0;
+        let failCount = 0;
+        for (const file of files) {
+            try {
+                let cleanPath = file.filePath.trim();
+                if (cleanPath.startsWith("/") || cleanPath.startsWith("\\")) {
+                    cleanPath = cleanPath.substring(1);
+                }
+                const fullPath = path.join(projectRoot, cleanPath);
+                // Ensure directory exists
+                const dirPath = path.dirname(fullPath);
+                if (!fs.existsSync(dirPath)) {
+                    fs.mkdirSync(dirPath, { recursive: true });
+                }
+                fs.writeFileSync(fullPath, file.code);
+                // Accept diff in DiffManager
+                await diffManager.acceptFile(vscode.Uri.file(fullPath));
+                successCount++;
+            }
+            catch (e) {
+                console.error(`Failed to write ${file.filePath}:`, e);
+                failCount++;
+            }
+        }
+        if (successCount > 0) {
+            vscode.window.showInformationMessage(`Successfully kept ${successCount} files.`);
+            // Close all diff editors
+            await vscode.commands.executeCommand("workbench.action.closeEditorsInGroup");
+        }
+        if (failCount > 0) {
+            vscode.window.showErrorMessage(`Failed to keep ${failCount} files.`);
         }
     }));
     context.subscriptions.push(vscode.commands.registerCommand("vibe-coding.fetchSuggestions", () => {
