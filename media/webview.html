@@ -922,7 +922,13 @@
               headers: {
                 "Content-Type": "application/json",
               },
-              body: JSON.stringify({ userId, token, message, attachments }),
+              body: JSON.stringify({
+                userId,
+                token,
+                message,
+                attachments,
+                history: messageArray,
+              }),
               signal: agentAbortController?.signal,
             },
           );
