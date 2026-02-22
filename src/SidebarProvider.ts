@@ -705,7 +705,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             // to ensure we capture output for the agent.
 
             const isShortCommand =
-              /^(ls|dir|mkdir|cat|type|echo|pwd|find|grep|rm|cp|mv)/i.test(
+              /^(ls|dir|mkdir|cat|type|echo|pwd|find|grep|rm|cp|mv|tree|head|tail)/i.test(
                 message.command.trim(),
               );
 
@@ -714,13 +714,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
               const workspaceFolder = vscode.workspace.workspaceFolders
                 ? vscode.workspace.workspaceFolders[0].uri.fsPath
                 : undefined;
+              const maxBuffer = 10 * 1024 * 1024; // 10MB buffer for large outputs
 
               if (workspaceFolder) {
                 if (gitBashPath && os.platform() === "win32") {
                   const cmd = message.command.replace(/"/g, '\\"');
                   cp.exec(
                     `"${gitBashPath}" -c "${cmd}"`,
-                    { cwd: workspaceFolder },
+                    { cwd: workspaceFolder, maxBuffer },
                     (err: any, stdout: string, stderr: string) => {
                       webviewView.webview.postMessage({
                         command: "commandFinished",
@@ -732,7 +733,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                 } else {
                   cp.exec(
                     message.command,
-                    { cwd: workspaceFolder },
+                    { cwd: workspaceFolder, maxBuffer },
                     (err: any, stdout: string, stderr: string) => {
                       webviewView.webview.postMessage({
                         command: "commandFinished",

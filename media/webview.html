@@ -1964,6 +1964,11 @@ ${result.summary || "Executed successfully."}`,
 
                 context += `\nSearch Results for "${query}":\n${searchResult}\n`;
                 currentStepMarkdown += `\n  > *Search complete.*\n`;
+                const displayResults =
+                  searchResult.length > 500
+                    ? searchResult.slice(0, 500) + "\n... (truncated)"
+                    : searchResult;
+                currentStepMarkdown += `\n\`\`\`\n${displayResults}\n\`\`\`\n`;
                 updateMessagesAssistant({
                   uniqueId: `assistant-${uniqueId}`,
                   content: currentStepMarkdown,
@@ -2048,15 +2053,23 @@ ${result.summary || "Executed successfully."}`,
                 if (!isLoading) throw err;
 
                 context += `\nFiles Found for "${pattern}":\n${findResult}\n`;
-                planMarkdown += `\n  > *Find complete.*\n`;
+                currentStepMarkdown += `\n  > *Find complete.*\n`;
+                const displayFiles =
+                  findResult.length > 500
+                    ? findResult.slice(0, 500) + "\n... (truncated)"
+                    : findResult;
+                currentStepMarkdown += `\n\`\`\`\n${displayFiles}\n\`\`\`\n`;
                 updateMessagesAssistant({
                   uniqueId: `assistant-${uniqueId}`,
-                  content: planMarkdown,
+                  content: currentStepMarkdown,
                 });
               } catch (e) {
                 context += `\nError finding files: ${e}\n`;
               }
             }
+
+            // Sync planMarkdown with currentStepMarkdown to include Think logs
+            planMarkdown = currentStepMarkdown;
 
             // --- PHASE 2: EXECUTE ---
             if (planMarkdown.indexOf("> *Executing...*") === -1) {
@@ -2399,6 +2412,13 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
                         terminalOutput += `\n\n[Process exited with code ${event.data.exitCode}]`;
                       } else {
                         terminalOutput += `\n\n[Process completed successfully]`;
+                      }
+
+                      // Safety truncation for large outputs to prevent context overflow
+                      if (terminalOutput.length > 500000) {
+                        terminalOutput =
+                          terminalOutput.slice(0, 500000) +
+                          "\n... [Output truncated (too large for context). Please refine command with exclusions.]";
                       }
 
                       // Final update with full output

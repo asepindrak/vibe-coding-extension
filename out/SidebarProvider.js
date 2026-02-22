@@ -631,16 +631,17 @@ class SidebarProvider {
                     // Unfortunately, VS Code Task API doesn't easily return stdout.
                     // WORKAROUND: Use child_process for short commands like 'ls' or 'mkdir'
                     // to ensure we capture output for the agent.
-                    const isShortCommand = /^(ls|dir|mkdir|cat|type|echo|pwd|find|grep|rm|cp|mv)/i.test(message.command.trim());
+                    const isShortCommand = /^(ls|dir|mkdir|cat|type|echo|pwd|find|grep|rm|cp|mv|tree|head|tail)/i.test(message.command.trim());
                     if (isShortCommand) {
                         const cp = require("child_process");
                         const workspaceFolder = vscode.workspace.workspaceFolders
                             ? vscode.workspace.workspaceFolders[0].uri.fsPath
                             : undefined;
+                        const maxBuffer = 10 * 1024 * 1024; // 10MB buffer for large outputs
                         if (workspaceFolder) {
                             if (gitBashPath && os.platform() === "win32") {
                                 const cmd = message.command.replace(/"/g, '\\"');
-                                cp.exec(`"${gitBashPath}" -c "${cmd}"`, { cwd: workspaceFolder }, (err, stdout, stderr) => {
+                                cp.exec(`"${gitBashPath}" -c "${cmd}"`, { cwd: workspaceFolder, maxBuffer }, (err, stdout, stderr) => {
                                     webviewView.webview.postMessage({
                                         command: "commandFinished",
                                         exitCode: err ? err.code || 1 : 0,
@@ -649,7 +650,7 @@ class SidebarProvider {
                                 });
                             }
                             else {
-                                cp.exec(message.command, { cwd: workspaceFolder }, (err, stdout, stderr) => {
+                                cp.exec(message.command, { cwd: workspaceFolder, maxBuffer }, (err, stdout, stderr) => {
                                     webviewView.webview.postMessage({
                                         command: "commandFinished",
                                         exitCode: err ? err.code || 1 : 0,
