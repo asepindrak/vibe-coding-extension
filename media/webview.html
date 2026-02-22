@@ -17,6 +17,13 @@
       </div>
       <div id="header-controls" class="header-controls">
         <button
+          id="button-workspace"
+          class="btn-elegant"
+          style="height: 32px; font-size: 12px"
+        >
+          Teach AI 🔄
+        </button>
+        <button
           id="newChatButton"
           class="btn-elegant"
           style="height: 32px; padding: 0 10px; margin-left: 5px"
@@ -273,10 +280,10 @@
       var messageArray = [];
       var pendingMessage = null;
       var pendingAttachments = null;
-
+      var isWorkspaceDirty = false;
       var talkDuration = 0;
       var talkMessage = "";
-
+      var workspaces = "";
       var lastSentMessage = "";
       var abortController = null;
       var agentAbortController = null;
@@ -574,7 +581,8 @@
         }
         const sendMessageButton = document.getElementById("sendMessageButton");
         sendMessageButton.addEventListener("click", handleSendMessage);
-
+        const btnWorkspace = document.getElementById("button-workspace");
+        btnWorkspace.addEventListener("click", updateWorkspaces);
         const logoutButton = document.getElementById("logoutButton");
         logoutButton.addEventListener("click", logout);
 
@@ -740,6 +748,43 @@
             // Handle the list of files as needed
           } else if (messageEvent.command === "error") {
             console.error(`Error: ${messageEvent.error}`);
+            return;
+          }
+
+          if (messageEvent.command === "workspaceCode") {
+            // console.log(`Files found webview: ${messageEvent.files}`)
+            workspaces = messageEvent.files;
+            await updateWorkspacesAPI(workspaces);
+            if (window.resolveWorkspaceUpdate) {
+              window.resolveWorkspaceUpdate();
+              window.resolveWorkspaceUpdate = null;
+            }
+            return;
+            // Handle the list of files as needed
+          } else if (messageEvent.command === "error") {
+            console.error(`Error: ${messageEvent.error}`);
+            return;
+          }
+
+          if (messageEvent.command === "workspaceCodeCancel") {
+            await cancelUpdateWorkspaces();
+            return;
+            // Handle the list of files as needed
+          } else if (messageEvent.command === "error") {
+            console.error(`Error: ${messageEvent.error}`);
+            return;
+          }
+
+          if (messageEvent.command === "workspaceDirty") {
+            isWorkspaceDirty = messageEvent.isDirty;
+            const btnWorkspace = document.getElementById("button-workspace");
+            if (isWorkspaceDirty) {
+              btnWorkspace.innerHTML = `Teach AI Current Code 🔄 (Changes detected)`;
+              btnWorkspace.classList.add("bg-yellow-600"); // Visual indicator
+            } else {
+              btnWorkspace.innerHTML = `Teach AI Current Code 🔄`;
+              btnWorkspace.classList.remove("bg-yellow-600");
+            }
             return;
           }
 
@@ -2705,6 +2750,7 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
           messageDiv.className = "message success";
           isLoading = false;
           setTimeout(() => {
+            updateWorkspaces();
             loginForm.innerHTML = `
                                         <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
                                         <button type="submit">➜]</button>
@@ -2719,6 +2765,9 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
           const logo = document.getElementById("logo");
           if (logo) logo.style.display = "flex";
 
+          const btnWorkspace = document.getElementById("button-workspace");
+          if (btnWorkspace) btnWorkspace.style.display = "block";
+
           // Fetch and display chat history
           fetchHistory();
         } catch (error) {
@@ -2730,6 +2779,72 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
                                         <button type="submit">➜]</button>
                                     `;
         }
+      }
+
+      async function updateWorkspaces(silent = false) {
+        if (isLoading && !silent && !pendingMessage) return;
+        if (!silent) isLoading = true;
+
+        const btnWorkspace = document.getElementById("button-workspace");
+        btnWorkspace.innerHTML = `
+                                <svg class="loader-button" viewBox="0 0 24 24" width="16" height="16"> <!-- Adjust width and height -->
+                                    <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
+                                </svg>
+                            `;
+        vscode.postMessage({ type: "updateWorkspaces", silent });
+      }
+
+      async function updateWorkspacesAPI(workspacesParam) {
+        try {
+          // Send a message to the extension to find files
+
+          const tokenData = localStorage.getItem("token");
+
+          const response = await fetch("http://localhost:13100/api/workspace", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              token: tokenData,
+              workspaces: workspacesParam,
+            }),
+          });
+
+          if (!response.ok) {
+            console.log("update workspaces gagal");
+            isLoading = false;
+          }
+          console.log("update workspaces berhasil");
+          const btnWorkspace = document.getElementById("button-workspace");
+          btnWorkspace.style.display = "block";
+          btnWorkspace.innerHTML = `Teach AI Current Code 🔄`;
+          btnWorkspace.addEventListener("click", updateWorkspaces);
+          isLoading = false;
+
+          if (pendingMessage) {
+            const msg = pendingMessage;
+            const atts = pendingAttachments;
+            pendingMessage = null;
+            console.log("Retrying pending message...");
+            if (atts) {
+              attachments = atts;
+              pendingAttachments = null;
+            }
+            sendMessageToApi(msg, true);
+          }
+        } catch (error) {
+          console.log("update workspaces gagal");
+          isLoading = false;
+        }
+      }
+
+      async function cancelUpdateWorkspaces() {
+        isLoading = false;
+        const btnWorkspace = document.getElementById("button-workspace");
+        btnWorkspace.style.display = "block";
+        btnWorkspace.innerHTML = `Teach AI Current Code 🔄`;
+        btnWorkspace.addEventListener("click", updateWorkspaces);
       }
 
       async function fetchHistory() {
