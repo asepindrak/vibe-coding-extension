@@ -554,7 +554,11 @@ function activate(context) {
     console.log('Congratulations, your extension "vibe-coding" is now active!');
     // Register the Sidebar Panel
     const sidebarProvider = new SidebarProvider_1.SidebarProvider(context.extensionUri, context);
-    context.subscriptions.push(vscode.window.registerWebviewViewProvider("vibe-coding-sidebar", sidebarProvider));
+    context.subscriptions.push(vscode.window.registerWebviewViewProvider("vibe-coding-sidebar", sidebarProvider, {
+        webviewOptions: {
+            retainContextWhenHidden: true,
+        },
+    }));
     // Register a command to update the webview with the current file and line information
     context.subscriptions.push(vscode.commands.registerCommand("vibe-coding.updateWebview", () => {
         const editor = vscode.window.activeTextEditor;
