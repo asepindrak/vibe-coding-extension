@@ -8,37 +8,12 @@ import { DiffManager } from "./DiffManager";
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   public _view?: vscode.WebviewView;
-  private fileWatcher?: vscode.FileSystemWatcher;
-  private isWorkspaceDirty = false;
   private _abortController: AbortController | null = null;
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
     private readonly context: vscode.ExtensionContext,
-  ) {
-    this.setupFileWatcher();
-  }
-
-  private setupFileWatcher() {
-    // Watch for changes in supported file types
-    this.fileWatcher = vscode.workspace.createFileSystemWatcher(
-      "**/*.{js,ts,jsx,tsx,json,py,go,rs,java,c,cpp,h,hpp,css,scss,html,php}",
-    );
-
-    const markDirty = () => {
-      this.isWorkspaceDirty = true;
-      if (this._view) {
-        this._view.webview.postMessage({
-          command: "workspaceDirty",
-          isDirty: true,
-        });
-      }
-    };
-
-    this.fileWatcher.onDidChange(markDirty);
-    this.fileWatcher.onDidCreate(markDirty);
-    this.fileWatcher.onDidDelete(markDirty);
-  }
+  ) {}
 
   private getGitBashPath(): string | undefined {
     if (os.platform() === "win32") {
@@ -72,15 +47,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     _token: vscode.CancellationToken,
   ) {
     this._view = webviewView;
-
-    // Initial check: if we reloaded, assume dirty or let frontend check
-    // But we can also send current status
-    setTimeout(() => {
-      webviewView.webview.postMessage({
-        command: "workspaceDirty",
-        isDirty: this.isWorkspaceDirty,
-      });
-    }, 1000);
 
     webviewView.webview.options = {
       enableScripts: true,
@@ -191,7 +157,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.onDidReceiveMessage(
       async (message) => {
-        const command = message.command || message.type;
+        const command = message.type || message.command;
         switch (command) {
           case "saveHistory":
             this.context.globalState.update("chatHistory", message.history);
@@ -284,7 +250,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           case "findFiles":
             try {
               console.log("Searching for files in the workspace...");
-              const files = await this.getAllWorkspaceFiles();
+              const files: string[] = []; // Disabled full workspace scan
               let workspacePath = "";
               if (vscode.workspace.workspaceFolders) {
                 workspacePath = vscode.workspace.workspaceFolders[0].uri.fsPath;
@@ -315,53 +281,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
               });
             }
             return;
-          case "updateWorkspaces":
-            if (message.silent) {
-              const files = await this.getAllWorkspaceFiles();
-              this.isWorkspaceDirty = false; // Reset dirty flag after update
-              if (this._view)
-                this._view.webview.postMessage({
-                  command: "workspaceDirty",
-                  isDirty: false,
-                });
 
-              webviewView.webview.postMessage({
-                command: "workspaceCode",
-                files,
-              });
-              return;
-            }
-            try {
-              // Tampilkan prompt kepada pengguna
-              const userResponse = await vscode.window.showInformationMessage(
-                "This action will train the AI with a sampled subset of the code in your workspace. This process helps the AI understand the context of your code, including its structure and logic. Do you want to proceed? Note: This may include sensitive or private code.",
-                { modal: true }, // Modal untuk memastikan pengguna memberikan respons
-                "Teach AI Current Code", // Tombol konfirmasi
-              );
-
-              if (userResponse === "Teach AI Current Code") {
-                // Jika pengguna memilih untuk melanjutkan
-                const files = await this.getAllWorkspaceFiles();
-                // console.log("files: ", files);
-                webviewView.webview.postMessage({
-                  command: "workspaceCode",
-                  files,
-                });
-              } else {
-                // Jika pengguna membatalkan
-                console.log("User canceled the AI training.");
-                webviewView.webview.postMessage({
-                  command: "workspaceCodeCancel",
-                });
-              }
-            } catch (error: any) {
-              console.error("Error getting workspace code:", error);
-              webviewView.webview.postMessage({
-                command: "error",
-                error: error?.message,
-              });
-            }
-            return;
           case "readFile":
             try {
               const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -729,177 +649,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       undefined,
       this.context.subscriptions,
     );
-  }
-
-  private maxTokens = 10000;
-  private targetSize = 40000; // sekitar 10k token (1 token ≈ 4 karakter)
-  private maxFilesPerFolder = 2;
-
-  async getAllWorkspaceFiles(): Promise<string> {
-    try {
-      const files = await vscode.workspace.findFiles(
-        "**/*",
-        "{**/node_modules/**,**/dist/**,**/build/**,**/out/**,**/.git/**,**/.svn/**,**/.hg/**,**/.next/**,**/.nuxt/**,**/.expo/**,**/vendor/**,**/__pycache__/**,**/.pytest_cache/**,**/venv/**,**/.venv/**,**/.idea/**,**/.vscode/**,**/.vs/**,**/coverage/**,**/bin/**,**/obj/**,**/target/**,**/Pods/**,**/env/**,**/.env/**,**/tmp/**,**/temp/**,**/*.log,**/*.lock,**/*.zip,**/*.png,**/*.jpg,**/*.jpeg,**/*.gif,**/*.exe,**/*.dll,**/*.bin,**/*.class,**/*.so,**/*.o,**/*.a}",
-      );
-
-      // Generate a lightweight file tree/list so the agent knows the structure
-      // even if file contents are truncated.
-      const filePaths = files.map((f) => vscode.workspace.asRelativePath(f));
-      // Sort for consistent view
-      filePaths.sort();
-
-      const structureHeader = "// ===== PROJECT STRUCTURE (Tree View) =====\n";
-      // Limit to first 500 files to save tokens, but gives good overview
-      const structureContent = filePaths
-        .slice(0, 500)
-        .map((p) => `// ${p}`)
-        .join("\n");
-      const structureSection = structureHeader + structureContent + "\n\n";
-
-      const folderBuckets: Record<
-        string,
-        { path: string; code: string; priority: boolean; config: boolean }[]
-      > = {};
-
-      for (const file of files) {
-        if (!this.isTextFile(file.fsPath)) continue;
-
-        const document = await vscode.workspace.openTextDocument(file);
-        const raw = document.getText();
-        const priority = this.isPriorityFile(file.fsPath);
-        const config = this.isConfigFile(file.fsPath);
-        const compressed =
-          priority || config
-            ? this.stripComments(raw)
-            : this.compressCodeSkeleton(raw);
-
-        if (compressed.length === 0) continue;
-
-        const folderName = path.dirname(file.fsPath);
-        if (!folderBuckets[folderName]) folderBuckets[folderName] = [];
-        folderBuckets[folderName].push({
-          path: file.fsPath,
-          code: compressed,
-          priority,
-          config,
-        });
-      }
-
-      const selectedFiles: {
-        path: string;
-        code: string;
-        priority: boolean;
-        config: boolean;
-      }[] = [];
-      for (const folder of Object.keys(folderBuckets)) {
-        const priorityFiles = folderBuckets[folder].filter((f) => f.priority);
-        const normalFiles = folderBuckets[folder].filter(
-          (f) => !f.priority && !f.config,
-        );
-        const configFiles = folderBuckets[folder].filter((f) => f.config);
-
-        // urutkan berdasarkan nama file (tidak random)
-        priorityFiles.sort((a, b) => a.path.localeCompare(b.path));
-        normalFiles.sort((a, b) => a.path.localeCompare(b.path));
-        configFiles.sort((a, b) => a.path.localeCompare(b.path));
-
-        // ambil max 3 file prioritas dulu
-        priorityFiles
-          .slice(0, this.maxFilesPerFolder)
-          .forEach((f) => selectedFiles.push(f));
-
-        const remainingSlots =
-          this.maxFilesPerFolder -
-          Math.min(priorityFiles.length, this.maxFilesPerFolder);
-        if (remainingSlots > 0) {
-          normalFiles
-            .slice(0, remainingSlots)
-            .forEach((f) => selectedFiles.push(f));
-        }
-
-        // Jika slot masih kosong, baru masukkan config
-        const finalSlots =
-          this.maxFilesPerFolder -
-          selectedFiles.filter((f) => path.dirname(f.path) === folder).length;
-        if (finalSlots > 0) {
-          configFiles
-            .slice(0, finalSlots)
-            .forEach((f) => selectedFiles.push(f));
-        }
-      }
-
-      // Group output berdasarkan folder
-      const grouped: Record<
-        string,
-        { path: string; code: string; priority: boolean; config: boolean }[]
-      > = {};
-      for (const f of selectedFiles) {
-        const folderKey = f.path.includes("/src/")
-          ? "src/" + f.path.split("/src/")[1].split("/")[0]
-          : "(root)";
-        if (!grouped[folderKey]) grouped[folderKey] = [];
-        grouped[folderKey].push(f);
-      }
-
-      // Gabungkan hasil dengan batas ukuran
-      let allCode = structureSection; // Start with the structure!
-      let totalSize = allCode.length;
-      console.log("=== FILES SELECTED TO SEND ===");
-
-      for (const folder of Object.keys(grouped)) {
-        const folderHeader = `\n\n// ===== Folder: ${folder} =====\n`;
-        if (totalSize + folderHeader.length <= this.targetSize) {
-          allCode += folderHeader;
-          totalSize += folderHeader.length;
-        } else {
-          console.log(`- SKIPPED FOLDER (limit) ${folder}`);
-          continue;
-        }
-
-        for (const f of grouped[folder]) {
-          const snippet = `// File: ${f.path}\n${f.code}\n\n`;
-          if (totalSize + snippet.length <= this.targetSize) {
-            allCode += snippet;
-            totalSize += snippet.length;
-            console.log(
-              `+ ${f.path} (${f.priority ? "PRIORITY" : f.config ? "CONFIG" : "normal"})`,
-            );
-          } else {
-            console.log(`- SKIPPED (limit) ${f.path}`);
-          }
-        }
-      }
-
-      // Add package.json dependencies to help AI understand the tech stack
-      const packageJsonFiles = files.filter((f) =>
-        f.fsPath.endsWith("package.json"),
-      );
-      for (const pkgFile of packageJsonFiles) {
-        try {
-          const doc = await vscode.workspace.openTextDocument(pkgFile);
-          const pkgContent = JSON.parse(doc.getText());
-          const deps = {
-            ...pkgContent.dependencies,
-            ...pkgContent.devDependencies,
-          };
-          const depsString = `\n\n// ===== Dependencies (${path.basename(path.dirname(pkgFile.fsPath))}) =====\n// ${JSON.stringify(deps, null, 2)}\n`;
-
-          if (totalSize + depsString.length <= this.targetSize) {
-            allCode += depsString;
-            totalSize += depsString.length;
-            console.log(`+ Dependencies for ${pkgFile.fsPath}`);
-          }
-        } catch (e) {
-          console.error(`Failed to read package.json: ${pkgFile.fsPath}`);
-        }
-      }
-
-      console.log("=== END OF FILE LIST ===");
-      return allCode;
-    } catch (err) {
-      console.error("Error reading workspace files:", err);
-      return "";
-    }
   }
 
   // --- Hapus komentar, tapi biarkan kode utuh ---

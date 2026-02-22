@@ -17,13 +17,6 @@
       </div>
       <div id="header-controls" class="header-controls">
         <button
-          id="button-workspace"
-          class="btn-elegant"
-          style="height: 32px; font-size: 12px"
-        >
-          Teach AI 🔄
-        </button>
-        <button
           id="newChatButton"
           class="btn-elegant"
           style="height: 32px; padding: 0 10px; margin-left: 5px"
@@ -280,10 +273,10 @@
       var messageArray = [];
       var pendingMessage = null;
       var pendingAttachments = null;
-      var isWorkspaceDirty = false;
+
       var talkDuration = 0;
       var talkMessage = "";
-      var workspaces = "";
+
       var lastSentMessage = "";
       var abortController = null;
       var agentAbortController = null;
@@ -295,6 +288,12 @@
 
       var currentSessionId = Date.now().toString(); // Default session ID
 
+      // Store file contents for diffing
+      window.fileContentMap = new Map();
+
+      // Store file paths for caching search results
+      window.filePathCache = new Map();
+
       function saveState() {
         vscode.setState({
           messagesHTML: document.getElementById("content").innerHTML,
@@ -304,6 +303,8 @@
           messages: messageArray,
           mode: document.getElementById("modeSelect")?.value ?? "agent",
           currentSessionId: currentSessionId,
+          filePathCache: Array.from(window.filePathCache.entries()), // Persist cache
+          fileContentMap: Array.from(window.fileContentMap.entries()), // Persist file content
         });
 
         // Also trigger save history to extension if we have messages
@@ -573,8 +574,7 @@
         }
         const sendMessageButton = document.getElementById("sendMessageButton");
         sendMessageButton.addEventListener("click", handleSendMessage);
-        const btnWorkspace = document.getElementById("button-workspace");
-        btnWorkspace.addEventListener("click", updateWorkspaces);
+
         const logoutButton = document.getElementById("logoutButton");
         logoutButton.addEventListener("click", logout);
 
@@ -743,43 +743,6 @@
             return;
           }
 
-          if (messageEvent.command === "workspaceCode") {
-            // console.log(`Files found webview: ${messageEvent.files}`)
-            workspaces = messageEvent.files;
-            await updateWorkspacesAPI(workspaces);
-            if (window.resolveWorkspaceUpdate) {
-              window.resolveWorkspaceUpdate();
-              window.resolveWorkspaceUpdate = null;
-            }
-            return;
-            // Handle the list of files as needed
-          } else if (messageEvent.command === "error") {
-            console.error(`Error: ${messageEvent.error}`);
-            return;
-          }
-
-          if (messageEvent.command === "workspaceCodeCancel") {
-            await cancelUpdateWorkspaces();
-            return;
-            // Handle the list of files as needed
-          } else if (messageEvent.command === "error") {
-            console.error(`Error: ${messageEvent.error}`);
-            return;
-          }
-
-          if (messageEvent.command === "workspaceDirty") {
-            isWorkspaceDirty = messageEvent.isDirty;
-            const btnWorkspace = document.getElementById("button-workspace");
-            if (isWorkspaceDirty) {
-              btnWorkspace.innerHTML = `Teach AI Current Code 🔄 (Changes detected)`;
-              btnWorkspace.classList.add("bg-yellow-600"); // Visual indicator
-            } else {
-              btnWorkspace.innerHTML = `Teach AI Current Code 🔄`;
-              btnWorkspace.classList.remove("bg-yellow-600");
-            }
-            return;
-          }
-
           if (messageEvent.command === "historyLoad") {
             window.chatHistory = messageEvent.history || [];
             renderHistoryList();
@@ -789,6 +752,41 @@
           if (messageEvent.command === "tokenValid") {
             localStorage.setItem("token", messageEvent.token);
             localStorage.setItem("userId", messageEvent.userId);
+
+            // Restore file path cache
+            if (persistedState.filePathCache) {
+              try {
+                window.filePathCache = new Map(persistedState.filePathCache);
+                console.log(
+                  "[webview] Restored file path cache:",
+                  window.filePathCache.size,
+                  "entries",
+                );
+              } catch (e) {
+                console.error(
+                  "[webview] Failed to restore file path cache:",
+                  e,
+                );
+              }
+            }
+
+            // Restore file content map
+            if (persistedState.fileContentMap) {
+              try {
+                window.fileContentMap = new Map(persistedState.fileContentMap);
+                console.log(
+                  "[webview] Restored file content map:",
+                  window.fileContentMap.size,
+                  "entries",
+                );
+              } catch (e) {
+                console.error(
+                  "[webview] Failed to restore file content map:",
+                  e,
+                );
+              }
+            }
+
             // Fetch and display chat history
             if (persistedState.messagesHTML) {
               document.getElementById("content").innerHTML =
@@ -1309,6 +1307,49 @@
         let currentModifiedFiles = new Set();
         let currentUniqueId = uniqueId;
 
+        // Helper to read file asynchronously for memory loading
+        const readFileAsync = (filePath, timeoutMs = 3000) => {
+          return new Promise((resolve) => {
+            let handleMessage;
+            const timeout = setTimeout(() => {
+              window.removeEventListener("message", handleMessage);
+              resolve(null); // Resolve null on timeout
+            }, timeoutMs);
+
+            handleMessage = (event) => {
+              if (
+                event.data.command === "readFileResult" &&
+                event.data.filePath === filePath
+              ) {
+                clearTimeout(timeout);
+                window.removeEventListener("message", handleMessage);
+                if (event.data.error) {
+                  resolve(null);
+                } else {
+                  resolve(event.data.content);
+                }
+              }
+            };
+            window.addEventListener("message", handleMessage);
+            vscode.postMessage({ type: "readFile", filePath });
+          });
+        };
+
+        // Try to load project memory
+        try {
+          const memoryPath = ".vico/memory.md";
+          const memoryContent = await readFileAsync(memoryPath);
+          if (memoryContent) {
+            currentContext += `\n=== PROJECT MEMORY (.vico/memory.md) ===\n${memoryContent}\n========================================\n`;
+            console.log("[webview] Loaded project memory.");
+          }
+        } catch (e) {
+          console.log(
+            "[webview] No project memory found or error reading it:",
+            e,
+          );
+        }
+
         // Initial thinking bubble
         updateMessagesAssistant({
           uniqueId: `assistant-${currentUniqueId}`,
@@ -1752,49 +1793,64 @@
                 content: planMarkdown,
               });
 
+              let findResult = "";
               try {
-                const findResult = await new Promise((resolve, reject) => {
-                  let handleMessage;
-                  let handleStop;
+                if (window.filePathCache && window.filePathCache.has(pattern)) {
+                  findResult = window.filePathCache.get(pattern);
+                  planMarkdown += `\n  > *Found in cache.*\n`;
+                  console.log(`[webview] Cache hit for pattern: ${pattern}`);
+                } else {
+                  findResult = await new Promise((resolve, reject) => {
+                    let handleMessage;
+                    let handleStop;
 
-                  const timeout = setTimeout(() => {
-                    window.removeEventListener("message", handleMessage);
-                    window.removeEventListener("agent-stop", handleStop);
-                    resolve("Error: Timeout finding files.");
-                  }, 60000);
+                    const timeout = setTimeout(() => {
+                      window.removeEventListener("message", handleMessage);
+                      window.removeEventListener("agent-stop", handleStop);
+                      resolve("Error: Timeout finding files.");
+                    }, 60000);
 
-                  handleStop = () => {
-                    clearTimeout(timeout);
-                    window.removeEventListener("message", handleMessage);
-                    window.removeEventListener("agent-stop", handleStop);
-                    const err = new Error("Aborted by user");
-                    err.name = "AbortError";
-                    reject(err);
-                  };
-
-                  handleMessage = (event) => {
-                    if (event.data.command === "systemLog") {
-                      planMarkdown += `\n  > *${event.data.message}*`;
-                      updateMessagesAssistant({
-                        uniqueId: `assistant-${uniqueId}`,
-                        content: planMarkdown,
-                      });
-                    }
-                    if (event.data.command === "listFilesResult") {
+                    handleStop = () => {
                       clearTimeout(timeout);
                       window.removeEventListener("message", handleMessage);
                       window.removeEventListener("agent-stop", handleStop);
-                      resolve(
-                        event.data.files
-                          ? event.data.files.join("\n")
-                          : event.data.error || "No files found.",
-                      );
+                      const err = new Error("Aborted by user");
+                      err.name = "AbortError";
+                      reject(err);
+                    };
+
+                    handleMessage = (event) => {
+                      if (event.data.command === "systemLog") {
+                        planMarkdown += `\n  > *${event.data.message}*`;
+                        updateMessagesAssistant({
+                          uniqueId: `assistant-${uniqueId}`,
+                          content: planMarkdown,
+                        });
+                      }
+                      if (event.data.command === "listFilesResult") {
+                        clearTimeout(timeout);
+                        window.removeEventListener("message", handleMessage);
+                        window.removeEventListener("agent-stop", handleStop);
+                        resolve(
+                          event.data.files
+                            ? event.data.files.join("\n")
+                            : event.data.error || "No files found.",
+                        );
+                      }
+                    };
+                    window.addEventListener("message", handleMessage);
+                    window.addEventListener("agent-stop", handleStop);
+                    vscode.postMessage({ command: "listFiles", pattern });
+                  });
+
+                  // Cache the result
+                  if (findResult && !findResult.startsWith("Error")) {
+                    if (window.filePathCache) {
+                      window.filePathCache.set(pattern, findResult);
+                      saveState(); // Persist immediately
                     }
-                  };
-                  window.addEventListener("message", handleMessage);
-                  window.addEventListener("agent-stop", handleStop);
-                  vscode.postMessage({ command: "listFiles", pattern });
-                });
+                  }
+                }
 
                 const err = new Error("Aborted by user");
                 err.name = "AbortError";
@@ -2024,12 +2080,27 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
               const fileContentRegex =
                 /\[file name="([^"]+)"\]([\s\S]*?)\[\/file\]/g;
               let contentMatch;
+
+              // Handle potential overlapping matches or multiple files in one block
+              // We need to be careful with greedy matching in [\s\S]*? if there are multiple files
+              // A safer approach might be to split by [file or just rely on the regex if well-formed
+
+              // Let's try to match all occurrences
+              const allContent = stepOutput;
+              let lastIndex = 0;
+
               while (
-                (contentMatch = fileContentRegex.exec(stepOutput)) !== null
+                (contentMatch = fileContentRegex.exec(allContent)) !== null
               ) {
                 const fPath = contentMatch[1];
                 const fContent = contentMatch[2];
                 window.fileContentMap.set(fPath, fContent);
+                console.log(
+                  `[webview] Stored content for ${fPath} (length: ${fContent.length})`,
+                );
+
+                // CRITICAL: Update context so the planner knows the file state
+                context += `\nFile Content (${fPath}):\n${fContent}\n`;
               }
             }
             if (stepOutput.includes("[command]")) {
@@ -2090,6 +2161,9 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
                         uniqueId: `assistant-${uniqueId}`,
                         content: planMarkdown + terminalOutput + "\n\`\`\`",
                       });
+
+                      // CRITICAL: Update context so the planner knows the command result
+                      context += `\nCommand Output for "${command}":\n${terminalOutput}\n`;
 
                       resolve(event.data.exitCode);
                     }
@@ -2207,18 +2281,63 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
           }
         }
 
+        if (!autoFixTriggered) {
+          // planMarkdown += `\n\n**All steps completed.**`; // Removed as per user request to be less intrusive
+
+          // --- SUMMARY GENERATION ---
+          try {
+            updateMessagesAssistant({
+              uniqueId: `assistant-${uniqueId}`,
+              content: planMarkdown + `\n\n> *Generating summary...*`,
+            });
+
+            const summaryResponse = await fetch(
+              "http://localhost:13100/api/agent/summary",
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  userId,
+                  token,
+                  context,
+                  originalRequest: message, // We need the original request to frame the summary
+                }),
+                signal: agentAbortController?.signal,
+              },
+            );
+
+            if (summaryResponse.ok) {
+              const summaryReader = summaryResponse.body.getReader();
+              const summaryDecoder = new TextDecoder();
+              let summaryText = "";
+              while (true) {
+                const { value, done } = await summaryReader.read();
+                if (done) break;
+                summaryText += summaryDecoder.decode(value, { stream: true });
+              }
+
+              if (summaryText) {
+                planMarkdown += `\n\n---\n\n### 📝 Session Summary\n${summaryText}`;
+              }
+            }
+          } catch (e) {
+            console.error("Failed to generate summary:", e);
+            // Fail silently, don't block the completion
+          }
+        }
+
+        // Move Modified Files section to the end (after summary)
         if (modifiedFiles.size > 0) {
           planMarkdown += `\n\n**Modified Files:**\n`;
           const filesList = Array.from(modifiedFiles).join(",");
-          planMarkdown += `\n[keepAllFiles files="${filesList}"]\n`;
+          // Add Open Diff buttons for each file
           modifiedFiles.forEach((file) => {
             planMarkdown += `\n[openDiff path="${file}"]`;
           });
+          // Add Keep All Files button at the end
+          planMarkdown += `\n\n[keepAllFiles files="${filesList}"]\n`;
         }
 
-        if (!autoFixTriggered) {
-          planMarkdown += `\n\n**All steps completed.**`;
-        }
         updateMessagesAssistant({
           uniqueId: `assistant-${uniqueId}`,
           content: planMarkdown,
@@ -2586,7 +2705,6 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
           messageDiv.className = "message success";
           isLoading = false;
           setTimeout(() => {
-            updateWorkspaces();
             loginForm.innerHTML = `
                                         <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
                                         <button type="submit">➜]</button>
@@ -2601,9 +2719,6 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
           const logo = document.getElementById("logo");
           if (logo) logo.style.display = "flex";
 
-          const btnWorkspace = document.getElementById("button-workspace");
-          if (btnWorkspace) btnWorkspace.style.display = "block";
-
           // Fetch and display chat history
           fetchHistory();
         } catch (error) {
@@ -2617,72 +2732,6 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
         }
       }
 
-      async function updateWorkspaces(silent = false) {
-        if (isLoading && !silent && !pendingMessage) return;
-        if (!silent) isLoading = true;
-
-        const btnWorkspace = document.getElementById("button-workspace");
-        btnWorkspace.innerHTML = `
-                                <svg class="loader-button" viewBox="0 0 24 24" width="16" height="16"> <!-- Adjust width and height -->
-                                    <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
-                                </svg>
-                            `;
-        vscode.postMessage({ type: "updateWorkspaces", silent });
-      }
-
-      async function updateWorkspacesAPI(workspacesParam) {
-        try {
-          // Send a message to the extension to find files
-
-          const tokenData = localStorage.getItem("token");
-
-          const response = await fetch("http://localhost:13100/api/workspace", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              token: tokenData,
-              workspaces: workspacesParam,
-            }),
-          });
-
-          if (!response.ok) {
-            console.log("update workspaces gagal");
-            isLoading = false;
-          }
-          console.log("update workspaces berhasil");
-          const btnWorkspace = document.getElementById("button-workspace");
-          btnWorkspace.style.display = "block";
-          btnWorkspace.innerHTML = `Teach AI Current Code 🔄`;
-          btnWorkspace.addEventListener("click", updateWorkspaces);
-          isLoading = false;
-
-          if (pendingMessage) {
-            const msg = pendingMessage;
-            const atts = pendingAttachments;
-            pendingMessage = null;
-            console.log("Retrying pending message...");
-            if (atts) {
-              attachments = atts;
-              pendingAttachments = null;
-            }
-            sendMessageToApi(msg, true);
-          }
-        } catch (error) {
-          console.log("update workspaces gagal");
-          isLoading = false;
-        }
-      }
-
-      async function cancelUpdateWorkspaces() {
-        isLoading = false;
-        const btnWorkspace = document.getElementById("button-workspace");
-        btnWorkspace.style.display = "block";
-        btnWorkspace.innerHTML = `Teach AI Current Code 🔄`;
-        btnWorkspace.addEventListener("click", updateWorkspaces);
-      }
-
       async function fetchHistory() {
         // Request history from extension
         vscode.postMessage({ type: "getHistory" });
@@ -2692,11 +2741,36 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
         const token = localStorage.getItem("token");
         vscode.postMessage({ type: "saveToken", token });
         const userId = localStorage.getItem("userId");
+
+        // Restore file content map from global state if possible?
+        // Actually, we should rebuild it from the HTML or messages.
+        // Let's rely on loadMessages to rebuild it if we fetch from API.
+        // If we restore from persistedState, we might miss it if we don't save the map.
+
         if (persistedState.messagesHTML) {
           document.getElementById("content").innerHTML =
             persistedState.messagesHTML;
           document.getElementById("messageInput").value =
             persistedState.input ?? "";
+
+          // Rebuild map from the restored HTML content (less reliable) or persisted messages
+          if (persistedState.messages) {
+            window.fileContentMap.clear();
+            persistedState.messages.forEach((msg) => {
+              if (msg.role === "assistant") {
+                const fileContentRegex =
+                  /\[file name="([^"]+)"\]([\s\S]*?)\[\/file\]/g;
+                let contentMatch;
+                while (
+                  (contentMatch = fileContentRegex.exec(msg.content)) !== null
+                ) {
+                  const fPath = contentMatch[1];
+                  const fContent = contentMatch[2];
+                  window.fileContentMap.set(fPath, fContent);
+                }
+              }
+            });
+          }
 
           // Show the message input container
           const messageInputContainer = document.getElementById(
@@ -2758,6 +2832,24 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
         content.innerHTML = "Loading...";
         try {
           displayMessages(messages.messages);
+
+          // Re-populate fileContentMap from message history
+          window.fileContentMap.clear();
+          messages.messages.forEach((msg) => {
+            if (msg.role === "assistant") {
+              const fileContentRegex =
+                /\[file name="([^"]+)"\]([\s\S]*?)\[\/file\]/g;
+              let contentMatch;
+              while (
+                (contentMatch = fileContentRegex.exec(msg.content)) !== null
+              ) {
+                const fPath = contentMatch[1];
+                const fContent = contentMatch[2];
+                window.fileContentMap.set(fPath, fContent);
+                console.log(`[webview] Restored content for ${fPath}`);
+              }
+            }
+          });
 
           // Show the message input container
           const messageInputContainer = document.getElementById(
@@ -2873,11 +2965,18 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
             ) {
               //skip
             } else if (part.startsWith('[file name="')) {
+              // Updated Regex to handle multiple lines properly
               const match = part.match(
-                /\[file name="(.*?)"\]([\s\S]*?)\[\/file\]/,
+                /\[file name="([^"]+)"\]([\s\S]*?)\[\/file\]/,
               );
               if (match) {
-                window.fileContentMap.set(match[1], match[2]);
+                // If it's a file block, we should not render it as text, but we must save it to the map
+                const fPath = match[1];
+                const fContent = match[2];
+                window.fileContentMap.set(fPath, fContent);
+                console.log(
+                  `[webview] Render pass: Stored content for ${fPath}`,
+                );
               }
             } else if (part.startsWith('[keepAllFiles files="')) {
               const match = part.match(/\[keepAllFiles files="(.*?)"\]/);
