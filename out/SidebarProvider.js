@@ -47,6 +47,27 @@ class SidebarProvider {
     fileWatcher;
     isWorkspaceDirty = false;
     _abortController = null;
+    recentActions = new Map();
+    checkDuplicateAction(actionType, payload) {
+        const hash = crypto
+            .createHash("md5")
+            .update(JSON.stringify({ type: actionType, payload }))
+            .digest("hex");
+        const now = Date.now();
+        const lastTime = this.recentActions.get(hash);
+        // 30 seconds cooldown for exact same action to break loops
+        if (lastTime && now - lastTime < 30000) {
+            return true;
+        }
+        this.recentActions.set(hash, now);
+        // Clean up old entries (> 2 minutes)
+        for (const [key, timestamp] of this.recentActions.entries()) {
+            if (now - timestamp > 120000) {
+                this.recentActions.delete(key);
+            }
+        }
+        return false;
+    }
     constructor(_extensionUri, context) {
         this._extensionUri = _extensionUri;
         this.context = context;
@@ -90,6 +111,11 @@ class SidebarProvider {
                 command: "systemLog",
                 message: message,
             });
+        }
+    }
+    postMessage(message) {
+        if (this._view) {
+            this._view.webview.postMessage(message);
         }
     }
     resolveWebviewView(webviewView, context, _token) {
@@ -179,7 +205,20 @@ class SidebarProvider {
                         }
                         // Use DiffManager
                         const diffManager = DiffManager_1.DiffManager.getInstance(this.context);
-                        await diffManager.openDiff(document.uri, newText);
+                        const result = await diffManager.openDiff(document.uri, newText);
+                        if (result && result.success) {
+                            // Notify webview about the change so it can track it
+                            const relativePath = vscode.workspace.asRelativePath(document.uri);
+                            this.postMessage({
+                                command: "filesModified",
+                                changes: [
+                                    {
+                                        filePath: relativePath,
+                                        originalContent: result.originalContent,
+                                    },
+                                ],
+                            });
+                        }
                     }
                     else {
                         vscode.window.showErrorMessage("No active editor or file found to apply code.");
@@ -313,6 +352,15 @@ class SidebarProvider {
                         });
                     }
                     return;
+                case "revertChanges":
+                    vscode.commands.executeCommand("vibe-coding.revertChanges", {
+                        changes: message.changes,
+                    });
+                    return;
+                case "copyToClipboard":
+                    vscode.env.clipboard.writeText(message.text);
+                    vscode.window.showInformationMessage("Copied to clipboard!");
+                    return;
                 case "updateWorkspaces":
                     if (message.silent) {
                         const files = await this.getAllWorkspaceFiles();
@@ -401,6 +449,13 @@ class SidebarProvider {
                     }
                     return;
                 case "search":
+                    if (this.checkDuplicateAction("search", message.query)) {
+                        webviewView.webview.postMessage({
+                            command: "searchResult",
+                            results: "⚠️ You recently performed this search. Please use the previous results or try a different query to avoid looping.",
+                        });
+                        return;
+                    }
                     try {
                         if (this._abortController) {
                             this._abortController.abort();
@@ -480,6 +535,13 @@ class SidebarProvider {
                     }
                     return;
                 case "listFiles":
+                    if (this.checkDuplicateAction("listFiles", message.pattern)) {
+                        webviewView.webview.postMessage({
+                            command: "listFilesResult",
+                            error: "⚠️ You recently listed these files. Please use the previous results to avoid looping.",
+                        });
+                        return;
+                    }
                     try {
                         const workspaceFolders = vscode.workspace.workspaceFolders;
                         if (!workspaceFolders) {
@@ -552,6 +614,14 @@ class SidebarProvider {
                     return;
                 case "executeCommand":
                     console.log("--> [SidebarProvider] executeCommand received:", message.command);
+                    if (this.checkDuplicateAction("executeCommand", message.command)) {
+                        webviewView.webview.postMessage({
+                            command: "commandFinished",
+                            exitCode: 0,
+                            output: "⚠️ You recently executed this command. Please proceed to the next step to avoid looping.",
+                        });
+                        return;
+                    }
                     const gitBashPath = this.getGitBashPath();
                     if (gitBashPath) {
                         console.log("Using Git Bash:", gitBashPath);

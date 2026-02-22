@@ -278,6 +278,7 @@
     <script type="module">
       var isLoading = false;
       var messageArray = [];
+      var changeStack = []; // Stack to track code changes
       var pendingMessage = null;
       var pendingAttachments = null;
       var isWorkspaceDirty = false;
@@ -751,6 +752,19 @@
             return;
           }
 
+          if (messageEvent.command === "filesModified") {
+            const changes = messageEvent.changes;
+            if (messageArray.length > 0) {
+              const lastMsg = messageArray[messageArray.length - 1];
+              if (!lastMsg.changes) {
+                lastMsg.changes = [];
+              }
+              lastMsg.changes.push(...changes);
+              saveState();
+            }
+            return;
+          }
+
           if (messageEvent.command === "workspaceCode") {
             // console.log(`Files found webview: ${messageEvent.files}`)
             workspaces = messageEvent.files;
@@ -833,7 +847,27 @@
             }
 
             // Fetch and display chat history
-            if (persistedState.messagesHTML) {
+            if (persistedState.messages && persistedState.messages.length > 0) {
+              messageArray = persistedState.messages;
+              displayMessages(messageArray);
+
+              document.getElementById("messageInput").value =
+                persistedState.input ?? "";
+              const modeSelect = document.getElementById("modeSelect");
+              if (modeSelect) {
+                modeSelect.value = persistedState.mode ?? "agent";
+              }
+              const messageInputContainer = document.getElementById(
+                "messageInputContainer",
+              );
+              messageInputContainer.style.display = "block";
+              var content = document.getElementById("content");
+              content.scrollTop = content.scrollHeight;
+              const messageInput = document.getElementById("messageInput");
+              messageInput.style.height = "auto";
+              messageInput.style.height = messageInput.scrollHeight + "px";
+              messageInput.focus();
+            } else if (persistedState.messagesHTML) {
               document.getElementById("content").innerHTML =
                 persistedState.messagesHTML;
               document.getElementById("messageInput").value =
@@ -847,6 +881,10 @@
                 "messageInputContainer",
               );
               messageInputContainer.style.display = "block";
+
+              // Re-attach event listeners for buttons since innerHTML destroys them
+              reattachEventListeners();
+
               var content = document.getElementById("content");
               // Scroll to the bottom of the content
               content.scrollTop = content.scrollHeight;
@@ -1382,11 +1420,21 @@
 
         // Try to load project memory
         try {
-          const memoryPath = ".vico/memory.md";
-          const memoryContent = await readFileAsync(memoryPath);
+          let memoryPath = ".vico/memory.md";
+          let memoryContent = await readFileAsync(memoryPath);
+
+          if (!memoryContent) {
+            memoryPath = "memory.md";
+            memoryContent = await readFileAsync(memoryPath);
+          }
+
           if (memoryContent) {
-            currentContext += `\n=== PROJECT MEMORY (.vico/memory.md) ===\n${memoryContent}\n========================================\n`;
-            console.log("[webview] Loaded project memory.");
+            currentContext += `\n=== PROJECT MEMORY (${memoryPath}) ===\n${memoryContent}\n========================================\n`;
+            currentContext += `\n=== SYSTEM NOTE ===\nTo update ${memoryPath}, ONLY generate the NEW content to be appended. Do NOT regenerate the entire file.\n===================\n`;
+            console.log(`[webview] Loaded project memory from ${memoryPath}.`);
+          } else {
+            // File missing, instruct agent to create it (prefer .vico/memory.md)
+            currentContext += `\n=== SYSTEM NOTE ===\nThe memory file .vico/memory.md does not exist. You MUST create it as your first action. Populate it with the project's Tech Stack, Design Patterns, and key architectural decisions. Then proceed with the user's request.\n===================\n`;
           }
         } catch (e) {
           console.log(
@@ -1395,16 +1443,28 @@
           );
         }
 
+        // Add explicit autonomous behavior instruction
+        currentContext += `\n=== CRITICAL INSTRUCTION ===\nYou are an AUTONOMOUS agent. Do NOT ask the user what to do next. You MUST decide the best course of action yourself and proceed to execute it immediately. If there are multiple options, choose the most reasonable one and ACT on it. Do not stop to ask for permission or preference. Complete the user's request end-to-end.\n`;
+        currentContext += `\n=== PLANNING & EXECUTION STRATEGY ===\n1. **PHASE 1: PLAN**: At the very beginning, CREATE A COMPREHENSIVE, NUMBERED PLAN. List all steps required to solve the user's request.\n2. **PHASE 2: EXECUTE**: Execute the plan step-by-step. Do not deviate unless a step fails.\n3. **VERIFY**: After applying a fix, you MUST verify it (e.g., run the code, check for errors).\n4. **NO LOOPING**: If a step fails, do not retry the exact same action. Analyze the error and adjust your plan.\n5. **HISTORY AWARENESS**: Review the 'History' to see what steps have already been completed. DO NOT REPEAT COMPLETED STEPS.\n============================\n`;
+        currentContext += `\nIMPORTANT: Maintain 'memory.md' as a living history of the project. Record every major user request and your solution steps there. This context is CRITICAL.\n`;
+        currentContext += `HOWEVER, you must BALANCE documentation with execution. Do not get stuck in a loop of only updating memory. Every memory update should be accompanied by, or follow, the actual code implementation that solves the user's problem. Log your work, then DO your work. If you have already updated memory for the current task, do not do it again unless new significant information arises. FOCUS ON DELIVERING WORKING CODE.\n============================\n`;
+
         // Initial thinking bubble
         updateMessagesAssistant({
           uniqueId: `assistant-${currentUniqueId}`,
           content: "🧠 Thinking & Planning...",
         });
 
+        // Initialize global plan state if starting new workflow
+        if (iteration === 1) {
+          window.currentPlanMarkdown = "";
+        }
+
         while (iteration < MAX_ITERATIONS) {
           iteration++;
 
-          // For iterations > 1, create a new bubble
+          // ... (existing bubble creation code) ...
+
           if (iteration > 1) {
             currentUniqueId = Date.now() + Math.random();
             displayMessagesAssistant({
@@ -1521,18 +1581,28 @@
             }
 
             // Render Plan
-            let planMarkdown = `**Step ${iteration}:** ${step.description}\n`;
+            let cleanDescription = step.description.replace(
+              /^Step\s+\d+[:.]\s*/i,
+              "",
+            );
+            let currentStepMarkdown = `**Step ${iteration}:** ${cleanDescription}\n`;
             // Add Checkbox for the step
-            planMarkdown += `- [ ] ${step.description}\n`;
+            currentStepMarkdown += `- [ ] ${cleanDescription}\n`;
+
+            // Wrap in thinking block for auto-collapse
+            const thinkingContent = `[thinking title="Step ${iteration}: ${cleanDescription.substring(0, 50)}${cleanDescription.length > 50 ? "..." : ""}"]\n${currentStepMarkdown}\n[/thinking]`;
 
             updateMessagesAssistant({
               uniqueId: `assistant-${currentUniqueId}`,
-              content: planMarkdown,
+              content: thinkingContent,
             });
 
-            // Update plan popup (shows current step)
-            updatePlanPopup(planMarkdown);
-            updatePlanButtonTitle(planMarkdown);
+            // Append to global plan for popup
+            window.currentPlanMarkdown =
+              (window.currentPlanMarkdown || "") +
+              `- [ ] Step ${iteration}: ${step.description}\n`;
+            updatePlanPopup(window.currentPlanMarkdown);
+            updatePlanButtonTitle(window.currentPlanMarkdown);
 
             // Execute Plan
             const result = await executePlan(
@@ -1540,24 +1610,28 @@
               currentUniqueId,
               userId,
               token,
-              planMarkdown,
+              currentStepMarkdown,
               attachments,
               currentContext, // Pass accumulated context
+              iteration,
             );
 
-            // Update context
-            // executePlan now returns the UPDATED full context if we passed it in?
-            // Or does it return just the delta?
-            // Looking at executePlan: context starts as existingContext.
-            // Then it appends to it.
-            // And returns { context: context, ... }
-            // So result.context is the FULL context (old + new).
-            // So we should replace currentContext, not append.
+            // Update context with the result from executePlan
             currentContext = result.context;
 
             if (result.modifiedFiles) {
               result.modifiedFiles.forEach((f) => currentModifiedFiles.add(f));
             }
+
+            // CRITICAL: Update history so the agent knows what it just did!
+            // This prevents looping and "Step 1" hallucinations.
+            messageArray.push({
+              role: "assistant",
+              content: `[Step ${iteration} Completed]
+Description: ${step.description}
+Execution Result:
+${result.summary || "Executed successfully."}`,
+            });
 
             // Handle Auto-Fix / Replan
             if (result.autoFixTriggered) {
@@ -1606,9 +1680,12 @@
         initialMarkdown,
         attachments,
         existingContext = "", // Add existingContext parameter
+        iteration = 1,
       ) {
         let context = existingContext; // Initialize with existing context
         let planMarkdown = initialMarkdown;
+        // Ensure currentStepMarkdown is initialized
+        let currentStepMarkdown = planMarkdown;
         let modifiedFiles = new Set();
         let autoFixTriggered = false;
 
@@ -1616,23 +1693,39 @@
           if (!isLoading) {
             break;
           }
-          // Update to In Progress - use more flexible regex
+          // Update to In Progress in the chat bubble
           const inProgressRegex = new RegExp(
-            `^\\s*-\\s*\\[\\s*\\]\\s*(Step\\s+${step.step}:)`,
+            `^\\s*-\\s*\\[\\s*\\]\\s*${step.description}`,
             "gm",
           );
-          planMarkdown = planMarkdown.replace(inProgressRegex, `- [🔄] $1`);
+          currentStepMarkdown = currentStepMarkdown.replace(
+            inProgressRegex,
+            `- [🔄] ${step.description}`,
+          );
           updateMessagesAssistant({
             uniqueId: `assistant-${uniqueId}`,
-            content: planMarkdown,
+            content: currentStepMarkdown,
           });
-          updatePlanPopup(planMarkdown);
+
+          // Update global plan status
+          if (window.currentPlanMarkdown) {
+            const globalStepRegex = new RegExp(
+              `^\\s*-\\s*\\[\\s*\\]\\s*Step\\s+${iteration}:\\s*${step.description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+              "gm",
+            );
+            window.currentPlanMarkdown = window.currentPlanMarkdown.replace(
+              globalStepRegex,
+              `- [🔄] Step ${iteration}: ${step.description}`,
+            );
+            updatePlanPopup(window.currentPlanMarkdown);
+            updatePlanButtonTitle(window.currentPlanMarkdown);
+          }
 
           try {
             // --- PHASE 1: THINKING ---
             updateMessagesAssistant({
               uniqueId: `assistant-${uniqueId}`,
-              content: planMarkdown + `\n  > *Thinking...*`,
+              content: currentStepMarkdown + `\n  > *Thinking...*`,
             });
 
             const thinkResponse = await fetch(
@@ -1670,10 +1763,10 @@
               : "Analyzing context...";
 
             // Update UI with thought
-            planMarkdown += `\n  > *Thought:* ${thought}\n`;
+            currentStepMarkdown += `\n  > *Thought:* ${thought}\n`;
             updateMessagesAssistant({
               uniqueId: `assistant-${uniqueId}`,
-              content: planMarkdown,
+              content: currentStepMarkdown,
             });
 
             // Check for [readFile]
@@ -1691,10 +1784,10 @@
                 const filePath = fileMatch[1];
 
                 // Visual feedback
-                planMarkdown += `\n  > *Reading file:* ${filePath}\n`;
+                currentStepMarkdown += `\n  > *Reading file:* ${filePath}\n`;
                 updateMessagesAssistant({
                   uniqueId: `assistant-${uniqueId}`,
-                  content: planMarkdown,
+                  content: currentStepMarkdown,
                 });
 
                 // Send readFile to extension with timeout
@@ -1742,17 +1835,17 @@
                   context += `\nFile Content (${filePath}):\n${fileContent}\n`;
 
                   // Visual feedback completion
-                  planMarkdown += `\n  > *Read complete.*\n`;
+                  currentStepMarkdown += `\n  > *Read complete.*\n`;
                   updateMessagesAssistant({
                     uniqueId: `assistant-${uniqueId}`,
-                    content: planMarkdown,
+                    content: currentStepMarkdown,
                   });
                 } catch (e) {
                   context += `\nError reading file ${filePath}: ${e}\n`;
-                  planMarkdown += `\n  > *Error reading file:* ${e}\n`;
+                  currentStepMarkdown += `\n  > *Error reading file:* ${e}\n`;
                   updateMessagesAssistant({
                     uniqueId: `assistant-${uniqueId}`,
-                    content: planMarkdown,
+                    content: currentStepMarkdown,
                   });
                 }
               }
@@ -1764,10 +1857,10 @@
             const searchFilesMatch = thinkOutput.match(searchFilesRegex);
             if (searchFilesMatch) {
               const query = searchFilesMatch[1].trim();
-              planMarkdown += `\n  > *Searching for:* \`${query}\`\n`;
+              currentStepMarkdown += `\n  > *Searching for:* \`${query}\`\n`;
               updateMessagesAssistant({
                 uniqueId: `assistant-${uniqueId}`,
-                content: planMarkdown,
+                content: currentStepMarkdown,
               });
 
               try {
@@ -1792,10 +1885,10 @@
 
                   handleMessage = (event) => {
                     if (event.data.command === "systemLog") {
-                      planMarkdown += `\n  > *${event.data.message}*`;
+                      currentStepMarkdown += `\n  > *${event.data.message}*`;
                       updateMessagesAssistant({
                         uniqueId: `assistant-${uniqueId}`,
-                        content: planMarkdown,
+                        content: currentStepMarkdown,
                       });
                     }
                     if (event.data.command === "searchResult") {
@@ -1817,10 +1910,10 @@
                 if (!isLoading) throw err;
 
                 context += `\nSearch Results for "${query}":\n${searchResult}\n`;
-                planMarkdown += `\n  > *Search complete.*\n`;
+                currentStepMarkdown += `\n  > *Search complete.*\n`;
                 updateMessagesAssistant({
                   uniqueId: `assistant-${uniqueId}`,
-                  content: planMarkdown,
+                  content: currentStepMarkdown,
                 });
               } catch (e) {
                 context += `\nError searching: ${e}\n`;
@@ -1832,17 +1925,17 @@
             const findFilesMatch = thinkOutput.match(findFilesRegex);
             if (findFilesMatch) {
               const pattern = findFilesMatch[1].trim();
-              planMarkdown += `\n  > *Finding files:* \`${pattern}\`\n`;
+              currentStepMarkdown += `\n  > *Finding files:* \`${pattern}\`\n`;
               updateMessagesAssistant({
                 uniqueId: `assistant-${uniqueId}`,
-                content: planMarkdown,
+                content: currentStepMarkdown,
               });
 
               let findResult = "";
               try {
                 if (window.filePathCache && window.filePathCache.has(pattern)) {
                   findResult = window.filePathCache.get(pattern);
-                  planMarkdown += `\n  > *Found in cache.*\n`;
+                  currentStepMarkdown += `\n  > *Found in cache.*\n`;
                   console.log(`[webview] Cache hit for pattern: ${pattern}`);
                 } else {
                   findResult = await new Promise((resolve, reject) => {
@@ -1866,10 +1959,10 @@
 
                     handleMessage = (event) => {
                       if (event.data.command === "systemLog") {
-                        planMarkdown += `\n  > *${event.data.message}*`;
+                        currentStepMarkdown += `\n  > *${event.data.message}*`;
                         updateMessagesAssistant({
                           uniqueId: `assistant-${uniqueId}`,
-                          content: planMarkdown,
+                          content: currentStepMarkdown,
                         });
                       }
                       if (event.data.command === "listFilesResult") {
@@ -2038,6 +2131,34 @@
             // (even though executePlan loop usually only has 1 step now)
             context = newContext;
 
+            // Update to Complete in the chat bubble
+            const completeRegex = new RegExp(
+              `^\\s*-\\s*\\[🔄\\]\\s*${step.description}`,
+              "gm",
+            );
+            currentStepMarkdown = currentStepMarkdown.replace(
+              completeRegex,
+              `- [✅] ${step.description}`,
+            );
+            updateMessagesAssistant({
+              uniqueId: `assistant-${uniqueId}`,
+              content: currentStepMarkdown,
+            });
+
+            // Update global plan status to Complete
+            if (window.currentPlanMarkdown) {
+              const globalStepRegex = new RegExp(
+                `^\\s*-\\s*\\[🔄\\]\\s*Step\\s+${iteration}:\\s*${step.description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+                "gm",
+              );
+              window.currentPlanMarkdown = window.currentPlanMarkdown.replace(
+                globalStepRegex,
+                `- [✅] Step ${iteration}: ${step.description}`,
+              );
+              updatePlanPopup(window.currentPlanMarkdown);
+              updatePlanButtonTitle(window.currentPlanMarkdown);
+            }
+
             // Process Actions
             if (stepOutput.includes("[REPLAN]")) {
               autoFixTriggered = true;
@@ -2061,12 +2182,23 @@ Original Request:
 ${(typeof message === "string" ? message : JSON.stringify(message || "")).replace(/\`/g, "'")}
 """`;
 
-              planMarkdown += `\n> *⚠️ Plan Divergence. Replanning...*\n`;
-              planMarkdown += `\n> *Reason:* ${replanReason}\n`;
-              updateMessagesAssistant({
-                uniqueId: `assistant-${uniqueId}`,
-                content: planMarkdown,
-              });
+              // Check if currentStepMarkdown is defined, if not, fallback to planMarkdown or empty string
+              if (typeof currentStepMarkdown !== "undefined") {
+                currentStepMarkdown += `\n> *⚠️ Plan Divergence. Replanning...*\n`;
+                currentStepMarkdown += `\n> *Reason:* ${replanReason}\n`;
+                updateMessagesAssistant({
+                  uniqueId: `assistant-${uniqueId}`,
+                  content: currentStepMarkdown,
+                });
+              } else {
+                // Fallback if currentStepMarkdown is missing
+                planMarkdown += `\n> *⚠️ Plan Divergence. Replanning...*\n`;
+                planMarkdown += `\n> *Reason:* ${replanReason}\n`;
+                updateMessagesAssistant({
+                  uniqueId: `assistant-${uniqueId}`,
+                  content: planMarkdown,
+                });
+              }
 
               await handleAgentWorkflow(
                 fixMessage,
@@ -2118,7 +2250,11 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
               const fileRegex = /\[file name="([^"]+)"\]/g;
               let match;
               while ((match = fileRegex.exec(stepOutput)) !== null) {
-                modifiedFiles.add(match[1]);
+                const fName = match[1];
+                // Hide memory.md from modified files list in chat
+                if (!fName.endsWith("memory.md")) {
+                  modifiedFiles.add(fName);
+                }
               }
 
               // Extract and save file content for Open Diff button
@@ -2138,7 +2274,18 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
                 (contentMatch = fileContentRegex.exec(allContent)) !== null
               ) {
                 const fPath = contentMatch[1];
-                const fContent = contentMatch[2];
+                let fContent = contentMatch[2];
+
+                // FIX: Strip markdown code blocks if the agent mistakenly included them inside [file] tags
+                // This handles cases where the agent wraps code in ```typescript ... ``` inside [file] tags
+                const trimmed = fContent.trim();
+                if (trimmed.startsWith("```") && trimmed.endsWith("```")) {
+                  // Remove the first ```... line and the last ``` line to get raw code
+                  fContent = trimmed
+                    .replace(/^```[^\n]*\n/, "")
+                    .replace(/\n```$/, "");
+                }
+
                 window.fileContentMap.set(fPath, fContent);
                 console.log(
                   `[webview] Stored content for ${fPath} (length: ${fContent.length})`,
@@ -2398,6 +2545,7 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
           context,
           modifiedFiles,
           autoFixTriggered,
+          summary: planMarkdown,
         };
       }
 
@@ -2987,31 +3135,15 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
       function displayMessages(messages) {
         const content = document.getElementById("content");
         content.innerHTML = "";
-        const chatContainer = document.createElement("div");
-        chatContainer.id = "chat-container";
-        chatContainer.className = "custom-scrollbar";
-        let talkDuration = 0;
-        let talkMessage = "";
-        messages.forEach((msg, index) => {
+
+        messages.forEach((msg) => {
           if (msg.role !== "system") {
-            const messageDiv = document.createElement("div");
-            messageDiv.className = `message-container ${msg.role === "user" ? "user" : "agent"}`;
-
-            const messageContent = document.createElement("div");
-            messageContent.className = `message-bubble ${msg.role === "user" ? "user-message" : "agent-message"}`;
-            messageContent.style.whiteSpace = "pre-wrap";
-
-            renderMessageParts(msg.content, messageContent);
-
-            messageDiv.appendChild(messageContent);
-            chatContainer.appendChild(messageDiv);
+            displayMessagesAssistant(msg);
           }
         });
 
-        content.appendChild(chatContainer);
-        content.scrollTop = content.scrollHeight;
         const messageInput = document.getElementById("messageInput");
-        messageInput.focus();
+        if (messageInput) messageInput.focus();
       }
 
       function displayMessagesAssistant(msg) {
@@ -3035,9 +3167,162 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
 
         renderMessageParts(msg.content, messageContent);
 
+        if (msg.role === "user") {
+          const footerDiv = document.createElement("div");
+          footerDiv.style.display = "flex";
+          footerDiv.style.gap = "8px";
+          footerDiv.style.marginTop = "6px";
+          footerDiv.style.justifyContent = "flex-end";
+          footerDiv.style.opacity = "0.7";
+
+          // Revert Button
+          const revertBtn = document.createElement("button");
+          revertBtn.title = "Revert to here";
+          revertBtn.style.background = "none";
+          revertBtn.style.border = "none";
+          revertBtn.style.color = "inherit";
+          revertBtn.style.cursor = "pointer";
+          revertBtn.style.padding = "2px";
+          revertBtn.style.display = "flex";
+          revertBtn.style.alignItems = "center";
+          revertBtn.innerHTML = `<svg style="width: 16px; height: 16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path></svg>`;
+          revertBtn.onclick = () => revertToMessage(msg.uniqueId);
+
+          // Copy Button
+          const copyBtn = document.createElement("button");
+          copyBtn.title = "Copy message";
+          copyBtn.style.background = "none";
+          copyBtn.style.border = "none";
+          copyBtn.style.color = "inherit";
+          copyBtn.style.cursor = "pointer";
+          copyBtn.style.padding = "2px";
+          copyBtn.style.display = "flex";
+          copyBtn.style.alignItems = "center";
+          copyBtn.innerHTML = `<svg style="width: 16px; height: 16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>`;
+
+          copyBtn.onclick = () => {
+            vscode.postMessage({
+              command: "copyToClipboard",
+              text: msg.content,
+            });
+            const originalHTML = copyBtn.innerHTML;
+            copyBtn.innerHTML = `<svg style="width: 16px; height: 16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`;
+            setTimeout(() => {
+              copyBtn.innerHTML = originalHTML;
+            }, 1000);
+          };
+
+          footerDiv.appendChild(revertBtn);
+          footerDiv.appendChild(copyBtn);
+          messageContent.appendChild(footerDiv);
+        }
+
         messageDiv.appendChild(messageContent);
         chatContainer.appendChild(messageDiv);
         content.scrollTop = content.scrollHeight;
+      }
+
+      function reattachEventListeners() {
+        // Re-attach listeners for Revert buttons
+        const revertBtns = document.querySelectorAll(
+          'button[title="Revert to here"]',
+        );
+        revertBtns.forEach((btn) => {
+          // Find the parent message bubble to get the ID
+          // Structure: button -> footerDiv -> messageContent -> messageDiv
+          // messageContent has the ID
+          const messageContent = btn.closest(".message-bubble");
+          if (messageContent && messageContent.id) {
+            btn.onclick = () => revertToMessage(messageContent.id);
+          }
+        });
+
+        // Re-attach listeners for Copy buttons
+        const copyBtns = document.querySelectorAll(
+          'button[title="Copy message"]',
+        );
+        copyBtns.forEach((btn) => {
+          const messageContent = btn.closest(".message-bubble");
+          if (messageContent) {
+            btn.onclick = () => {
+              // Fallback to innerText since we don't have the original markdown
+              // We could try to reconstruct it, but innerText is safer than nothing
+              vscode.postMessage({
+                command: "copyToClipboard",
+                text: messageContent.innerText
+                  .replace(/Revert to here|Copy message/g, "")
+                  .trim(), // Basic cleanup
+              });
+              const originalHTML = btn.innerHTML;
+              btn.innerHTML = `<svg style="width: 16px; height: 16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`;
+              setTimeout(() => {
+                btn.innerHTML = originalHTML;
+              }, 1000);
+            };
+          }
+        });
+      }
+
+      function revertToMessage(messageId) {
+        const index = messageArray.findIndex((m) => m.uniqueId === messageId);
+        if (index === -1) return;
+
+        if (
+          !confirm(
+            "Are you sure you want to revert to this point? All subsequent changes will be undone.",
+          )
+        ) {
+          return;
+        }
+
+        // We want to keep the current message and its immediate response (if any)
+        // Usually User -> Assistant. So keep index and index + 1.
+        // But if the user clicks revert on the *User* message, they expect to go back to the state *after* this interaction?
+        // "jika user klik revert di chat pertama, maka chat ke 2 dan 3 ... akan hilang".
+        // Chat 1 = User Request + Agent Response.
+        // So keep User Request (index) + Agent Response (index + 1).
+
+        const targetIndex = index + 1; // Keep up to this index (inclusive)
+
+        // Collect changes to revert (in reverse order)
+        const changesToRevert = [];
+        for (let i = messageArray.length - 1; i > targetIndex; i--) {
+          const msg = messageArray[i];
+          if (msg.changes && msg.changes.length > 0) {
+            // Add changes in reverse order of application?
+            // Actually, just add them. The backend handles reverting a list of changes.
+            // But if multiple changes to same file, order matters.
+            // If msg.changes is [C1, C2], we should revert C2 then C1?
+            // The backend `revertChanges` iterates the array.
+            // So we should push in reverse order: C2, C1.
+            // msg.changes stores [C1, C2] in order of application.
+            // So to revert, we need [C2, C1].
+            changesToRevert.push(...[...msg.changes].reverse());
+          }
+        }
+
+        if (changesToRevert.length > 0) {
+          vscode.postMessage({
+            command: "revertChanges",
+            changes: changesToRevert,
+          });
+        }
+
+        // Truncate message array
+        messageArray = messageArray.slice(0, targetIndex + 1);
+
+        // Update UI
+        saveState();
+
+        // Re-render
+        const content = document.getElementById("content");
+        content.innerHTML = "";
+        const chatContainer = document.createElement("div");
+        chatContainer.id = "chat-container";
+        chatContainer.className = "custom-scrollbar";
+        content.appendChild(chatContainer);
+
+        messageArray.forEach((msg) => displayMessagesAssistant(msg));
       }
 
       function updateMessagesAssistant(msg) {
@@ -3068,7 +3353,7 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
 
       function renderMessageParts(content, container) {
         const parts = content.split(
-          /(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[file name=".*?"\][\s\S]*?\[\/file\]|\[openDiff path=".*?"\]|\[keepAllFiles files=".*?"\]|\[att-img .*?\]|\[att-file .*?\]|\[file\][\s\S]*?\[file\]|\[status\][\s\S]*?\[\/status\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|####.*|###.*|##.*|#.*|^- .*)/gm,
+          /(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[file name=".*?"\][\s\S]*?\[\/file\]|\[openDiff path=".*?"\]|\[keepAllFiles files=".*?"\]|\[att-img .*?\]|\[att-file .*?\]|\[file\][\s\S]*?\[file\]|\[status\][\s\S]*?\[\/status\]|\[thinking[\s\S]*?\[\/thinking\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|####.*|###.*|##.*|#.*|^- .*)/gm,
         );
 
         parts
@@ -3165,6 +3450,28 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
               statusDiv.className = "status-box";
               statusDiv.innerHTML = `<span class="status-label">STATUS</span>${statusContent}`;
               container.appendChild(statusDiv);
+            } else if (
+              part.startsWith("[thinking") &&
+              part.endsWith("[/thinking]")
+            ) {
+              const match = part.match(
+                /\[thinking title="(.*?)"\]([\s\S]*?)\[\/thinking\]/,
+              );
+              if (match) {
+                const title = match[1];
+                const content = match[2];
+                const details = document.createElement("details");
+
+                const summary = document.createElement("summary");
+                summary.textContent = title;
+                details.appendChild(summary);
+
+                const contentDiv = document.createElement("div");
+                renderMessageParts(content, contentDiv);
+                details.appendChild(contentDiv);
+
+                container.appendChild(details);
+              }
             } else if (part.startsWith("[file]") && part.endsWith("[file]")) {
               const textSpan = document.createElement("span");
               textSpan.textContent = "--File--";

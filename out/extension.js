@@ -268,10 +268,10 @@ async function handleDiff(fileUri, fileContent, relativePath, context) {
     catch (err) {
         vico_logger_1.default.error("Failed to write file:", err);
         vscode.window.showErrorMessage("Failed to write file: " + (err.message || err.toString()));
-        return false;
+        return { success: false, originalContent: null };
     }
 }
-async function writeFileVico(context, editor) {
+async function writeFileVico(context, editor, sidebarProvider) {
     vico_logger_1.default.info("writeFileVico called");
     const writeContent = context.globalState.get("writeContent");
     if (!writeContent) {
@@ -310,24 +310,75 @@ async function writeFileVico(context, editor) {
         const fileRegex = /\[file\s+name="([^"]+)"(?:\s+type="[^"]+")?\]([\s\S]*?)\[\/file\]/g;
         let fileMatch;
         let filesCreated = 0;
+        let duplicateSkipped = false;
+        const fileChanges = [];
         while ((fileMatch = fileRegex.exec(contentToProcess)) !== null) {
             const relativePath = fileMatch[1].trim();
             let fileContent = fileMatch[2].trim();
             // STRIP MARKDOWN CODE BLOCKS FROM CONTENT
             // Often agents wrap the content in ```typescript ... ```
-            const markdownRegex = /^\s*```(?:[\w\d]*)\s*\n([\s\S]*?)```\s*$/;
-            const markdownMatch = fileContent.match(markdownRegex);
-            if (markdownMatch) {
-                fileContent = markdownMatch[1].trim();
+            // IMPROVED: Use a more robust check that handles any language identifier and whitespace
+            if (fileContent.startsWith("```") && fileContent.endsWith("```")) {
+                const lines = fileContent.split("\n");
+                // Check if it looks like a code block (at least 2 lines: opener and closer)
+                if (lines.length >= 2) {
+                    // Remove first line (```language)
+                    lines.shift();
+                    // Remove last line (```)
+                    lines.pop();
+                    // Rejoin
+                    fileContent = lines.join("\n").trim();
+                }
             }
             const fileUri = vscode.Uri.joinPath(projectRoot, relativePath);
             const dirUri = vscode.Uri.file(path.dirname(fileUri.fsPath));
             // 3. Create directory if it doesn't exist
             await vscode.workspace.fs.createDirectory(dirUri);
+            // Special handling for memory.md: Append and write directly (no diff)
+            if (relativePath.toLowerCase().endsWith("memory.md")) {
+                let newContent = fileContent;
+                let originalContent = null;
+                try {
+                    const existingBytes = await vscode.workspace.fs.readFile(fileUri);
+                    const existingString = Buffer.from(existingBytes).toString("utf8");
+                    if (existingString.includes(fileContent.trim())) {
+                        duplicateSkipped = true;
+                        continue;
+                    }
+                    if (existingString.trim().length > 0) {
+                        originalContent = existingString;
+                        // Append with a separator and timestamp for better organization
+                        const timestamp = new Date().toISOString().split("T")[0];
+                        newContent =
+                            existingString + `\n\n## [${timestamp}]\n` + newContent;
+                    }
+                }
+                catch (e) {
+                    // File doesn't exist, proceed with newContent
+                }
+                try {
+                    await vscode.workspace.fs.writeFile(fileUri, Buffer.from(newContent, "utf8"));
+                    filesCreated++;
+                    fileChanges.push({
+                        filePath: relativePath,
+                        originalContent: originalContent,
+                    });
+                    continue; // Skip handleDiff
+                }
+                catch (e) {
+                    vico_logger_1.default.error(`Failed to write memory.md:`, e);
+                    // Fallback to handleDiff if direct write fails? No, just log error.
+                }
+            }
             // 4. Handle Diff & Write
-            const success = await handleDiff(fileUri, fileContent, relativePath, context);
-            if (success)
+            const result = await handleDiff(fileUri, fileContent, relativePath, context);
+            if (result && result.success) {
                 filesCreated++;
+                fileChanges.push({
+                    filePath: relativePath,
+                    originalContent: result.originalContent,
+                });
+            }
         }
         // Fallback: Check for XML-style tags <file path="...">...</file> (sometimes agents use this)
         if (filesCreated === 0) {
@@ -338,15 +389,66 @@ async function writeFileVico(context, editor) {
                 const fileUri = vscode.Uri.joinPath(projectRoot, relativePath);
                 const dirUri = vscode.Uri.file(path.dirname(fileUri.fsPath));
                 await vscode.workspace.fs.createDirectory(dirUri);
-                const success = await handleDiff(fileUri, fileContent, relativePath, context);
-                if (success)
+                // Special handling for memory.md: Append and write directly (no diff)
+                if (relativePath.toLowerCase().endsWith("memory.md")) {
+                    let newContent = fileContent;
+                    let originalContent = null;
+                    try {
+                        const existingBytes = await vscode.workspace.fs.readFile(fileUri);
+                        const existingString = Buffer.from(existingBytes).toString("utf8");
+                        if (existingString.includes(fileContent.trim())) {
+                            duplicateSkipped = true;
+                            continue;
+                        }
+                        if (existingString.trim().length > 0) {
+                            originalContent = existingString;
+                            const timestamp = new Date().toISOString().split("T")[0];
+                            newContent =
+                                existingString + `\n\n## [${timestamp}]\n` + newContent;
+                        }
+                    }
+                    catch (e) {
+                        // File doesn't exist
+                    }
+                    try {
+                        await vscode.workspace.fs.writeFile(fileUri, Buffer.from(newContent, "utf8"));
+                        filesCreated++;
+                        fileChanges.push({
+                            filePath: relativePath,
+                            originalContent: originalContent,
+                        });
+                        continue;
+                    }
+                    catch (e) {
+                        vico_logger_1.default.error(`Failed to write memory.md:`, e);
+                    }
+                }
+                const result = await handleDiff(fileUri, fileContent, relativePath, context);
+                if (result && result.success) {
                     filesCreated++;
+                    fileChanges.push({
+                        filePath: relativePath,
+                        originalContent: result.originalContent,
+                    });
+                }
             }
         }
         if (filesCreated > 0) {
-            vscode.window.showInformationMessage(`🎉 Successfully created/updated ${filesCreated} files.`);
+            // Check if the only file created is memory.md - if so, be silent
+            const isSilentUpdate = fileChanges.length === 1 &&
+                fileChanges[0].filePath.toLowerCase().endsWith("memory.md");
+            if (!isSilentUpdate) {
+                vscode.window.showInformationMessage(`🎉 Successfully created/updated ${filesCreated} files.`);
+            }
+            // Send file changes to webview for history tracking
+            if (sidebarProvider) {
+                sidebarProvider.postMessage({
+                    command: "filesModified",
+                    changes: fileChanges,
+                });
+            }
         }
-        else {
+        else if (!duplicateSkipped) {
             // Log content to debug why regex failed
             vico_logger_1.default.warn("No file blocks found. Content preview:", contentToProcess.substring(0, 200));
             vscode.window.showWarningMessage('No file blocks found to create. Format: [file name="path"]content[/file]');
@@ -364,7 +466,7 @@ function activate(context) {
     // Disini kita daftarin command
     let disposable = vscode.commands.registerCommand("vibe-coding.writeFile", async () => {
         vico_logger_1.default.info("writeFile command triggered");
-        await writeFileVico(context, vscode.window.activeTextEditor);
+        await writeFileVico(context, vscode.window.activeTextEditor, sidebarProvider);
     });
     context.subscriptions.push(vscode.commands.registerCommand("vibe-coding.openDiff", async (args) => {
         // args: { filePath, code }
@@ -625,6 +727,19 @@ function activate(context) {
                     // Open the updated file
                     const doc = await vscode.workspace.openTextDocument(document.fileName);
                     await vscode.window.showTextDocument(doc);
+                    // Notify webview about the change
+                    if (sidebarProvider) {
+                        const relativePath = vscode.workspace.asRelativePath(document.uri);
+                        sidebarProvider.postMessage({
+                            command: "filesModified",
+                            changes: [
+                                {
+                                    filePath: relativePath,
+                                    originalContent: originalText,
+                                },
+                            ],
+                        });
+                    }
                 }
                 else {
                     // Discard - maybe delete temp file?
@@ -656,6 +771,7 @@ function activate(context) {
         const diffManager = DiffManager_1.DiffManager.getInstance(context);
         let successCount = 0;
         let failCount = 0;
+        const changes = [];
         for (const file of files) {
             try {
                 let cleanPath = file.filePath.trim();
@@ -663,6 +779,11 @@ function activate(context) {
                     cleanPath = cleanPath.substring(1);
                 }
                 const fullPath = path.join(projectRoot, cleanPath);
+                // Capture original content before overwriting
+                let originalContent = null;
+                if (fs.existsSync(fullPath)) {
+                    originalContent = fs.readFileSync(fullPath, "utf8");
+                }
                 // Ensure directory exists
                 const dirPath = path.dirname(fullPath);
                 if (!fs.existsSync(dirPath)) {
@@ -672,6 +793,10 @@ function activate(context) {
                 // Accept diff in DiffManager
                 await diffManager.acceptFile(vscode.Uri.file(fullPath));
                 successCount++;
+                changes.push({
+                    filePath: cleanPath,
+                    originalContent,
+                });
             }
             catch (e) {
                 console.error(`Failed to write ${file.filePath}:`, e);
@@ -680,6 +805,13 @@ function activate(context) {
         }
         if (successCount > 0) {
             vscode.window.showInformationMessage(`Successfully kept ${successCount} files.`);
+            // Notify webview
+            if (sidebarProvider) {
+                sidebarProvider.postMessage({
+                    command: "filesModified",
+                    changes: changes,
+                });
+            }
             // Close all diff editors
             await vscode.commands.executeCommand("workbench.action.closeEditorsInGroup");
         }
@@ -687,6 +819,47 @@ function activate(context) {
             vscode.window.showErrorMessage(`Failed to keep ${failCount} files.`);
         }
     }));
+    vscode.commands.registerCommand("vibe-coding.revertChanges", async (args) => {
+        const changes = args?.changes;
+        if (!changes || !Array.isArray(changes) || changes.length === 0) {
+            vscode.window.showErrorMessage("No changes to revert.");
+            return;
+        }
+        if (!vscode.workspace.workspaceFolders) {
+            vscode.window.showErrorMessage("No workspace folder open!");
+            return;
+        }
+        const projectRoot = vscode.workspace.workspaceFolders[0].uri;
+        let successCount = 0;
+        for (const change of changes) {
+            try {
+                const cleanPath = change.filePath.trim().replace(/^[\/\\]/, "");
+                const fullUri = vscode.Uri.joinPath(projectRoot, cleanPath);
+                if (change.originalContent === null) {
+                    // File was created, so delete it
+                    try {
+                        await vscode.workspace.fs.delete(fullUri);
+                        successCount++;
+                    }
+                    catch (e) {
+                        // Ignore if already deleted
+                    }
+                }
+                else {
+                    // File was modified, restore original content
+                    const data = Buffer.from(change.originalContent, "utf8");
+                    await vscode.workspace.fs.writeFile(fullUri, data);
+                    successCount++;
+                }
+            }
+            catch (e) {
+                console.error(`Failed to revert ${change.filePath}:`, e);
+            }
+        }
+        if (successCount > 0) {
+            vscode.window.showInformationMessage(`Successfully reverted ${successCount} files.`);
+        }
+    });
     context.subscriptions.push(vscode.commands.registerCommand("vibe-coding.fetchSuggestions", () => {
         const editor = vscode.window.activeTextEditor;
         if (editor) {

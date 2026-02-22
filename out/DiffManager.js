@@ -108,11 +108,11 @@ class DiffManager {
             });
             // 6. Update Context
             this.updateContext(vscode.window.activeTextEditor);
-            return true;
+            return { success: true, originalContent: fileExists ? oldContent : null };
         }
         catch (err) {
             vscode.window.showErrorMessage("Failed to write file: " + (err.message || err.toString()));
-            return false;
+            return { success: false, originalContent: null };
         }
     }
     async acceptFile(fileUri) {
