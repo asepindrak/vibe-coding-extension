@@ -47,6 +47,7 @@ class SidebarProvider {
     fileWatcher;
     isWorkspaceDirty = false;
     _abortController = null;
+    childProcesses = [];
     recentActions = new Map();
     checkDuplicateAction(actionType, payload) {
         const hash = crypto
@@ -442,12 +443,6 @@ class SidebarProvider {
                         });
                     }
                     return;
-                case "abort":
-                    if (this._abortController) {
-                        this._abortController.abort();
-                        this._abortController = null;
-                    }
-                    return;
                 case "search":
                     if (this.checkDuplicateAction("search", message.query)) {
                         webviewView.webview.postMessage({
@@ -593,7 +588,14 @@ class SidebarProvider {
                         }
                     }
                     return;
+                case "abort":
                 case "stopCommand":
+                    // Abort any running search
+                    if (this._abortController) {
+                        this._abortController.abort();
+                        this._abortController = null;
+                        this.sendLog("[System] Search aborted.");
+                    }
                     try {
                         const executions = vscode.tasks.taskExecutions;
                         let stoppedCount = 0;
@@ -602,6 +604,20 @@ class SidebarProvider {
                                 execution.terminate();
                                 stoppedCount++;
                             }
+                        }
+                        // Also stop child processes
+                        for (const child of this.childProcesses) {
+                            try {
+                                child.kill();
+                                stoppedCount++;
+                            }
+                            catch (e) {
+                                // ignore
+                            }
+                        }
+                        this.childProcesses = [];
+                        if (stoppedCount > 0) {
+                            this.sendLog(`[System] Stopped ${stoppedCount} running tasks.`);
                         }
                         webviewView.webview.postMessage({
                             command: "commandStopped",
@@ -639,9 +655,17 @@ class SidebarProvider {
                             : undefined;
                         const maxBuffer = 10 * 1024 * 1024; // 10MB buffer for large outputs
                         if (workspaceFolder) {
+                            let childProcess;
+                            const onExit = () => {
+                                if (childProcess) {
+                                    this.childProcesses = this.childProcesses.filter((c) => c !== childProcess);
+                                    console.log(`[SidebarProvider] Child process exited. Total: ${this.childProcesses.length}`);
+                                }
+                            };
                             if (gitBashPath && os.platform() === "win32") {
                                 const cmd = message.command.replace(/"/g, '\\"');
-                                cp.exec(`"${gitBashPath}" -c "${cmd}"`, { cwd: workspaceFolder, maxBuffer }, (err, stdout, stderr) => {
+                                childProcess = cp.exec(`"${gitBashPath}" -c "${cmd}"`, { cwd: workspaceFolder, maxBuffer }, (err, stdout, stderr) => {
+                                    onExit();
                                     webviewView.webview.postMessage({
                                         command: "commandFinished",
                                         exitCode: err ? err.code || 1 : 0,
@@ -650,13 +674,18 @@ class SidebarProvider {
                                 });
                             }
                             else {
-                                cp.exec(message.command, { cwd: workspaceFolder, maxBuffer }, (err, stdout, stderr) => {
+                                childProcess = cp.exec(message.command, { cwd: workspaceFolder, maxBuffer }, (err, stdout, stderr) => {
+                                    onExit();
                                     webviewView.webview.postMessage({
                                         command: "commandFinished",
                                         exitCode: err ? err.code || 1 : 0,
                                         output: stdout + stderr,
                                     });
                                 });
+                            }
+                            if (childProcess) {
+                                this.childProcesses.push(childProcess);
+                                console.log(`[SidebarProvider] Started child process. Total: ${this.childProcesses.length}`);
                             }
                             return;
                         }

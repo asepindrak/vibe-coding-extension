@@ -11,6 +11,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   private fileWatcher?: vscode.FileSystemWatcher;
   private isWorkspaceDirty = false;
   private _abortController: AbortController | null = null;
+  private childProcesses: cp.ChildProcess[] = [];
   private recentActions: Map<string, number> = new Map();
 
   private checkDuplicateAction(actionType: string, payload: any): boolean {
@@ -458,12 +459,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
               });
             }
             return;
-          case "abort":
-            if (this._abortController) {
-              this._abortController.abort();
-              this._abortController = null;
-            }
-            return;
           case "search":
             if (this.checkDuplicateAction("search", message.query)) {
               webviewView.webview.postMessage({
@@ -659,7 +654,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
               }
             }
             return;
+          case "abort":
           case "stopCommand":
+            // Abort any running search
+            if (this._abortController) {
+              this._abortController.abort();
+              this._abortController = null;
+              this.sendLog("[System] Search aborted.");
+            }
+
             try {
               const executions = vscode.tasks.taskExecutions;
               let stoppedCount = 0;
@@ -669,6 +672,22 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                   stoppedCount++;
                 }
               }
+
+              // Also stop child processes
+              for (const child of this.childProcesses) {
+                try {
+                  child.kill();
+                  stoppedCount++;
+                } catch (e) {
+                  // ignore
+                }
+              }
+              this.childProcesses = [];
+
+              if (stoppedCount > 0) {
+                this.sendLog(`[System] Stopped ${stoppedCount} running tasks.`);
+              }
+
               webviewView.webview.postMessage({
                 command: "commandStopped",
                 count: stoppedCount,
@@ -717,12 +736,25 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
               const maxBuffer = 10 * 1024 * 1024; // 10MB buffer for large outputs
 
               if (workspaceFolder) {
+                let childProcess: any;
+                const onExit = () => {
+                  if (childProcess) {
+                    this.childProcesses = this.childProcesses.filter(
+                      (c) => c !== childProcess,
+                    );
+                    console.log(
+                      `[SidebarProvider] Child process exited. Total: ${this.childProcesses.length}`,
+                    );
+                  }
+                };
+
                 if (gitBashPath && os.platform() === "win32") {
                   const cmd = message.command.replace(/"/g, '\\"');
-                  cp.exec(
+                  childProcess = cp.exec(
                     `"${gitBashPath}" -c "${cmd}"`,
                     { cwd: workspaceFolder, maxBuffer },
                     (err: any, stdout: string, stderr: string) => {
+                      onExit();
                       webviewView.webview.postMessage({
                         command: "commandFinished",
                         exitCode: err ? err.code || 1 : 0,
@@ -731,16 +763,24 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                     },
                   );
                 } else {
-                  cp.exec(
+                  childProcess = cp.exec(
                     message.command,
                     { cwd: workspaceFolder, maxBuffer },
                     (err: any, stdout: string, stderr: string) => {
+                      onExit();
                       webviewView.webview.postMessage({
                         command: "commandFinished",
                         exitCode: err ? err.code || 1 : 0,
                         output: stdout + stderr,
                       });
                     },
+                  );
+                }
+
+                if (childProcess) {
+                  this.childProcesses.push(childProcess);
+                  console.log(
+                    `[SidebarProvider] Started child process. Total: ${this.childProcesses.length}`,
                   );
                 }
                 return;

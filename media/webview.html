@@ -1260,7 +1260,13 @@
           renderAttachments();
           // Setup AbortController for agent workflow
           agentAbortController = new AbortController();
-          await handleAgentWorkflow(message, uniqueId, snapshot);
+          try {
+            await handleAgentWorkflow(message, uniqueId, snapshot);
+          } catch (err) {
+            if (err.name !== "AbortError") {
+              console.error("Agent workflow error:", err);
+            }
+          }
           return;
         }
 
@@ -1501,6 +1507,7 @@
         currentContext += `\n=== PLANNING & EXECUTION STRATEGY ===\n1. **PHASE 1: PLAN**: At the very beginning, CREATE A COMPREHENSIVE, NUMBERED PLAN. List all steps required to solve the user's request.\n2. **PHASE 2: EXECUTE**: Execute the plan step-by-step. Do not deviate unless a step fails.\n3. **VERIFY**: After applying a fix, you MUST verify it (e.g., run the code, check for errors).\n4. **NO LOOPING**: If a step fails, do not retry the exact same action. Analyze the error and adjust your plan.\n5. **HISTORY AWARENESS**: Review the 'History' to see what steps have already been completed. DO NOT REPEAT COMPLETED STEPS.\n============================\n`;
         currentContext += `\nIMPORTANT: Maintain 'memory.md' as a living history of the project. Record every major user request and your solution steps there. This context is CRITICAL.\n`;
         currentContext += `HOWEVER, you must BALANCE documentation with execution. Do not get stuck in a loop of only updating memory. Every memory update should be accompanied by, or follow, the actual code implementation that solves the user's problem. Log your work, then DO your work. If you have already updated memory for the current task, do not do it again unless new significant information arises. FOCUS ON DELIVERING WORKING CODE.\n============================\n`;
+        currentContext += `\n=== FILE STRUCTURE AWARENESS ===\nBefore creating any new file or component, you MUST check the 'PROJECT FILE STRUCTURE' provided in the context. \n- If this is a Next.js project, verify if it uses the 'app/' directory (App Router) or 'pages/' directory (Pages Router). \n- Do NOT create 'pages/index.js' if 'app/page.tsx' exists. \n- Do NOT mix TypeScript (.ts/.tsx) and JavaScript (.js/.jsx) unless the project already does. Follow existing patterns.\n================================\n`;
 
         // Initial thinking bubble
         updateMessagesAssistant({
@@ -1508,12 +1515,92 @@
           content: "🧠 Thinking & Planning...",
         });
 
+        // === MANDATORY PROJECT STRUCTURE SCAN ===
+        try {
+          updateMessagesAssistant({
+            uniqueId: `assistant-${currentUniqueId}`,
+            content: "📂 Scanning project structure...",
+          });
+
+          // 1. List Files
+          const fileList = await new Promise((resolve) => {
+            let handleMessage;
+            const timeout = setTimeout(() => {
+              window.removeEventListener("message", handleMessage);
+              resolve([]); // Return empty list on timeout
+            }, 5000);
+
+            handleMessage = (event) => {
+              if (event.data.command === "listFilesResult") {
+                clearTimeout(timeout);
+                window.removeEventListener("message", handleMessage);
+                resolve(event.data.files || []);
+              }
+            };
+            window.addEventListener("message", handleMessage);
+            vscode.postMessage({ command: "listFiles", pattern: "**/*" });
+          });
+
+          if (fileList.length > 0) {
+            // Filter for important directories/files to keep context lean but useful
+            const crucialFiles = fileList.filter(
+              (f) =>
+                f.match(
+                  /^(package\.json|tsconfig\.json|jsconfig\.json|next\.config\.|vite\.config\.|src\/|app\/|pages\/|components\/|public\/|index\.|main\.)/i,
+                ) || f.split("/").length <= 3, // Include root and depth-2 files
+            );
+
+            // If crucial files are too few, just take top 200 of everything
+            const filesToContext =
+              crucialFiles.length > 0 ? crucialFiles : fileList.slice(0, 200);
+
+            currentContext += `\n=== PROJECT FILE STRUCTURE (Scanned) ===\n${filesToContext.join("\n")}\n========================================\n`;
+            console.log(
+              "[webview] Scanned project structure:",
+              filesToContext.length,
+              "files",
+            );
+
+            // 2. Read package.json if exists
+            if (fileList.includes("package.json")) {
+              const pkgContent = await readFileAsync("package.json");
+              if (pkgContent) {
+                currentContext += `\n=== package.json ===\n${pkgContent}\n====================\n`;
+              }
+            }
+
+            // 3. Read tsconfig.json if exists
+            if (fileList.includes("tsconfig.json")) {
+              const tsConfigContent = await readFileAsync("tsconfig.json");
+              if (tsConfigContent) {
+                currentContext += `\n=== tsconfig.json ===\n${tsConfigContent}\n=====================\n`;
+              }
+            }
+          }
+
+          // Restore "Thinking" status
+          updateMessagesAssistant({
+            uniqueId: `assistant-${currentUniqueId}`,
+            content: "🧠 Thinking & Planning...",
+          });
+        } catch (scanError) {
+          console.error("Project scan failed:", scanError);
+          // Continue without scan if it fails
+        }
+
         // Initialize global plan state if starting new workflow
         if (iteration === 1) {
           window.currentPlanMarkdown = "";
         }
 
         while (iteration < MAX_ITERATIONS) {
+          if (!isLoading) {
+            updateMessagesAssistant({
+              uniqueId: `assistant-${currentUniqueId}`,
+              content: "Stopped.",
+            });
+            break;
+          }
           iteration++;
 
           // ... (existing bubble creation code) ...
@@ -2290,14 +2377,35 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
 
             if (stepOutput.includes("[writeFile]")) {
               // Wait for writeFile to finish to avoid race conditions with subsequent readFiles
-              await new Promise((resolve) => {
-                const handleMessage = (event) => {
+              await new Promise((resolve, reject) => {
+                let handleMessage;
+                let handleStop;
+
+                const timeout = setTimeout(() => {
+                  window.removeEventListener("message", handleMessage);
+                  window.removeEventListener("agent-stop", handleStop);
+                  resolve();
+                }, 10000);
+
+                handleStop = () => {
+                  clearTimeout(timeout);
+                  window.removeEventListener("message", handleMessage);
+                  window.removeEventListener("agent-stop", handleStop);
+                  const err = new Error("Aborted by user");
+                  err.name = "AbortError";
+                  reject(err);
+                };
+
+                handleMessage = (event) => {
                   if (event.data.command === "writeFileFinished") {
+                    clearTimeout(timeout);
                     window.removeEventListener("message", handleMessage);
+                    window.removeEventListener("agent-stop", handleStop);
                     resolve();
                   }
                 };
                 window.addEventListener("message", handleMessage);
+                window.addEventListener("agent-stop", handleStop);
 
                 // Send the message inside the promise setup to ensure we don't miss the response
                 // (though unlikely with JS event loop)
@@ -2305,12 +2413,6 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
                   type: "writeFile",
                   assistantMessage: stepOutput,
                 });
-
-                // Fallback timeout just in case
-                setTimeout(() => {
-                  window.removeEventListener("message", handleMessage);
-                  resolve();
-                }, 10000);
               });
 
               const fileRegex = /\[file name="([^"]+)"\]/g;
@@ -2382,8 +2484,19 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
                 });
 
                 // Request execution and wait for completion
-                const exitCode = await new Promise((resolve) => {
-                  const handleMessage = (event) => {
+                const exitCode = await new Promise((resolve, reject) => {
+                  let handleMessage;
+                  let handleStop;
+
+                  handleStop = () => {
+                    window.removeEventListener("message", handleMessage);
+                    window.removeEventListener("agent-stop", handleStop);
+                    const err = new Error("Aborted by user");
+                    err.name = "AbortError";
+                    reject(err);
+                  };
+
+                  handleMessage = (event) => {
                     if (event.data.command === "commandOutput") {
                       terminalOutput += event.data.output;
                       // Update UI
@@ -2394,6 +2507,7 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
                     }
                     if (event.data.command === "commandFinished") {
                       window.removeEventListener("message", handleMessage);
+                      window.removeEventListener("agent-stop", handleStop);
 
                       // Add note about external terminal if we didn't capture much output
                       if (terminalOutput.trim().length === 0) {
@@ -2432,8 +2546,24 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
 
                       resolve(event.data.exitCode);
                     }
+                    // Handle commandStopped event from SidebarProvider
+                    if (event.data.command === "commandStopped") {
+                      window.removeEventListener("message", handleMessage);
+                      window.removeEventListener("agent-stop", handleStop);
+                      terminalOutput += `\n\n[Process stopped by user]`;
+
+                      updateMessagesAssistant({
+                        uniqueId: `assistant-${uniqueId}`,
+                        content: planMarkdown + terminalOutput + "\n\`\`\`",
+                      });
+
+                      const err = new Error("Aborted by user");
+                      err.name = "AbortError";
+                      reject(err);
+                    }
                   };
                   window.addEventListener("message", handleMessage);
+                  window.addEventListener("agent-stop", handleStop);
                   vscode.postMessage({ type: "executeCommand", command });
                 });
 
