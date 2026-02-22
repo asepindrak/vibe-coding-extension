@@ -187,7 +187,7 @@ MIT License
 
 # 📜 Release Notes
 
-## 2.0.0
+## 2.0.1
 
 - 🚀 Major Update: Agent Mode (Autonomous Task Execution)
 - 🖼 Added File & Image Upload Support
