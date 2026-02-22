@@ -476,7 +476,7 @@ class SidebarProvider {
                             return;
                         }
                         const results = [];
-                        const excludePattern = "**/{node_modules,.git,dist,build,out,coverage,.vscode,.idea,tmp,temp,venv,__pycache__}/**";
+                        const excludePattern = "**/{node_modules,.git,dist,build,out,coverage,.vscode,.idea,tmp,temp,venv,__pycache__,.vico}/**";
                         const codeFilePattern = "**/*.{ts,js,tsx,jsx,json,html,css,scss,md,py,java,c,cpp,h,go,rs,php,rb,sh,yaml,yml,xml,sql,graphql,prisma,vue,svelte,astro}";
                         this.sendLog(`[Search] Finding files... Pattern: ${codeFilePattern}`);
                         // Find matching files first
@@ -548,7 +548,7 @@ class SidebarProvider {
                             throw new Error("No workspace open");
                         }
                         // Standard exclude pattern to avoid clutter
-                        const excludePattern = "**/{node_modules,.git,dist,build,out,coverage,.vscode,.idea,tmp,temp,venv,__pycache__}/**";
+                        const excludePattern = "**/{node_modules,.git,dist,build,out,coverage,.vscode,.idea,tmp,temp,venv,__pycache__,.vico}/**";
                         let pattern = message.pattern || "**/*";
                         this.sendLog(`[ListFiles] Request pattern: "${pattern}"`);
                         // Smart pattern: if it looks like a simple filename search (no path separators), make it recursive
@@ -714,7 +714,7 @@ class SidebarProvider {
     maxFilesPerFolder = 2;
     async getAllWorkspaceFiles() {
         try {
-            const files = await vscode.workspace.findFiles("**/*", "{**/node_modules/**,**/dist/**,**/build/**,**/out/**,**/.git/**,**/.svn/**,**/.hg/**,**/.next/**,**/.nuxt/**,**/.expo/**,**/vendor/**,**/__pycache__/**,**/.pytest_cache/**,**/venv/**,**/.venv/**,**/.idea/**,**/.vscode/**,**/.vs/**,**/coverage/**,**/bin/**,**/obj/**,**/target/**,**/Pods/**,**/env/**,**/.env/**,**/tmp/**,**/temp/**,**/*.log,**/*.lock,**/*.zip,**/*.png,**/*.jpg,**/*.jpeg,**/*.gif,**/*.exe,**/*.dll,**/*.bin,**/*.class,**/*.so,**/*.o,**/*.a}");
+            const files = await vscode.workspace.findFiles("**/*", "{**/node_modules/**,**/dist/**,**/build/**,**/out/**,**/.git/**,**/.svn/**,**/.hg/**,**/.next/**,**/.nuxt/**,**/.expo/**,**/vendor/**,**/__pycache__/**,**/.pytest_cache/**,**/venv/**,**/.venv/**,**/.idea/**,**/.vscode/**,**/.vs/**,**/coverage/**,**/bin/**,**/obj/**,**/target/**,**/Pods/**,**/env/**,**/.env/**,**/tmp/**,**/temp/**,**/.vico/**,**/.vico,**/*.log,**/*.lock,**/*.zip,**/*.png,**/*.jpg,**/*.jpeg,**/*.gif,**/*.exe,**/*.dll,**/*.bin,**/*.class,**/*.so,**/*.o,**/*.a}");
             // Generate a lightweight file tree/list so the agent knows the structure
             // even if file contents are truncated.
             const filePaths = files.map((f) => vscode.workspace.asRelativePath(f));

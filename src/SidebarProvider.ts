@@ -498,7 +498,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
               const results: string[] = [];
 
               const excludePattern =
-                "**/{node_modules,.git,dist,build,out,coverage,.vscode,.idea,tmp,temp,venv,__pycache__}/**";
+                "**/{node_modules,.git,dist,build,out,coverage,.vscode,.idea,tmp,temp,venv,__pycache__,.vico}/**";
 
               const codeFilePattern =
                 "**/*.{ts,js,tsx,jsx,json,html,css,scss,md,py,java,c,cpp,h,go,rs,php,rb,sh,yaml,yml,xml,sql,graphql,prisma,vue,svelte,astro}";
@@ -599,7 +599,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
               }
               // Standard exclude pattern to avoid clutter
               const excludePattern =
-                "**/{node_modules,.git,dist,build,out,coverage,.vscode,.idea,tmp,temp,venv,__pycache__}/**";
+                "**/{node_modules,.git,dist,build,out,coverage,.vscode,.idea,tmp,temp,venv,__pycache__,.vico}/**";
               let pattern = message.pattern || "**/*";
 
               this.sendLog(`[ListFiles] Request pattern: "${pattern}"`);
@@ -826,7 +826,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     try {
       const files = await vscode.workspace.findFiles(
         "**/*",
-        "{**/node_modules/**,**/dist/**,**/build/**,**/out/**,**/.git/**,**/.svn/**,**/.hg/**,**/.next/**,**/.nuxt/**,**/.expo/**,**/vendor/**,**/__pycache__/**,**/.pytest_cache/**,**/venv/**,**/.venv/**,**/.idea/**,**/.vscode/**,**/.vs/**,**/coverage/**,**/bin/**,**/obj/**,**/target/**,**/Pods/**,**/env/**,**/.env/**,**/tmp/**,**/temp/**,**/*.log,**/*.lock,**/*.zip,**/*.png,**/*.jpg,**/*.jpeg,**/*.gif,**/*.exe,**/*.dll,**/*.bin,**/*.class,**/*.so,**/*.o,**/*.a}",
+        "{**/node_modules/**,**/dist/**,**/build/**,**/out/**,**/.git/**,**/.svn/**,**/.hg/**,**/.next/**,**/.nuxt/**,**/.expo/**,**/vendor/**,**/__pycache__/**,**/.pytest_cache/**,**/venv/**,**/.venv/**,**/.idea/**,**/.vscode/**,**/.vs/**,**/coverage/**,**/bin/**,**/obj/**,**/target/**,**/Pods/**,**/env/**,**/.env/**,**/tmp/**,**/temp/**,**/.vico/**,**/.vico,**/*.log,**/*.lock,**/*.zip,**/*.png,**/*.jpg,**/*.jpeg,**/*.gif,**/*.exe,**/*.dll,**/*.bin,**/*.class,**/*.so,**/*.o,**/*.a}",
       );
 
       // Generate a lightweight file tree/list so the agent knows the structure
