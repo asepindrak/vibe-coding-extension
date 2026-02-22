@@ -854,8 +854,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         const raw = document.getText();
         const priority = this.isPriorityFile(file.fsPath);
         const config = this.isConfigFile(file.fsPath);
-        const compressed =
-          priority || config
+        const isMarkdown = file.fsPath.toLowerCase().endsWith(".md");
+        const compressed = isMarkdown
+          ? raw.trim() // Keep markdown headers and structure intact
+          : priority || config
             ? this.stripComments(raw)
             : this.compressCodeSkeleton(raw);
 

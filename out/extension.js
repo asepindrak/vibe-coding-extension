@@ -334,27 +334,44 @@ async function writeFileVico(context, editor, sidebarProvider) {
             const dirUri = vscode.Uri.file(path.dirname(fileUri.fsPath));
             // 3. Create directory if it doesn't exist
             await vscode.workspace.fs.createDirectory(dirUri);
-            // Special handling for memory.md: Append and write directly (no diff)
-            if (relativePath.toLowerCase().endsWith("memory.md")) {
+            // Special handling for history.md, lessons.md, architecture.md, and style.md:
+            // Append and write directly (no diff) for log files.
+            // Overwrite directly for structural/style definition files (architecture.md, style.md) as they are source of truth.
+            const isLogFile = relativePath.toLowerCase().endsWith("history.md") ||
+                relativePath.toLowerCase().endsWith("lessons.md") ||
+                relativePath.toLowerCase().endsWith("memory.md");
+            const isStructuralFile = relativePath.toLowerCase().endsWith("architecture.md") ||
+                relativePath.toLowerCase().endsWith("style.md");
+            if (isLogFile || isStructuralFile) {
                 let newContent = fileContent;
                 let originalContent = null;
-                try {
-                    const existingBytes = await vscode.workspace.fs.readFile(fileUri);
-                    const existingString = Buffer.from(existingBytes).toString("utf8");
-                    if (existingString.includes(fileContent.trim())) {
-                        duplicateSkipped = true;
-                        continue;
+                if (isLogFile) {
+                    try {
+                        const existingBytes = await vscode.workspace.fs.readFile(fileUri);
+                        const existingString = Buffer.from(existingBytes).toString("utf8");
+                        if (existingString.includes(fileContent.trim())) {
+                            duplicateSkipped = true;
+                            continue;
+                        }
+                        if (existingString.trim().length > 0) {
+                            originalContent = existingString;
+                            // Append with a separator and timestamp for better organization
+                            const timestamp = new Date().toISOString().split("T")[0];
+                            newContent =
+                                existingString + `\n\n## [${timestamp}]\n` + newContent;
+                        }
                     }
-                    if (existingString.trim().length > 0) {
-                        originalContent = existingString;
-                        // Append with a separator and timestamp for better organization
-                        const timestamp = new Date().toISOString().split("T")[0];
-                        newContent =
-                            existingString + `\n\n## [${timestamp}]\n` + newContent;
+                    catch (e) {
+                        // File doesn't exist, proceed with newContent
                     }
                 }
-                catch (e) {
-                    // File doesn't exist, proceed with newContent
+                else {
+                    // Structural files: Read original for history tracking, but overwrite content
+                    try {
+                        const existingBytes = await vscode.workspace.fs.readFile(fileUri);
+                        originalContent = Buffer.from(existingBytes).toString("utf8");
+                    }
+                    catch (e) { }
                 }
                 try {
                     await vscode.workspace.fs.writeFile(fileUri, Buffer.from(newContent, "utf8"));
@@ -366,7 +383,7 @@ async function writeFileVico(context, editor, sidebarProvider) {
                     continue; // Skip handleDiff
                 }
                 catch (e) {
-                    vico_logger_1.default.error(`Failed to write memory.md:`, e);
+                    vico_logger_1.default.error(`Failed to write .vico file:`, e);
                     // Fallback to handleDiff if direct write fails? No, just log error.
                 }
             }

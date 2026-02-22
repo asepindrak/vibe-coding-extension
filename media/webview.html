@@ -1438,23 +1438,56 @@
           });
         };
 
-        // Try to load project memory
+        // Try to load project memory and other context files
         try {
-          let memoryPath = ".vico/memory.md";
-          let memoryContent = await readFileAsync(memoryPath);
+          const vicoFiles = [
+            "memory.md",
+            "architecture.md",
+            "style.md",
+            "history.md",
+            "lessons.md",
+          ];
+          let memoryFound = false;
 
-          if (!memoryContent) {
-            memoryPath = "memory.md";
-            memoryContent = await readFileAsync(memoryPath);
+          for (const file of vicoFiles) {
+            const vicoPath = `.vico/${file}`;
+            const content = await readFileAsync(vicoPath);
+
+            if (content) {
+              currentContext += `\n=== PROJECT CONTEXT (${vicoPath}) ===\n${content}\n========================================\n`;
+
+              if (
+                file === "memory.md" ||
+                file === "history.md" ||
+                file === "lessons.md"
+              ) {
+                if (file === "memory.md") memoryFound = true;
+                currentContext += `\n=== SYSTEM NOTE ===\nTo update ${vicoPath}, ONLY generate the NEW content to be appended. Do NOT regenerate the entire file.\n===================\n`;
+              }
+
+              if (file === "architecture.md" || file === "style.md") {
+                currentContext += `\n=== SYSTEM NOTE ===\nTo update ${vicoPath}, you MUST regenerate the ENTIRE content. This file represents the current state of truth.\n===================\n`;
+              }
+
+              console.log(`[webview] Loaded project context from ${vicoPath}.`);
+            } else if (file === "memory.md") {
+              // Fallback for memory.md in root if not in .vico
+              const rootMemoryPath = "memory.md";
+              const rootMemoryContent = await readFileAsync(rootMemoryPath);
+              if (rootMemoryContent) {
+                memoryFound = true;
+                currentContext += `\n=== PROJECT MEMORY (${rootMemoryPath}) ===\n${rootMemoryContent}\n========================================\n`;
+                currentContext += `\n=== SYSTEM NOTE ===\nTo update ${rootMemoryPath}, ONLY generate the NEW content to be appended. Do NOT regenerate the entire file.\n===================\n`;
+                console.log(
+                  `[webview] Loaded project memory from ${rootMemoryPath}.`,
+                );
+              }
+            }
           }
 
-          if (memoryContent) {
-            currentContext += `\n=== PROJECT MEMORY (${memoryPath}) ===\n${memoryContent}\n========================================\n`;
-            currentContext += `\n=== SYSTEM NOTE ===\nTo update ${memoryPath}, ONLY generate the NEW content to be appended. Do NOT regenerate the entire file.\n===================\n`;
-            console.log(`[webview] Loaded project memory from ${memoryPath}.`);
-          } else {
+          if (!memoryFound) {
             // File missing, instruct agent to create it (prefer .vico/memory.md)
-            currentContext += `\n=== SYSTEM NOTE ===\nThe memory file .vico/memory.md does not exist. You MUST create it as your first action. Populate it with the project's Tech Stack, Design Patterns, and key architectural decisions. Then proceed with the user's request.\n===================\n`;
+            currentContext += `\n=== SYSTEM NOTE ===\nThe memory file .vico/memory.md does not exist. If this is a new project, run the CLI generator FIRST (e.g., npx create-next-app .). Create .vico/memory.md ONLY AFTER the project structure is ready.\n===================\n`;
           }
         } catch (e) {
           console.log(
@@ -3528,17 +3561,23 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
 
               Prism.highlightElement(code);
 
-              const copyButton = document.createElement("button");
-              copyButton.textContent = "Copy";
-              copyButton.className = "mt-2 btn-primary px-2 py-1 text-xs";
-              copyButton.onclick = () => handleCopy(codeContent);
-              codeDiv.appendChild(copyButton);
+              const modeSelect = document.getElementById("modeSelect");
+              const isAgentMode = modeSelect && modeSelect.value === "agent";
 
-              const applyButton = document.createElement("button");
-              applyButton.textContent = "Apply";
-              applyButton.className = "mt-2 btn-elegant px-2 py-1 ml-2 text-xs";
-              applyButton.onclick = () => handleaApply(codeContent);
-              codeDiv.appendChild(applyButton);
+              if (!isAgentMode) {
+                const copyButton = document.createElement("button");
+                copyButton.textContent = "Copy";
+                copyButton.className = "mt-2 btn-primary px-2 py-1 text-xs";
+                copyButton.onclick = () => handleCopy(codeContent);
+                codeDiv.appendChild(copyButton);
+
+                const applyButton = document.createElement("button");
+                applyButton.textContent = "Apply";
+                applyButton.className =
+                  "mt-2 btn-elegant px-2 py-1 ml-2 text-xs";
+                applyButton.onclick = () => handleaApply(codeContent);
+                codeDiv.appendChild(applyButton);
+              }
 
               container.appendChild(codeDiv);
             } else if (part.startsWith("`") && part.endsWith("`")) {
