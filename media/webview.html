@@ -24,14 +24,56 @@
           Teach AI 🔄
         </button>
         <button
+          id="newChatButton"
+          class="btn-elegant"
+          style="height: 32px; padding: 0 10px; margin-left: 5px"
+          title="New Chat"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-4 w-4 pointer-events-none"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M12 4v16m8-8H4"
+            />
+          </svg>
+        </button>
+        <button
+          id="historyButton"
+          class="btn-elegant"
+          style="height: 32px; padding: 0 10px; margin-left: 5px"
+          title="History"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-4 w-4 pointer-events-none"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+        </button>
+        <button
           id="logoutButton"
           class="btn-elegant"
-          style="height: 32px; padding: 0 10px"
+          style="height: 32px; padding: 0 10px; margin-left: 5px"
           title="Logout"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            class="h-4 w-4"
+            class="h-4 w-4 pointer-events-none"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -185,6 +227,54 @@
     >
       <div id="planContent" style="font-size: 0.875rem; color: #c9d1d9"></div>
     </div>
+
+    <!-- History Popup -->
+    <div
+      id="historyPopup"
+      style="
+        position: fixed;
+        top: 48px;
+        right: 10px;
+        background-color: #1a1d23;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        padding: 0;
+        width: 300px;
+        max-height: 400px;
+        overflow-y: auto;
+        display: none;
+        z-index: 9999;
+      "
+    >
+      <div
+        class="p-4 border-b border-gray-700 font-bold text-gray-300 flex justify-between items-center"
+        style="padding: 12px 16px"
+      >
+        <span>Chat History</span>
+        <button
+          id="closeHistory"
+          class="text-white hover:text-white"
+          style="
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-size: 1.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          "
+        >
+          &times;
+        </button>
+      </div>
+      <div id="historyList" class="flex flex-col">
+        <!-- History items will be injected here -->
+        <div class="p-4 text-center text-gray-500 text-sm">
+          No history found
+        </div>
+      </div>
+    </div>
     <script type="module">
       var isLoading = false;
       var messageArray = [];
@@ -203,6 +293,8 @@
       const vscode = acquireVsCodeApi();
       const persistedState = vscode.getState() || {};
 
+      var currentSessionId = Date.now().toString(); // Default session ID
+
       function saveState() {
         vscode.setState({
           messagesHTML: document.getElementById("content").innerHTML,
@@ -211,6 +303,233 @@
           userId: localStorage.getItem("userId"),
           messages: messageArray,
           mode: document.getElementById("modeSelect")?.value ?? "agent",
+          currentSessionId: currentSessionId,
+        });
+
+        // Also trigger save history to extension if we have messages
+        if (messageArray.length > 0) {
+          saveCurrentChatToHistory();
+        }
+      }
+
+      function saveCurrentChatToHistory() {
+        const title =
+          messageArray.length > 0
+            ? messageArray[0].content.substring(0, 30) + "..."
+            : "New Chat";
+
+        const historyItem = {
+          id: currentSessionId,
+          title: title,
+          timestamp: Date.now(),
+          messages: messageArray,
+          mode: document.getElementById("modeSelect")?.value ?? "agent",
+        };
+
+        // Optimistically update local history if available
+        if (window.chatHistory) {
+          const existingIndex = window.chatHistory.findIndex(
+            (h) => h.id === currentSessionId,
+          );
+          if (existingIndex >= 0) {
+            window.chatHistory[existingIndex] = historyItem;
+          } else {
+            window.chatHistory.unshift(historyItem); // Add to top
+          }
+          // Trim history if too long?
+          if (window.chatHistory.length > 50) {
+            window.chatHistory = window.chatHistory.slice(0, 50);
+          }
+        }
+
+        vscode.postMessage({
+          type: "saveHistoryItem",
+          item: historyItem,
+        });
+      }
+
+      function startNewChat(skipSave = false) {
+        try {
+          if (isLoading) {
+            // Force stop if user confirmed new chat while loading
+            isLoading = false;
+            if (agentAbortController) {
+              agentAbortController.abort();
+              agentAbortController = null;
+            }
+            const btnStop = document.getElementById("button-stop");
+            const btnSend = document.getElementById("button-send");
+            const loader = document.getElementById("loader");
+            if (btnStop) btnStop.classList.add("hidden");
+            if (btnSend) btnSend.classList.remove("hidden");
+            if (loader) loader.classList.add("hidden");
+          }
+
+          if (messageArray.length > 0 && !skipSave) {
+            try {
+              saveCurrentChatToHistory();
+            } catch (e) {
+              console.error("Failed to save history:", e);
+            }
+          }
+
+          // Reset state
+          currentSessionId = Date.now().toString();
+          messageArray = [];
+          const content = document.getElementById("content");
+          if (content) content.innerHTML = "";
+          const msgInput = document.getElementById("messageInput");
+          if (msgInput) msgInput.value = "";
+          const generating = document.getElementById("generating");
+          if (generating) generating.innerHTML = "";
+
+          // Clear attachments
+          attachments = [];
+          renderAttachments();
+
+          // Reset plan button
+          const planButton = document.getElementById("planButton");
+          if (planButton) planButton.style.display = "none";
+
+          saveState();
+        } catch (e) {
+          console.error("Error in startNewChat:", e);
+          vscode.postMessage({
+            command: "error",
+            error: "Failed to reset chat: " + e.message,
+          });
+        }
+      }
+
+      function loadHistorySession(sessionId) {
+        const session = window.chatHistory.find((h) => h.id === sessionId);
+        if (!session) return;
+
+        if (isLoading) {
+          if (!confirm("Agent is working. Stop and load history?")) return;
+          isLoading = false;
+          if (agentAbortController) {
+            agentAbortController.abort();
+            agentAbortController = null;
+          }
+          const btnStop = document.getElementById("button-stop");
+          const btnSend = document.getElementById("button-send");
+          const loader = document.getElementById("loader");
+          if (btnStop) btnStop.classList.add("hidden");
+          if (btnSend) btnSend.classList.remove("hidden");
+          if (loader) loader.classList.add("hidden");
+        }
+
+        // Save current before switching?
+        if (messageArray.length > 0) {
+          saveCurrentChatToHistory();
+        }
+
+        currentSessionId = session.id;
+        messageArray = session.messages || [];
+
+        // Re-render messages
+        const contentDiv = document.getElementById("content");
+        contentDiv.innerHTML = "";
+
+        messageArray.forEach((msg) => {
+          if (msg.isHidden) return;
+          // We need to re-render bubbles.
+          // Since we don't have the HTML stored in history (only content), we use displayMessagesAssistant/User
+          // But those functions append to DOM.
+
+          if (msg.role === "user") {
+            const uniqueId = Date.now() + Math.random();
+            displayMessagesAssistant({
+              role: "user",
+              content: msg.content,
+              uniqueId,
+            });
+          } else {
+            const uniqueId = Date.now() + Math.random();
+            displayMessagesAssistant({
+              role: "assistant",
+              content: msg.content,
+              uniqueId,
+            });
+          }
+        });
+
+        // Restore mode
+        const modeSelect = document.getElementById("modeSelect");
+        if (modeSelect && session.mode) {
+          modeSelect.value = session.mode;
+        }
+
+        // Hide history popup
+        document.getElementById("historyPopup").style.display = "none";
+        saveState();
+      }
+
+      function deleteHistorySession(sessionId) {
+        if (!window.chatHistory) return;
+        window.chatHistory = window.chatHistory.filter(
+          (h) => h.id !== sessionId,
+        );
+        vscode.postMessage({
+          type: "deleteHistoryItem",
+          id: sessionId,
+        });
+        renderHistoryList();
+        // If deleted current session, start new chat?
+        if (sessionId === currentSessionId) {
+          startNewChat(true);
+        }
+      }
+
+      function renderHistoryList() {
+        const listContainer = document.getElementById("historyList");
+        listContainer.innerHTML = "";
+
+        if (!window.chatHistory || window.chatHistory.length === 0) {
+          listContainer.innerHTML =
+            '<div class="p-4 text-center text-gray-500 text-sm">No history found</div>';
+          return;
+        }
+
+        window.chatHistory.forEach((item) => {
+          const date = new Date(item.timestamp).toLocaleString();
+          const div = document.createElement("div");
+          div.className = "history-item group";
+          div.onclick = () => loadHistorySession(item.id);
+
+          const infoDiv = document.createElement("div");
+          infoDiv.className = "history-info";
+
+          const title = document.createElement("span");
+          title.className = "history-title";
+          title.textContent = item.title || "Untitled Chat";
+
+          const meta = document.createElement("span");
+          meta.className = "history-date";
+          meta.textContent = date;
+
+          infoDiv.appendChild(title);
+          infoDiv.appendChild(meta);
+
+          // Delete button
+          const deleteBtn = document.createElement("button");
+          deleteBtn.className = "history-delete-btn";
+          deleteBtn.title = "Delete Chat";
+          deleteBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          `;
+          deleteBtn.onclick = (e) => {
+            e.stopPropagation();
+            // Removed confirm dialog as it might block the webview
+            deleteHistorySession(item.id);
+          };
+
+          div.appendChild(infoDiv);
+          div.appendChild(deleteBtn);
+          listContainer.appendChild(div);
         });
       }
 
@@ -226,6 +545,9 @@
       });
 
       document.addEventListener("DOMContentLoaded", function () {
+        // Always request history on load to ensure window.chatHistory is populated
+        vscode.postMessage({ type: "getHistory" });
+
         const token = localStorage.getItem("token");
         const userId = localStorage.getItem("userId");
         const modeSelect = document.getElementById("modeSelect");
@@ -255,6 +577,58 @@
         btnWorkspace.addEventListener("click", updateWorkspaces);
         const logoutButton = document.getElementById("logoutButton");
         logoutButton.addEventListener("click", logout);
+
+        const newChatButton = document.getElementById("newChatButton");
+        if (newChatButton) {
+          newChatButton.addEventListener("click", () => {
+            // Remove confirm for now to test if it's blocking
+            // if (confirm("Start a new chat? Current chat will be saved to history.")) {
+            try {
+              startNewChat();
+            } catch (e) {
+              console.error("Error starting new chat:", e);
+              vscode.postMessage({
+                command: "error",
+                error: "Failed to start new chat: " + e.message,
+              });
+            }
+            // }
+          });
+        }
+
+        const historyButton = document.getElementById("historyButton");
+        const historyPopup = document.getElementById("historyPopup");
+        const closeHistoryBtn = document.getElementById("closeHistory");
+
+        if (historyButton && historyPopup) {
+          historyButton.addEventListener("click", () => {
+            if (historyPopup.style.display === "none") {
+              // Request latest history
+              vscode.postMessage({ type: "getHistory" });
+              historyPopup.style.display = "block";
+            } else {
+              historyPopup.style.display = "none";
+            }
+          });
+
+          // Close when clicking outside
+          document.addEventListener("click", (e) => {
+            if (
+              historyPopup &&
+              !historyPopup.contains(e.target) &&
+              !historyButton.contains(e.target) &&
+              historyPopup.style.display === "block"
+            ) {
+              historyPopup.style.display = "none";
+            }
+          });
+        }
+
+        if (closeHistoryBtn) {
+          closeHistoryBtn.addEventListener("click", () => {
+            historyPopup.style.display = "none";
+          });
+        }
 
         // Plan Button Logic
         const planButton = document.getElementById("planButton");
@@ -323,6 +697,11 @@
 
         window.addEventListener("message", async (event) => {
           const messageEvent = event.data;
+
+          if (messageEvent.command === "systemLog") {
+            console.log("[SystemLog]", messageEvent.message);
+            return;
+          }
 
           if (messageEvent.command == "updateFileInfo") {
             if (messageEvent.filePath) {
@@ -401,6 +780,12 @@
             return;
           }
 
+          if (messageEvent.command === "historyLoad") {
+            window.chatHistory = messageEvent.history || [];
+            renderHistoryList();
+            return;
+          }
+
           if (messageEvent.command === "tokenValid") {
             localStorage.setItem("token", messageEvent.token);
             localStorage.setItem("userId", messageEvent.userId);
@@ -451,55 +836,8 @@
             return;
           }
 
-          const messageText = event.data; // Menerima pesan dari extension
-          let coding = messageText.text || ""; // Menggunakan operator logika OR untuk inisialisasi
-          let allCode = messageText.allCode || ""; // Menggunakan operator logika OR untuk inisialisasi
-          const allCodeStorageKey = "allCodeStorage"; // Define a key for storing all code in local storage
-          const codingStorageKey = "codingStorage"; // Define a key for storing all code in local storage
-          const storedAllCode = localStorage.getItem(allCodeStorageKey);
-          const storedCoding = localStorage.getItem(codingStorageKey);
-
-          if (storedAllCode === allCode) {
-            allCode = ""; // Reset allCode jika sama dengan yang disimpan
-          }
-          if (storedCoding === coding) {
-            coding = ""; // Reset allCode jika sama dengan yang disimpan
-          }
-
-          // Save all code to local storage only if it's not empty
-          if (allCode) {
-            localStorage.setItem(allCodeStorageKey, allCode);
-            console.log("All code saved to local storage.");
-          } else {
-            console.log("No allCode to save.");
-          }
-
-          // Save all code to local storage only if it's not empty
-          if (coding) {
-            localStorage.setItem(codingStorageKey, coding);
-            console.log("Coding saved to local storage.");
-          } else {
-            console.log("No coding to save.");
-          }
-
-          const messageInput = document.getElementById("messageInput");
-          // Menghapus spasi di awal dan akhir pada load
-
-          let message = messageInput.value.trim();
-          if (coding && mode !== "agent") {
-            message =
-              "[labelInstruction]Instruction: [labelInstruction]" +
-              message +
-              "[selection]" +
-              coding +
-              "[selection]";
-          }
-          if (allCode && mode !== "agent") {
-            message = "[fullcode]" + allCode + "[fullcode]" + message;
-          }
-          console.log("send message to API");
-          if (!message) return;
-          sendMessageToApi(message);
+          // Legacy handling for messages without command - now handled in handleSendMessage via explicit listener
+          return;
         });
       });
 
@@ -626,17 +964,67 @@
         document.getElementById("generating").innerHTML = "Generating...";
         const sendMessageButton = document.getElementById("button-send");
         const stopButton = document.getElementById("button-stop");
-        // const loader = document.getElementById("loader");
 
-        // Ganti tombol send dengan stop
         sendMessageButton.classList.add("hidden");
         stopButton.classList.remove("hidden");
-        // loader.classList.remove("hidden");
 
         console.log("send message to Vibe Coding");
-        // Proses pengiriman pesan
-        vscode.postMessage({ command: "getSelectedText" });
-        // document.getElementById("generating").innerHTML = ""; // Don't clear yet
+
+        // Wait for response from extension
+        const response = await new Promise((resolve) => {
+          const handler = (event) => {
+            const msg = event.data;
+            if (msg.command === "selectedTextResponse") {
+              window.removeEventListener("message", handler);
+              resolve(msg);
+            }
+          };
+          window.addEventListener("message", handler);
+          vscode.postMessage({ command: "getSelectedText" });
+
+          // Fallback timeout
+          setTimeout(() => {
+            window.removeEventListener("message", handler);
+            resolve({ text: "", allCode: "" });
+          }, 2000);
+        });
+
+        const coding = response.text || "";
+        const allCode = response.allCode || "";
+
+        const allCodeStorageKey = "allCodeStorage";
+        const codingStorageKey = "codingStorage";
+        const storedAllCode = localStorage.getItem(allCodeStorageKey);
+        const storedCoding = localStorage.getItem(codingStorageKey);
+
+        if (allCode && storedAllCode !== allCode) {
+          localStorage.setItem(allCodeStorageKey, allCode);
+          console.log("All code saved to local storage.");
+        }
+        if (coding && storedCoding !== coding) {
+          localStorage.setItem(codingStorageKey, coding);
+          console.log("Coding saved to local storage.");
+        }
+
+        let message = messageVal;
+        const modeSelect = document.getElementById("modeSelect");
+        const mode = modeSelect ? modeSelect.value : "agent";
+
+        if (coding && mode !== "agent") {
+          message =
+            "[labelInstruction]Instruction: [labelInstruction]" +
+            message +
+            "[selection]" +
+            coding +
+            "[selection]";
+        }
+        if (allCode && mode !== "agent") {
+          message = "[fullcode]" + allCode + "[fullcode]" + message;
+        }
+
+        console.log("send message to API");
+        if (!message) return;
+        sendMessageToApi(message);
       }
 
       function stopGeneration() {
@@ -650,6 +1038,13 @@
           } catch (e) {}
           agentAbortController = null;
         }
+
+        // Notify extension to abort any running tasks
+        vscode.postMessage({ command: "abort" });
+
+        // Dispatch event for internal listeners
+        window.dispatchEvent(new Event("agent-stop"));
+
         isLoading = false;
 
         const sendMessageButton = document.getElementById("button-send");
@@ -908,166 +1303,211 @@
           );
         } catch (e) {}
 
-        // 1. Request Plan
+        let iteration = 0;
+        const MAX_ITERATIONS = 25;
+        let currentContext = "";
+        let currentModifiedFiles = new Set();
+        let currentUniqueId = uniqueId;
+
+        // Initial thinking bubble
         updateMessagesAssistant({
-          uniqueId: `assistant-${uniqueId}`,
+          uniqueId: `assistant-${currentUniqueId}`,
           content: "🧠 Thinking & Planning...",
         });
 
-        try {
-          const response = await fetch(
-            "http://localhost:13100/api/agent/plan",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                userId,
-                token,
-                message,
-                attachments,
-                history: messageArray,
-              }),
-              signal: agentAbortController?.signal,
-            },
-          );
+        while (iteration < MAX_ITERATIONS) {
+          iteration++;
 
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
-          let planJson = "";
-
-          while (true) {
-            const { value, done } = await reader.read();
-            if (done) break;
-            const chunk = decoder.decode(value, { stream: true });
-            planJson += chunk;
-          }
-
-          let planData;
-          try {
-            // Find JSON in the response (in case of extra text)
-            const jsonMatch = planJson.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-              planData = JSON.parse(jsonMatch[0]);
-            } else {
-              throw new Error("Invalid JSON plan");
-            }
-          } catch (e) {
-            updateMessagesAssistant({
-              uniqueId: `assistant-${uniqueId}`,
-              content: `Error parsing plan: ${e.message}\nRaw output:\n${planJson}`,
+          // For iterations > 1, create a new bubble
+          if (iteration > 1) {
+            currentUniqueId = Date.now() + Math.random();
+            displayMessagesAssistant({
+              role: "assistant",
+              content: "",
+              uniqueId: `assistant-${currentUniqueId}`,
             });
-            resetUI();
-            return;
+            updateMessagesAssistant({
+              uniqueId: `assistant-${currentUniqueId}`,
+              content: `🧠 Thinking & Planning (Step ${iteration})...`,
+            });
           }
 
-          // Render Plan
-          let planMarkdown = `**Plan:**\n`;
-          planData.plan.forEach((step) => {
-            planMarkdown += `- [ ] Step ${step.step}: ${step.description}\n`;
-          });
-          updateMessagesAssistant({
-            uniqueId: `assistant-${uniqueId}`,
-            content: planMarkdown,
-          });
+          try {
+            // 1. Request Plan
+            const response = await fetch(
+              "http://localhost:13100/api/agent/plan",
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  userId,
+                  token,
+                  message,
+                  attachments,
+                  history: messageArray,
+                  context: currentContext, // Pass accumulated context
+                }),
+                signal: agentAbortController?.signal,
+              },
+            );
 
-          // Show plan button and update popup
-          const planButton = document.getElementById("planButton");
-          if (planButton) {
-            planButton.style.display = "inline-block";
-            updatePlanButtonTitle(planMarkdown);
-          }
-          updatePlanPopup(planMarkdown);
-          updatePlanButtonTitle(planMarkdown);
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let planJson = "";
 
-          // Execute Plan
-          await executePlan(
-            planData.plan,
-            uniqueId,
-            userId,
-            token,
-            planMarkdown,
-            attachments,
-          );
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              const chunk = decoder.decode(value, { stream: true });
+              planJson += chunk;
+            }
 
-          // Auto-retry if plan was just an analysis step
-          if (!isRetry && planData.plan.length <= 2) {
-            const stepDesc = planData.plan[0].description.toLowerCase();
-            if (
-              stepDesc.includes("check") ||
-              stepDesc.includes("analy") ||
-              stepDesc.includes("identif") ||
-              stepDesc.includes("ls ") ||
-              stepDesc.includes("verif") ||
-              stepDesc.includes("detect")
-            ) {
-              console.log("Auto-retrying plan after analysis step...");
+            let planData;
+            try {
+              // Find JSON in the response (robust extraction)
+              let jsonString = planJson;
 
-              // Mark previous plan as done/analysis phase
+              // 1. Try to extract from markdown code block first
+              const markdownMatch = planJson.match(
+                /```(?:json)?\s*([\s\S]*?)```/,
+              );
+              if (markdownMatch) {
+                jsonString = markdownMatch[1];
+              }
+
+              // 2. Find the first '{' and last '}' to isolate the JSON object
+              const firstBrace = jsonString.indexOf("{");
+              const lastBrace = jsonString.lastIndexOf("}");
+
+              if (
+                firstBrace !== -1 &&
+                lastBrace !== -1 &&
+                lastBrace > firstBrace
+              ) {
+                const potentialJson = jsonString.substring(
+                  firstBrace,
+                  lastBrace + 1,
+                );
+                planData = JSON.parse(potentialJson);
+              } else {
+                throw new Error("No valid JSON object found in response");
+              }
+            } catch (e) {
+              console.error("JSON Parse Error:", e);
               updateMessagesAssistant({
-                uniqueId: `assistant-${uniqueId}`,
-                content:
-                  planMarkdown +
-                  `\n\n> *Analysis complete. Proceeding to implementation planning...*`,
+                uniqueId: `assistant-${currentUniqueId}`,
+                content: `**Error parsing agent plan.**\n\nRaw output:\n${planJson}`,
               });
-
-              // Create NEW bubble for the next phase
-              const newUniqueId = Date.now() + Math.random();
-
-              // Add an empty “assistant” bubble that we’ll update
-              displayMessagesAssistant({
-                role: "assistant",
-                content: "",
-                uniqueId: `assistant-${newUniqueId}`,
-              });
-
-              // Trigger workspace update and wait for tech stack to be refreshed
-              console.log(
-                "Triggering workspace update for tech stack refresh...",
-              );
-              updateWorkspaces(true);
-
-              await new Promise((resolve) => {
-                window.resolveWorkspaceUpdate = resolve;
-                setTimeout(() => {
-                  if (window.resolveWorkspaceUpdate) {
-                    console.log(
-                      "Workspace update timed out, proceeding anyway...",
-                    );
-                    window.resolveWorkspaceUpdate = null;
-                    resolve();
-                  }
-                }, 5000);
-              });
-
-              // Recursively call handleAgentWorkflow with new ID and isRetry=true
-              const retryMessage =
-                message +
-                " (Safety check complete. Proceed with full implementation immediately.)";
-              await handleAgentWorkflow(
-                retryMessage,
-                newUniqueId,
-                attachments,
-                true,
-              );
+              resetUI();
               return;
             }
-          }
-        } catch (err) {
-          if (err.name === "AbortError") {
+
+            // Check for completion
+            if (!planData.plan || planData.plan.length === 0) {
+              updateMessagesAssistant({
+                uniqueId: `assistant-${currentUniqueId}`,
+                content: `✅ **Task Completed.**`,
+              });
+              messageArray.push({
+                role: "assistant",
+                content: "✅ Task Completed.",
+              });
+              saveState();
+              resetUI();
+              return;
+            }
+
+            const step = planData.plan[0];
+            if (step.type === "complete") {
+              updateMessagesAssistant({
+                uniqueId: `assistant-${currentUniqueId}`,
+                content: `✅ **Task Completed:** ${step.description}`,
+              });
+              messageArray.push({
+                role: "assistant",
+                content: `✅ Task Completed: ${step.description}`,
+              });
+              saveState();
+              resetUI();
+              return;
+            }
+
+            // Render Plan
+            let planMarkdown = `**Step ${iteration}:** ${step.description}\n`;
+            // Add Checkbox for the step
+            planMarkdown += `- [ ] ${step.description}\n`;
+
             updateMessagesAssistant({
-              uniqueId: `assistant-${uniqueId}`,
-              content: "Stopped.",
+              uniqueId: `assistant-${currentUniqueId}`,
+              content: planMarkdown,
+            });
+
+            // Update plan popup (shows current step)
+            updatePlanPopup(planMarkdown);
+            updatePlanButtonTitle(planMarkdown);
+
+            // Execute Plan
+            const result = await executePlan(
+              [step],
+              currentUniqueId,
+              userId,
+              token,
+              planMarkdown,
+              attachments,
+              currentContext, // Pass accumulated context
+            );
+
+            // Update context
+            // executePlan now returns the UPDATED full context if we passed it in?
+            // Or does it return just the delta?
+            // Looking at executePlan: context starts as existingContext.
+            // Then it appends to it.
+            // And returns { context: context, ... }
+            // So result.context is the FULL context (old + new).
+            // So we should replace currentContext, not append.
+            currentContext = result.context;
+
+            if (result.modifiedFiles) {
+              result.modifiedFiles.forEach((f) => currentModifiedFiles.add(f));
+            }
+
+            // Handle Auto-Fix / Replan
+            if (result.autoFixTriggered) {
+              // The recursive call has taken over. We stop this loop.
+              return;
+            }
+          } catch (err) {
+            if (err.name === "AbortError") {
+              updateMessagesAssistant({
+                uniqueId: `assistant-${currentUniqueId}`,
+                content: "Stopped.",
+              });
+              resetUI();
+              return;
+            }
+            console.error(err);
+            updateMessagesAssistant({
+              uniqueId: `assistant-${currentUniqueId}`,
+              content: `Error: ${err.message}`,
             });
             resetUI();
             return;
           }
-          console.error(err);
+        }
+
+        // Max iterations reached
+        if (iteration >= MAX_ITERATIONS) {
           updateMessagesAssistant({
-            uniqueId: `assistant-${uniqueId}`,
-            content: `Error: ${err.message}`,
+            uniqueId: `assistant-${currentUniqueId}`,
+            content: `**Stopped: Max iterations (${MAX_ITERATIONS}) reached.**`,
           });
+          messageArray.push({
+            role: "assistant",
+            content: "**Stopped: Max iterations reached.**",
+          });
+          saveState();
           resetUI();
         }
       }
@@ -1079,13 +1519,17 @@
         token,
         initialMarkdown,
         attachments,
+        existingContext = "", // Add existingContext parameter
       ) {
-        let context = "";
+        let context = existingContext; // Initialize with existing context
         let planMarkdown = initialMarkdown;
         let modifiedFiles = new Set();
         let autoFixTriggered = false;
 
         for (const step of plan) {
+          if (!isLoading) {
+            break;
+          }
           // Update to In Progress - use more flexible regex
           const inProgressRegex = new RegExp(
             `^\\s*-\\s*\\[\\s*\\]\\s*(Step\\s+${step.step}:)`,
@@ -1114,7 +1558,7 @@
                   userId,
                   token,
                   step,
-                  context,
+                  context, // Pass the accumulated context
                   mode: "think",
                   attachments,
                 }),
@@ -1169,14 +1613,25 @@
 
                 // Send readFile to extension with timeout
                 try {
-                  const fileContent = await new Promise((resolve) => {
+                  const fileContent = await new Promise((resolve, reject) => {
                     // Define handler first so we can remove it
                     let handleMessage;
+                    let handleStop;
 
                     const timeout = setTimeout(() => {
                       window.removeEventListener("message", handleMessage);
+                      window.removeEventListener("agent-stop", handleStop);
                       resolve(`Error: Timeout reading file ${filePath}`);
-                    }, 5000); // 5 second timeout
+                    }, 15000); // 15 second timeout
+
+                    handleStop = () => {
+                      clearTimeout(timeout);
+                      window.removeEventListener("message", handleMessage);
+                      window.removeEventListener("agent-stop", handleStop);
+                      const err = new Error("Aborted by user");
+                      err.name = "AbortError";
+                      reject(err);
+                    };
 
                     handleMessage = (event) => {
                       if (
@@ -1185,12 +1640,18 @@
                       ) {
                         clearTimeout(timeout);
                         window.removeEventListener("message", handleMessage);
+                        window.removeEventListener("agent-stop", handleStop);
                         resolve(event.data.content || event.data.error || "");
                       }
                     };
                     window.addEventListener("message", handleMessage);
+                    window.addEventListener("agent-stop", handleStop);
                     vscode.postMessage({ type: "readFile", filePath });
                   });
+
+                  const err = new Error("Aborted by user");
+                  err.name = "AbortError";
+                  if (!isLoading) throw err;
 
                   context += `\nFile Content (${filePath}):\n${fileContent}\n`;
 
@@ -1208,6 +1669,145 @@
                     content: planMarkdown,
                   });
                 }
+              }
+            }
+
+            // Check for [searchFiles]
+            const searchFilesRegex =
+              /\[searchFiles\]([\s\S]*?)\[\/searchFiles\]/i;
+            const searchFilesMatch = thinkOutput.match(searchFilesRegex);
+            if (searchFilesMatch) {
+              const query = searchFilesMatch[1].trim();
+              planMarkdown += `\n  > *Searching for:* \`${query}\`\n`;
+              updateMessagesAssistant({
+                uniqueId: `assistant-${uniqueId}`,
+                content: planMarkdown,
+              });
+
+              try {
+                const searchResult = await new Promise((resolve, reject) => {
+                  let handleMessage;
+                  let handleStop;
+
+                  const timeout = setTimeout(() => {
+                    window.removeEventListener("message", handleMessage);
+                    window.removeEventListener("agent-stop", handleStop);
+                    resolve("Error: Timeout searching files.");
+                  }, 60000);
+
+                  handleStop = () => {
+                    clearTimeout(timeout);
+                    window.removeEventListener("message", handleMessage);
+                    window.removeEventListener("agent-stop", handleStop);
+                    const err = new Error("Aborted by user");
+                    err.name = "AbortError";
+                    reject(err);
+                  };
+
+                  handleMessage = (event) => {
+                    if (event.data.command === "systemLog") {
+                      planMarkdown += `\n  > *${event.data.message}*`;
+                      updateMessagesAssistant({
+                        uniqueId: `assistant-${uniqueId}`,
+                        content: planMarkdown,
+                      });
+                    }
+                    if (event.data.command === "searchResult") {
+                      clearTimeout(timeout);
+                      window.removeEventListener("message", handleMessage);
+                      window.removeEventListener("agent-stop", handleStop);
+                      resolve(
+                        event.data.results || event.data.error || "No matches.",
+                      );
+                    }
+                  };
+                  window.addEventListener("message", handleMessage);
+                  window.addEventListener("agent-stop", handleStop);
+                  vscode.postMessage({ command: "search", query });
+                });
+
+                const err = new Error("Aborted by user");
+                err.name = "AbortError";
+                if (!isLoading) throw err;
+
+                context += `\nSearch Results for "${query}":\n${searchResult}\n`;
+                planMarkdown += `\n  > *Search complete.*\n`;
+                updateMessagesAssistant({
+                  uniqueId: `assistant-${uniqueId}`,
+                  content: planMarkdown,
+                });
+              } catch (e) {
+                context += `\nError searching: ${e}\n`;
+              }
+            }
+
+            // Check for [findFiles]
+            const findFilesRegex = /\[findFiles\]([\s\S]*?)\[\/findFiles\]/i;
+            const findFilesMatch = thinkOutput.match(findFilesRegex);
+            if (findFilesMatch) {
+              const pattern = findFilesMatch[1].trim();
+              planMarkdown += `\n  > *Finding files:* \`${pattern}\`\n`;
+              updateMessagesAssistant({
+                uniqueId: `assistant-${uniqueId}`,
+                content: planMarkdown,
+              });
+
+              try {
+                const findResult = await new Promise((resolve, reject) => {
+                  let handleMessage;
+                  let handleStop;
+
+                  const timeout = setTimeout(() => {
+                    window.removeEventListener("message", handleMessage);
+                    window.removeEventListener("agent-stop", handleStop);
+                    resolve("Error: Timeout finding files.");
+                  }, 60000);
+
+                  handleStop = () => {
+                    clearTimeout(timeout);
+                    window.removeEventListener("message", handleMessage);
+                    window.removeEventListener("agent-stop", handleStop);
+                    const err = new Error("Aborted by user");
+                    err.name = "AbortError";
+                    reject(err);
+                  };
+
+                  handleMessage = (event) => {
+                    if (event.data.command === "systemLog") {
+                      planMarkdown += `\n  > *${event.data.message}*`;
+                      updateMessagesAssistant({
+                        uniqueId: `assistant-${uniqueId}`,
+                        content: planMarkdown,
+                      });
+                    }
+                    if (event.data.command === "listFilesResult") {
+                      clearTimeout(timeout);
+                      window.removeEventListener("message", handleMessage);
+                      window.removeEventListener("agent-stop", handleStop);
+                      resolve(
+                        event.data.files
+                          ? event.data.files.join("\n")
+                          : event.data.error || "No files found.",
+                      );
+                    }
+                  };
+                  window.addEventListener("message", handleMessage);
+                  window.addEventListener("agent-stop", handleStop);
+                  vscode.postMessage({ command: "listFiles", pattern });
+                });
+
+                const err = new Error("Aborted by user");
+                err.name = "AbortError";
+                if (!isLoading) throw err;
+
+                context += `\nFiles Found for "${pattern}":\n${findResult}\n`;
+                planMarkdown += `\n  > *Find complete.*\n`;
+                updateMessagesAssistant({
+                  uniqueId: `assistant-${uniqueId}`,
+                  content: planMarkdown,
+                });
+              } catch (e) {
+                context += `\nError finding files: ${e}\n`;
               }
             }
 
@@ -1259,43 +1859,136 @@
               // But planMarkdown already has "Executing...".
 
               const executingBlock = `\n  > *Executing...*\n`;
-              const displayOutput = executingBlock + `\n${stepOutput}`;
-
-              // We replace the last occurrence of executingBlock with displayOutput
-              // But planMarkdown is the BASE.
-              // So we need to construct the full content.
-
-              // Find the index of the executing block
-              const idx = planMarkdown.lastIndexOf(executingBlock);
-              if (idx !== -1) {
-                const pre = planMarkdown.substring(0, idx);
-                updateMessagesAssistant({
-                  uniqueId: `assistant-${uniqueId}`,
-                  content: pre + displayOutput,
-                });
-              }
+              // Update with streaming output
+              updateMessagesAssistant({
+                uniqueId: `assistant-${uniqueId}`,
+                content: planMarkdown + executingBlock + `\n${stepOutput}`,
+              });
             }
 
-            // After loop, we update planMarkdown permanently?
-            // The original code does: planMarkdown += ...
-            // But we might have displayed partial output.
-            // Let's remove the "Executing..." block and the partial output from the UI state
-            // and let the logic below handle the final formatting.
-
-            // Actually, the logic below extracts "Reasoning" and "Action".
-            // If we just leave the raw output, it might be messy.
-            // So we should revert planMarkdown to the state before "Executing..."?
-            // No, the original code adds "Step X Output" to context, but parses output for display.
-
-            // Let's just remove the "Executing..." line from planMarkdown before adding the final result.
+            // After execution, remove "Executing..." and append final output
             planMarkdown = planMarkdown.replace(`\n  > *Executing...*\n`, "");
-            updatePlanPopup(planMarkdown);
-            updatePlanButtonTitle(planMarkdown);
+            // But we want to KEEP the execution log in the assistant message for history!
+            // Actually, usually we summarize. But for debugging, full log is better.
+            // Let's format it nicely.
+            planMarkdown += `\n> *Execution Output:*\n\`\`\`\n${stepOutput.slice(0, 1000)}${stepOutput.length > 1000 ? "..." : ""}\n\`\`\`\n`;
+
+            updateMessagesAssistant({
+              uniqueId: `assistant-${uniqueId}`,
+              content: planMarkdown,
+            });
 
             // Append output to context for next steps
-            context += `\nStep ${step.step} Output:\n${stepOutput}\n`;
+            // CRITICAL: Ensure we capture the FULL output for the agent's context
+            // Note: 'context' is updated below correctly combining previous context and stepOutput.
+            // currentContext += ... NO, currentContext is not in scope here.
+
+            // Also capture any file read/search results that happened in the "Think" phase
+            // (They were added to 'context' local variable, but we need them in 'currentContext')
+            // Wait, 'context' local variable was initialized from 'currentContext' at the start of loop?
+            // No, in handleAgentWorkflow:
+            //    let currentContext = "";
+            //    ...
+            //    const context = currentContext;
+            // So 'context' is a local copy? No, strings are immutable.
+            // We need to update 'currentContext' with whatever was added to 'context'.
+
+            // Actually, we should just use 'currentContext' throughout.
+            // But the code above used 'context'.
+            // Let's synchronize them.
+            // The code above did: context += ...
+            // So we need to make sure those changes are reflected in currentContext for the NEXT iteration.
+
+            // Calculate the diff or just append?
+            // 'context' started as 'currentContext'.
+            // So 'context' contains 'currentContext' + new stuff.
+
+            // Only update currentContext if context has more content (it should)
+            // But 'currentContext' is not defined in this scope!
+            // 'context' is the local variable we are accumulating.
+
+            /* 
+            if (context.length > currentContext.length) {
+              currentContext = context;
+            } else {
+              currentContext = context;
+            }
+            */
+
+            // Also append the execution output to currentContext if it wasn't added to 'context' yet?
+            // stepOutput is added to 'currentContext' above: currentContext += ...
+            // But 'context' does NOT have stepOutput yet.
+            // So if we set currentContext = context, we lose stepOutput!
+
+            // Correct logic:
+            // 1. 'context' has the Think phase results (read/search).
+            // 2. 'stepOutput' has the Execute phase results.
+            // 3. We want currentContext to have BOTH.
+            // 4. 'existingContext' passed to this function is the BASE.
+            // 5. 'context' variable in this function started as 'existingContext' and had Think results appended.
+
+            // So:
+            const newContext =
+              context +
+              `\nStep ${step.step} Execution Output:\n${stepOutput}\n`;
+
+            // We need to return the FULL UPDATED context to the caller
+            // But we also need to update the local 'context' variable for the next iteration of the loop
+            // (even though executePlan loop usually only has 1 step now)
+            context = newContext;
 
             // Process Actions
+            if (stepOutput.includes("[REPLAN]")) {
+              autoFixTriggered = true;
+              const replanMatch =
+                stepOutput.match(/\[REPLAN\]([\s\S]*?)\[\/REPLAN\]/i) ||
+                stepOutput.match(/\[REPLAN\]([\s\S]*?)$/i);
+              const replanReason = replanMatch
+                ? replanMatch[1].trim()
+                : "Replanning required.";
+
+              const fixMessage = `The agent requested a REPLAN during Step ${step.step}.
+Reason: ${replanReason}
+
+**URGENT: ADJUST PLAN AND RESUME**
+1. **ANALYZE**: Why was the replan requested? (e.g. file missing, context mismatch)
+2. **NEW PLAN**: Create a NEW set of steps to achieve the *ORIGINAL REQUEST* given the new information.
+3. **EXECUTE**: Start executing the new plan.
+
+Original Request:
+"""
+${(typeof message === "string" ? message : JSON.stringify(message || "")).replace(/\`/g, "'")}
+"""`;
+
+              planMarkdown += `\n> *⚠️ Plan Divergence. Replanning...*\n`;
+              planMarkdown += `\n> *Reason:* ${replanReason}\n`;
+              updateMessagesAssistant({
+                uniqueId: `assistant-${uniqueId}`,
+                content: planMarkdown,
+              });
+
+              await handleAgentWorkflow(
+                fixMessage,
+                Date.now() + Math.random(),
+                attachments,
+                true,
+              );
+
+              const errorRegex = new RegExp(
+                `^\\s*-\\s*\\[🔄\\]\\s*(Step\\s+${step.step}:)`,
+                "gm",
+              );
+              planMarkdown = planMarkdown.replace(errorRegex, `- [❌] $1`);
+              planMarkdown += `\n  > *Step ${step.step} Cancelled (Replanning).*\n`;
+
+              updateMessagesAssistant({
+                uniqueId: `assistant-${uniqueId}`,
+                content: planMarkdown,
+              });
+
+              break;
+            }
+
             if (stepOutput.includes("[writeFile]")) {
               // Wait for writeFile to finish to avoid race conditions with subsequent readFiles
               await new Promise((resolve) => {
@@ -1378,6 +2071,11 @@
                         terminalOutput += "(See VS Code Terminal for output)";
                       }
 
+                      // Use output from event if available (from child_process workaround), otherwise fallback to captured terminal output
+                      if (event.data.output) {
+                        terminalOutput = event.data.output;
+                      }
+
                       if (event.data.exitCode !== 0) {
                         console.error(
                           `Command failed with exit code ${event.data.exitCode}`,
@@ -1411,18 +2109,20 @@
       \`\`\`
       ${terminalOutput}
       \`\`\`
-      Please analyze the error and fix it. Common fixes include installing missing dependencies, correcting syntax, or fixing file paths. 
       
-      CRITICAL INSTRUCTION:
-      1. FIX the error.
-      2. THEN, CONTINUE with the ORIGINAL REQUEST.
+      **URGENT: FIX AND RESUME**
+      1. **DIAGNOSE**: Why did it fail? (Missing dependency? Wrong path? Syntax error?)
+         - **IF MISSING PACKAGE**: Run \`npm install <package>\` or \`pip install <package>\` IMMEDIATELY. Do not search for the package file.
+      2. **FIX**: Apply the fix immediately.
+      3. **RESUME**: You MUST complete the *ORIGINAL REQUEST* after fixing.
+         - Do NOT stop after fixing.
+         - Do NOT just say "Fixed".
+         - **GENERATE A COMPLETE PLAN TO FINISH THE ENTIRE ORIGINAL TASK.**
       
       Original Request:
       """
       ${(typeof message === "string" ? message : JSON.stringify(message || "")).replace(/\`/g, "'")}
-      """
-      
-      Analyze what was left unfinished in the previous plan and finish it.`;
+      """`;
 
                   planMarkdown += `\n> *⚠️ Command failed. Delegating to Auto-Fix Agent...*\n`;
                   updateMessagesAssistant({
@@ -1489,8 +2189,7 @@
                 uniqueId: `assistant-${uniqueId}`,
                 content: planMarkdown + `\n  > *Stopped by user.*`,
               });
-              resetUI();
-              return;
+              throw err;
             }
             const errorRegex = new RegExp(
               `^\\s*-\\s*\\[🔄\\]\\s*(Step\\s+${step.step}:)`,
@@ -1530,7 +2229,12 @@
         // Finalize
         messageArray.push({ role: "assistant", content: planMarkdown });
         saveState();
-        resetUI();
+
+        return {
+          context,
+          modifiedFiles,
+          autoFixTriggered,
+        };
       }
 
       // Plan-related functions
@@ -1980,6 +2684,9 @@
       }
 
       async function fetchHistory() {
+        // Request history from extension
+        vscode.postMessage({ type: "getHistory" });
+
         const logo = document.getElementById("logo");
         logo.style.display = "block";
         const token = localStorage.getItem("token");

@@ -453,6 +453,9 @@ textarea#messageInput:focus {
 .flex {
   display: flex;
 }
+.flex-col {
+  flex-direction: column;
+}
 .items-center {
   align-items: center;
 }
@@ -707,4 +710,79 @@ li {
   padding: 6px 12px;
   font-weight: 300;
   font-size: 9px;
+}
+
+/* --- History List Styles --- */
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #30363d;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  width: 100%;
+}
+
+.history-item:hover {
+  background-color: #21262d;
+}
+
+.history-info {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  overflow: hidden;
+  margin-right: 12px;
+  flex: 1;
+}
+
+.history-title {
+  font-weight: 500;
+  color: #c9d1d9;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  margin-right: 8px;
+}
+
+.history-date {
+  font-size: 12px;
+  color: #8b949e;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.history-delete-btn {
+  color: #8b949e;
+  padding: 6px;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.history-item:hover .history-delete-btn {
+  opacity: 1;
+}
+
+.history-delete-btn:hover {
+  color: #f85149;
+  background-color: rgba(248, 81, 73, 0.15);
+  opacity: 1;
+}
+
+.no-history {
+  padding: 16px;
+  text-align: center;
+  color: #8b949e;
+  font-size: 0.875rem;
 }

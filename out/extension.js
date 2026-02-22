@@ -312,7 +312,14 @@ async function writeFileVico(context, editor) {
         let filesCreated = 0;
         while ((fileMatch = fileRegex.exec(contentToProcess)) !== null) {
             const relativePath = fileMatch[1].trim();
-            const fileContent = fileMatch[2].trim();
+            let fileContent = fileMatch[2].trim();
+            // STRIP MARKDOWN CODE BLOCKS FROM CONTENT
+            // Often agents wrap the content in ```typescript ... ```
+            const markdownRegex = /^\s*```(?:[\w\d]*)\s*\n([\s\S]*?)```\s*$/;
+            const markdownMatch = fileContent.match(markdownRegex);
+            if (markdownMatch) {
+                fileContent = markdownMatch[1].trim();
+            }
             const fileUri = vscode.Uri.joinPath(projectRoot, relativePath);
             const dirUri = vscode.Uri.file(path.dirname(fileUri.fsPath));
             // 3. Create directory if it doesn't exist

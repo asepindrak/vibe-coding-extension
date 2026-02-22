@@ -37,6 +37,7 @@ exports.SidebarProvider = void 0;
 const vscode = __importStar(require("vscode"));
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
+const os = __importStar(require("os"));
 const crypto = __importStar(require("crypto"));
 const DiffManager_1 = require("./DiffManager");
 class SidebarProvider {
@@ -45,6 +46,7 @@ class SidebarProvider {
     _view;
     fileWatcher;
     isWorkspaceDirty = false;
+    _abortController = null;
     constructor(_extensionUri, context) {
         this._extensionUri = _extensionUri;
         this.context = context;
@@ -65,6 +67,30 @@ class SidebarProvider {
         this.fileWatcher.onDidChange(markDirty);
         this.fileWatcher.onDidCreate(markDirty);
         this.fileWatcher.onDidDelete(markDirty);
+    }
+    getGitBashPath() {
+        if (os.platform() === "win32") {
+            const possiblePaths = [
+                "C:\\Program Files\\Git\\bin\\bash.exe",
+                "C:\\Program Files (x86)\\Git\\bin\\bash.exe",
+                "C:\\Program Files\\Git\\usr\\bin\\bash.exe",
+            ];
+            for (const p of possiblePaths) {
+                if (fs.existsSync(p)) {
+                    return p;
+                }
+            }
+        }
+        return undefined;
+    }
+    sendLog(message) {
+        console.log(message);
+        if (this._view) {
+            this._view.webview.postMessage({
+                command: "systemLog",
+                message: message,
+            });
+        }
     }
     resolveWebviewView(webviewView, context, _token) {
         this._view = webviewView;
@@ -89,11 +115,18 @@ class SidebarProvider {
                     const selection = editor.selection;
                     const text = editor.document.getText(selection);
                     // Kirim ke webview
-                    webviewView.webview.postMessage({ text, allCode });
+                    webviewView.webview.postMessage({
+                        command: "selectedTextResponse",
+                        text,
+                        allCode,
+                    });
                 }
                 else {
                     // Kirim ke webview
-                    webviewView.webview.postMessage({ text: "" });
+                    webviewView.webview.postMessage({
+                        command: "selectedTextResponse",
+                        text: "",
+                    });
                 }
             }
             else if (message.command === "applyCodeSelection") {
@@ -166,7 +199,46 @@ class SidebarProvider {
         });
         webviewView.webview.html = this.getHtmlForWebview(webviewView.webview);
         webviewView.webview.onDidReceiveMessage(async (message) => {
-            switch (message.type) {
+            const command = message.command || message.type;
+            switch (command) {
+                case "saveHistory":
+                    this.context.globalState.update("chatHistory", message.history);
+                    return;
+                case "saveHistoryItem":
+                    let currentHistory = this.context.globalState.get("chatHistory", []);
+                    const newItem = message.item;
+                    const existingIndex = currentHistory.findIndex((h) => h.id === newItem.id);
+                    if (existingIndex >= 0) {
+                        currentHistory[existingIndex] = newItem;
+                    }
+                    else {
+                        currentHistory.unshift(newItem);
+                    }
+                    // Limit history size
+                    if (currentHistory.length > 50) {
+                        currentHistory = currentHistory.slice(0, 50);
+                    }
+                    this.context.globalState.update("chatHistory", currentHistory);
+                    return;
+                case "deleteHistoryItem":
+                    let historyToDelete = this.context.globalState.get("chatHistory", []);
+                    historyToDelete = historyToDelete.filter((h) => h.id !== message.id);
+                    this.context.globalState.update("chatHistory", historyToDelete);
+                    return;
+                case "getHistory":
+                    const history = this.context.globalState.get("chatHistory", []);
+                    webviewView.webview.postMessage({
+                        command: "historyLoad",
+                        history,
+                    });
+                    return;
+                case "clearHistory":
+                    this.context.globalState.update("chatHistory", []);
+                    webviewView.webview.postMessage({
+                        command: "historyLoad",
+                        history: [],
+                    });
+                    return;
                 case "saveToken":
                     // Simpan token di globalState
                     this.context.globalState.update("token", message.token);
@@ -322,10 +394,213 @@ class SidebarProvider {
                         });
                     }
                     return;
+                case "abort":
+                    if (this._abortController) {
+                        this._abortController.abort();
+                        this._abortController = null;
+                    }
+                    return;
+                case "search":
+                    try {
+                        if (this._abortController) {
+                            this._abortController.abort();
+                        }
+                        this._abortController = new AbortController();
+                        const signal = this._abortController.signal;
+                        const workspaceFolders = vscode.workspace.workspaceFolders;
+                        if (!workspaceFolders) {
+                            throw new Error("No workspace open");
+                        }
+                        const query = message.query;
+                        this.sendLog(`[Search] Query received: "${query}"`);
+                        if (!query || query.length <= 2) {
+                            webviewView.webview.postMessage({
+                                command: "searchResult",
+                                results: "Query too short for content search.",
+                            });
+                            return;
+                        }
+                        const results = [];
+                        const excludePattern = "**/{node_modules,.git,dist,build,out,coverage,.vscode,.idea,tmp,temp,venv,__pycache__}/**";
+                        const codeFilePattern = "**/*.{ts,js,tsx,jsx,json,html,css,scss,md,py,java,c,cpp,h,go,rs,php,rb,sh,yaml,yml,xml,sql,graphql,prisma,vue,svelte,astro}";
+                        this.sendLog(`[Search] Finding files... Pattern: ${codeFilePattern}`);
+                        // Find matching files first
+                        const matchingFiles = await vscode.workspace.findFiles(codeFilePattern, excludePattern, 1000);
+                        this.sendLog(`[Search] Found ${matchingFiles.length} files to scan.`);
+                        // Search through file contents
+                        let scannedCount = 0;
+                        for (const file of matchingFiles) {
+                            if (signal.aborted || results.length >= 300) {
+                                this.sendLog(`[Search] Stopped. Aborted or limit reached.`);
+                                break;
+                            }
+                            scannedCount++;
+                            if (scannedCount % 50 === 0) {
+                                this.sendLog(`[Search] Scanned ${scannedCount}/${matchingFiles.length} files...`);
+                            }
+                            try {
+                                const document = await vscode.workspace.openTextDocument(file);
+                                const text = document.getText();
+                                const lines = text.split("\n");
+                                const regex = new RegExp(query, "i");
+                                for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+                                    if (signal.aborted || results.length >= 300) {
+                                        break;
+                                    }
+                                    const line = lines[lineIdx];
+                                    if (regex.test(line)) {
+                                        const relativePath = vscode.workspace.asRelativePath(file);
+                                        const lineNum = lineIdx + 1;
+                                        const preview = line.trim().substring(0, 200);
+                                        const resultStr = `${relativePath}:${lineNum}: ${preview}`;
+                                        if (!results.includes(resultStr)) {
+                                            results.push(resultStr);
+                                        }
+                                    }
+                                }
+                            }
+                            catch (e) {
+                                // Skip files that can't be read
+                                continue;
+                            }
+                        }
+                        this.sendLog(`[Search] Completed. Found ${results.length} matches.`);
+                        const output = results.length > 0 ? results.join("\n") : "No matches found.";
+                        webviewView.webview.postMessage({
+                            command: "searchResult",
+                            results: output,
+                        });
+                    }
+                    catch (error) {
+                        this.sendLog(`[Search] Error: ${error.message}`);
+                        webviewView.webview.postMessage({
+                            command: "searchResult",
+                            error: error.message,
+                        });
+                    }
+                    return;
+                case "listFiles":
+                    try {
+                        const workspaceFolders = vscode.workspace.workspaceFolders;
+                        if (!workspaceFolders) {
+                            throw new Error("No workspace open");
+                        }
+                        // Standard exclude pattern to avoid clutter
+                        const excludePattern = "**/{node_modules,.git,dist,build,out,coverage,.vscode,.idea,tmp,temp,venv,__pycache__}/**";
+                        let pattern = message.pattern || "**/*";
+                        this.sendLog(`[ListFiles] Request pattern: "${pattern}"`);
+                        // Smart pattern: if it looks like a simple filename search (no path separators), make it recursive
+                        if (!pattern.includes("/") &&
+                            !pattern.includes("\\") &&
+                            !pattern.startsWith("**")) {
+                            pattern = `**/${pattern}`;
+                        }
+                        this.sendLog(`[ListFiles] Searching with pattern: "${pattern}"`);
+                        // Use CancellationTokenSource for timeout (15s)
+                        const cts = new vscode.CancellationTokenSource();
+                        const timeout = setTimeout(() => {
+                            cts.cancel();
+                        }, 15000);
+                        const files = await vscode.workspace.findFiles(pattern, excludePattern, 5000, // Limit to 5000 files
+                        cts.token);
+                        clearTimeout(timeout);
+                        cts.dispose();
+                        this.sendLog(`[ListFiles] Found ${files.length} files.`);
+                        const filePaths = files.map((file) => vscode.workspace.asRelativePath(file));
+                        filePaths.sort();
+                        webviewView.webview.postMessage({
+                            command: "listFilesResult",
+                            files: filePaths,
+                        });
+                    }
+                    catch (error) {
+                        // Handle cancellation specifically?
+                        if (error.name === "Canceled" || error.message === "Canceled") {
+                            this.sendLog(`[ListFiles] Cancelled (Timeout).`);
+                            webviewView.webview.postMessage({
+                                command: "listFilesResult",
+                                error: "Search timed out (15s limit). Please refine your search.",
+                            });
+                        }
+                        else {
+                            this.sendLog(`[ListFiles] Error: ${error.message}`);
+                            webviewView.webview.postMessage({
+                                command: "listFilesResult",
+                                error: error.message,
+                            });
+                        }
+                    }
+                    return;
+                case "stopCommand":
+                    try {
+                        const executions = vscode.tasks.taskExecutions;
+                        let stoppedCount = 0;
+                        for (const execution of executions) {
+                            if (execution.task.source === "vico-agent") {
+                                execution.terminate();
+                                stoppedCount++;
+                            }
+                        }
+                        webviewView.webview.postMessage({
+                            command: "commandStopped",
+                            count: stoppedCount,
+                        });
+                    }
+                    catch (e) {
+                        console.error("Error stopping command:", e);
+                    }
+                    return;
                 case "executeCommand":
                     console.log("--> [SidebarProvider] executeCommand received:", message.command);
+                    const gitBashPath = this.getGitBashPath();
+                    if (gitBashPath) {
+                        console.log("Using Git Bash:", gitBashPath);
+                    }
                     // Create the task
-                    const task = new vscode.Task({ type: "shell", task: "Vico Command" }, vscode.TaskScope.Workspace, "Vico Agent Command", "vico-agent", new vscode.ShellExecution(message.command));
+                    // Use a custom problem matcher or shell execution to capture output better?
+                    // Unfortunately, VS Code Task API doesn't easily return stdout.
+                    // WORKAROUND: Use child_process for short commands like 'ls' or 'mkdir'
+                    // to ensure we capture output for the agent.
+                    const isShortCommand = /^(ls|dir|mkdir|cat|type|echo|pwd|find|grep|rm|cp|mv)/i.test(message.command.trim());
+                    if (isShortCommand) {
+                        const cp = require("child_process");
+                        const workspaceFolder = vscode.workspace.workspaceFolders
+                            ? vscode.workspace.workspaceFolders[0].uri.fsPath
+                            : undefined;
+                        if (workspaceFolder) {
+                            if (gitBashPath && os.platform() === "win32") {
+                                const cmd = message.command.replace(/"/g, '\\"');
+                                cp.exec(`"${gitBashPath}" -c "${cmd}"`, { cwd: workspaceFolder }, (err, stdout, stderr) => {
+                                    webviewView.webview.postMessage({
+                                        command: "commandFinished",
+                                        exitCode: err ? err.code || 1 : 0,
+                                        output: stdout + stderr,
+                                    });
+                                });
+                            }
+                            else {
+                                cp.exec(message.command, { cwd: workspaceFolder }, (err, stdout, stderr) => {
+                                    webviewView.webview.postMessage({
+                                        command: "commandFinished",
+                                        exitCode: err ? err.code || 1 : 0,
+                                        output: stdout + stderr,
+                                    });
+                                });
+                            }
+                            return;
+                        }
+                    }
+                    let shellExecution;
+                    if (gitBashPath) {
+                        shellExecution = new vscode.ShellExecution(message.command, {
+                            executable: gitBashPath,
+                            shellArgs: ["-c"],
+                        });
+                    }
+                    else {
+                        shellExecution = new vscode.ShellExecution(message.command);
+                    }
+                    const task = new vscode.Task({ type: "shell", task: "Vico Command" }, vscode.TaskScope.Workspace, "Vico Agent Command", "vico-agent", shellExecution);
                     // Configure presentation to ensure it's visible
                     task.presentationOptions = {
                         reveal: vscode.TaskRevealKind.Always,
