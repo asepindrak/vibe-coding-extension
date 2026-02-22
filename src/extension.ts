@@ -149,7 +149,7 @@ async function fetchSuggestions(
   const requestLine = cursorLine;
 
   try {
-    const response = await fetch("http://localhost:13100/api/suggest", {
+    const response = await fetch("http://103.250.10.249:13100/api/suggest", {
       method: "POST",
       signal: controller.signal,
       headers: {
@@ -1191,7 +1191,7 @@ async function triggerCodeCompletion(
     loadingStatusBarItem.show();
 
     try {
-      const response = await fetch("http://localhost:13100/api/suggest", {
+      const response = await fetch("http://103.250.10.249:13100/api/suggest", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

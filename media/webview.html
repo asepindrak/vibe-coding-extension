@@ -1283,15 +1283,18 @@
         renderAttachments();
 
         try {
-          const response = await fetch("http://localhost:13100/api/message", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${data.token}`,
-              "Content-Type": "application/json",
+          const response = await fetch(
+            "http://103.250.10.249:13100/api/message",
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${data.token}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(data),
+              signal: abortController.signal,
             },
-            body: JSON.stringify(data),
-            signal: abortController.signal,
-          });
+          );
 
           if (!response.ok) {
             const clone = response.clone();
@@ -1623,7 +1626,7 @@
           try {
             // 1. Request Plan
             const response = await fetch(
-              "http://localhost:13100/api/agent/plan",
+              "http://103.250.10.249:13100/api/agent/plan",
               {
                 method: "POST",
                 headers: {
@@ -1871,7 +1874,7 @@ ${result.summary || "Executed successfully."}`,
             });
 
             const thinkResponse = await fetch(
-              "http://localhost:13100/api/agent/execute",
+              "http://103.250.10.249:13100/api/agent/execute",
               {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -2170,7 +2173,7 @@ ${result.summary || "Executed successfully."}`,
             }
 
             const response = await fetch(
-              "http://localhost:13100/api/agent/execute",
+              "http://103.250.10.249:13100/api/agent/execute",
               {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -2689,7 +2692,7 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
             });
 
             const summaryResponse = await fetch(
-              "http://localhost:13100/api/agent/summary",
+              "http://103.250.10.249:13100/api/agent/summary",
               {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -3071,16 +3074,19 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
                                     </button>
                                 `;
 
-          const response = await fetch("http://localhost:13100/api/login", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
+          const response = await fetch(
+            "http://103.250.10.249:13100/api/login",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                email: formEmail,
+                token: tokenParam,
+              }),
             },
-            body: JSON.stringify({
-              email: formEmail,
-              token: tokenParam,
-            }),
-          });
+          );
 
           if (!response.ok) {
             console.log("login gagal");
@@ -3159,16 +3165,19 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
 
           const tokenData = localStorage.getItem("token");
 
-          const response = await fetch("http://localhost:13100/api/workspace", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
+          const response = await fetch(
+            "http://103.250.10.249:13100/api/workspace",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                token: tokenData,
+                workspaces: workspacesParam,
+              }),
             },
-            body: JSON.stringify({
-              token: tokenData,
-              workspaces: workspacesParam,
-            }),
-          });
+          );
 
           if (!response.ok) {
             console.log("update workspaces gagal");
@@ -3261,7 +3270,7 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
         }
         try {
           const response = await fetch(
-            `http://localhost:13100/api/history/?token=${token}&userId=${userId}`,
+            `http://103.250.10.249:13100/api/history/?token=${token}&userId=${userId}`,
             {
               method: "GET",
               headers: {
