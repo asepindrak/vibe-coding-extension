@@ -1588,6 +1588,8 @@
           // Continue without scan if it fails
         }
 
+        currentContext += `\n=== ANTI-PATTERNS (STRICTLY FORBIDDEN) ===\n1. **NO EMPTY SCAFFOLDING**: Do NOT create empty folders or '.gitkeep' files. If you need a folder, create it by writing a REAL file inside it (e.g., 'components/Navbar.tsx', not just 'components/').\n2. **NO PLACEHOLDERS**: Do NOT write files with "// TODO: implement". Write the ACTUAL code requested.\n3. **NO HALLUCINATED COMPLETION**: Do not say "Task Completed" if you have only created folders. You must write the functional code.\n==========================================\n`;
+
         // Initialize global plan state if starting new workflow
         if (iteration === 1) {
           window.currentPlanMarkdown = "";
