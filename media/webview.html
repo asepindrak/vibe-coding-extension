@@ -1045,9 +1045,14 @@
         document.getElementById("generating").innerHTML = "Generating...";
         const sendMessageButton = document.getElementById("button-send");
         const stopButton = document.getElementById("button-stop");
+        const newChatButton = document.getElementById("newChatButton");
+        const historyButton = document.getElementById("historyButton");
 
         sendMessageButton.classList.add("hidden");
         stopButton.classList.remove("hidden");
+
+        if (newChatButton) newChatButton.disabled = true;
+        if (historyButton) historyButton.disabled = true;
 
         console.log("send message to Vibe Coding");
 
@@ -1132,10 +1137,15 @@
         const stopButton = document.getElementById("button-stop");
         const loader = document.getElementById("loader");
         const messageInput = document.getElementById("messageInput");
+        const newChatButton = document.getElementById("newChatButton");
+        const historyButton = document.getElementById("historyButton");
 
         sendMessageButton.classList.remove("hidden");
         stopButton.classList.add("hidden");
         loader.classList.add("hidden");
+
+        if (newChatButton) newChatButton.disabled = false;
+        if (historyButton) historyButton.disabled = false;
 
         messageInput.value = lastSentMessage;
         messageInput.style.height = "auto";
@@ -1338,10 +1348,15 @@
           const loader = document.getElementById("loader");
           const sendBtn = document.getElementById("button-send");
           const stopBtn = document.getElementById("button-stop");
+          const newChatButton = document.getElementById("newChatButton");
+          const historyButton = document.getElementById("historyButton");
 
           loader.classList.add("hidden");
           stopBtn.classList.add("hidden");
           sendBtn.classList.remove("hidden");
+
+          if (newChatButton) newChatButton.disabled = false;
+          if (historyButton) historyButton.disabled = false;
 
           document.getElementById("generating").innerHTML = "";
           saveState();
@@ -1362,6 +1377,11 @@
           document.getElementById("button-stop").classList.add("hidden");
           document.getElementById("button-send").classList.remove("hidden");
           document.getElementById("messageInput").disabled = false;
+
+          const newChatButton = document.getElementById("newChatButton");
+          const historyButton = document.getElementById("historyButton");
+          if (newChatButton) newChatButton.disabled = false;
+          if (historyButton) historyButton.disabled = false;
         }
       }
 
@@ -2772,9 +2792,15 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
         const loader = document.getElementById("loader");
         const sendBtn = document.getElementById("button-send");
         const stopBtn = document.getElementById("button-stop");
+        const newChatButton = document.getElementById("newChatButton");
+        const historyButton = document.getElementById("historyButton");
+
         loader.classList.add("hidden");
         sendBtn.classList.remove("hidden");
         stopBtn.classList.add("hidden");
+
+        if (newChatButton) newChatButton.disabled = false;
+        if (historyButton) historyButton.disabled = false;
         document.getElementById("generating").innerHTML = "";
         isLoading = false;
         document.getElementById("messageInput").disabled = false;

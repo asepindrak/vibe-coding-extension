@@ -309,6 +309,11 @@ code {
   border-color: #8b949e;
   color: #ffffff;
 }
+.btn-elegant:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 
 .btn-primary {
   background-color: #1f6feb;
