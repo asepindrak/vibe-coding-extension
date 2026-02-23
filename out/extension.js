@@ -158,7 +158,7 @@ async function fetchSuggestions(context, editor) {
     // 👉 simpan posisi cursor saat request dikirim
     const requestLine = cursorLine;
     try {
-        const response = await fetch("http://103.250.10.249:13100/api/suggest", {
+        const response = await fetch("http://localhost:13100/api/suggest", {
             method: "POST",
             signal: controller.signal,
             headers: {
@@ -958,7 +958,7 @@ async function triggerCodeCompletion(context, comment, allCode) {
         loadingStatusBarItem.text = "🔄 Vibe Coding loading...";
         loadingStatusBarItem.show();
         try {
-            const response = await fetch("http://103.250.10.249:13100/api/suggest", {
+            const response = await fetch("http://localhost:13100/api/suggest", {
                 method: "POST",
                 headers: {
                     Authorization: `Bearer ${token}`,

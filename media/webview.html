@@ -134,8 +134,30 @@
       >
         <div class="flex justify-between items-center mb-1">
           <span class="font-bold text-blue-400">Current Plan</span>
-          <button id="closePlanStatus" class="text-gray-500 hover:text-white">
-            &times;
+          <button
+            id="closePlanStatus"
+            style="
+              background: none;
+              border: none;
+              cursor: pointer;
+              color: white;
+            "
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              style="width: 16px; height: 16px"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
           </button>
         </div>
         <div id="planStatusContent" class="whitespace-pre-wrap"></div>
@@ -224,15 +246,68 @@
         border: 1px solid #30363d;
         border-radius: 8px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-        padding: 8px;
+        padding: 0;
         max-width: 320px;
         max-height: 256px;
-        overflow-y: auto;
         display: none;
         z-index: 9999;
+        flex-direction: column;
       "
     >
-      <div id="planContent" style="font-size: 0.875rem; color: #c9d1d9"></div>
+      <div
+        style="
+          padding: 8px 12px;
+          border-bottom: 1px solid #30363d;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          background-color: #21262d;
+          border-radius: 8px 8px 0 0;
+        "
+      >
+        <span style="font-weight: 600; color: #c9d1d9; font-size: 0.875rem"
+          >Current Plan</span
+        >
+        <button
+          id="closePlanPopup"
+          class="text-gray-400 hover:text-white transition-colors duration-200"
+          style="
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+          "
+          onmouseover="this.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'"
+          onmouseout="this.style.backgroundColor = 'transparent'"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-5 w-5"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            style="width: 20px; height: 20px"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+              clip-rule="evenodd"
+            />
+          </svg>
+        </button>
+      </div>
+      <div
+        id="planContent"
+        style="
+          font-size: 0.875rem;
+          color: #c9d1d9;
+          padding: 8px;
+          overflow-y: auto;
+        "
+      ></div>
     </div>
 
     <!-- History Popup -->
@@ -662,6 +737,11 @@
 
         if (planButton) {
           planButton.addEventListener("click", togglePlanPopup);
+        }
+
+        const closePlanPopupBtn = document.getElementById("closePlanPopup");
+        if (closePlanPopupBtn) {
+          closePlanPopupBtn.addEventListener("click", hidePlanPopup);
         }
 
         if (closePlanStatus && planStatusContainer) {
@@ -1294,18 +1374,15 @@
         renderAttachments();
 
         try {
-          const response = await fetch(
-            "http://103.250.10.249:13100/api/message",
-            {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${data.token}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(data),
-              signal: abortController.signal,
+          const response = await fetch("http://localhost:13100/api/message", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${data.token}`,
+              "Content-Type": "application/json",
             },
-          );
+            body: JSON.stringify(data),
+            signal: abortController.signal,
+          });
 
           if (!response.ok) {
             const clone = response.clone();
@@ -1637,7 +1714,7 @@
           try {
             // 1. Request Plan
             const response = await fetch(
-              "http://103.250.10.249:13100/api/agent/plan",
+              "http://localhost:13100/api/agent/plan",
               {
                 method: "POST",
                 headers: {
@@ -1922,7 +1999,7 @@ ${result.summary || "Executed successfully."}`,
             });
 
             const thinkResponse = await fetch(
-              "http://103.250.10.249:13100/api/agent/execute",
+              "http://localhost:13100/api/agent/execute",
               {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -2221,7 +2298,7 @@ ${result.summary || "Executed successfully."}`,
             }
 
             const response = await fetch(
-              "http://103.250.10.249:13100/api/agent/execute",
+              "http://localhost:13100/api/agent/execute",
               {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -2740,7 +2817,7 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
             });
 
             const summaryResponse = await fetch(
-              "http://103.250.10.249:13100/api/agent/summary",
+              "http://localhost:13100/api/agent/summary",
               {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -2807,22 +2884,25 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
 
       // Plan-related functions
       function togglePlanPopup() {
-        const container = document.getElementById("planStatusContainer");
         const planPopup = document.getElementById("planPopup");
+        const planStatusContainer = document.getElementById(
+          "planStatusContainer",
+        );
 
-        // Toggle inline container
-        if (container) {
-          if (container.classList.contains("hidden")) {
-            container.classList.remove("hidden");
-            container.scrollTop = container.scrollHeight;
-          } else {
-            container.classList.add("hidden");
-          }
+        // Hide inline container if it's visible (we are switching to floating)
+        if (
+          planStatusContainer &&
+          !planStatusContainer.classList.contains("hidden")
+        ) {
+          planStatusContainer.classList.add("hidden");
         }
 
-        // Hide old popup if it exists
         if (planPopup) {
-          planPopup.style.display = "none";
+          if (planPopup.style.display === "flex") {
+            planPopup.style.display = "none";
+          } else {
+            showPlanPopup();
+          }
         }
       }
 
@@ -2911,7 +2991,7 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
 
         if (planPopup && planButton && messageInputContainer) {
           // Make visible first
-          planPopup.style.display = "block";
+          planPopup.style.display = "flex";
 
           // Get dimensions
           const containerRect = messageInputContainer.getBoundingClientRect();
@@ -2945,7 +3025,7 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
         } else {
           // Fallback
           if (planPopup) {
-            planPopup.style.display = "block";
+            planPopup.style.display = "flex";
             planPopup.style.top = "50px";
             planPopup.style.left = "50px";
           }
@@ -3172,19 +3252,16 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
                                     </button>
                                 `;
 
-          const response = await fetch(
-            "http://103.250.10.249:13100/api/login",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                email: formEmail,
-                token: tokenParam,
-              }),
+          const response = await fetch("http://localhost:13100/api/login", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
             },
-          );
+            body: JSON.stringify({
+              email: formEmail,
+              token: tokenParam,
+            }),
+          });
 
           if (!response.ok) {
             console.log("login gagal");
@@ -3263,19 +3340,16 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
 
           const tokenData = localStorage.getItem("token");
 
-          const response = await fetch(
-            "http://103.250.10.249:13100/api/workspace",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                token: tokenData,
-                workspaces: workspacesParam,
-              }),
+          const response = await fetch("http://localhost:13100/api/workspace", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
             },
-          );
+            body: JSON.stringify({
+              token: tokenData,
+              workspaces: workspacesParam,
+            }),
+          });
 
           if (!response.ok) {
             console.log("update workspaces gagal");
@@ -3368,7 +3442,7 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
         }
         try {
           const response = await fetch(
-            `http://103.250.10.249:13100/api/history/?token=${token}&userId=${userId}`,
+            `http://localhost:13100/api/history/?token=${token}&userId=${userId}`,
             {
               method: "GET",
               headers: {
