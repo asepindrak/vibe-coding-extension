@@ -702,6 +702,36 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
               message.command,
             );
 
+            // OPTIMIZATION: Handle 'ls -R' specifically to avoid token limits
+            // We inject ignore patterns for common heavy folders
+            if (/\bls\s+-R\b/.test(message.command)) {
+              const excludes = [
+                "node_modules",
+                ".git",
+                ".next",
+                "out",
+                "dist",
+                "build",
+                ".vscode",
+                "coverage",
+                "__pycache__",
+                ".vico",
+                "android",
+                "ios",
+                "target",
+                "vendor",
+                "bin",
+                "obj",
+              ];
+              const ignoreFlags = excludes
+                .map((dir) => `--ignore=${dir}`)
+                .join(" ");
+              message.command = `${message.command} ${ignoreFlags}`;
+              this.sendLog(
+                `[System] Optimized 'ls -R' with exclusions: ${ignoreFlags}`,
+              );
+            }
+
             if (this.checkDuplicateAction("executeCommand", message.command)) {
               webviewView.webview.postMessage({
                 command: "commandFinished",
