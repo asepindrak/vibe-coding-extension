@@ -1768,6 +1768,54 @@
               result.modifiedFiles.forEach((f) => currentModifiedFiles.add(f));
             }
 
+            // --- REFRESH CRITICAL FILES IN CONTEXT ---
+            // If we installed packages or modified config, refresh package.json/tsconfig.json
+            const isPackageChange =
+              step.description.match(/install|add|remove|dependency/i) ||
+              (result.modifiedFiles && result.modifiedFiles.has("package.json"));
+
+            if (isPackageChange) {
+              try {
+                const pkgContent = await readFileAsync("package.json");
+                if (pkgContent) {
+                  // Regex to replace existing block or append
+                  const regex = /=== package\.json ===[\s\S]*?={10,}/;
+                  const newBlock = `=== package.json ===\n${pkgContent}\n====================`;
+                  if (regex.test(currentContext)) {
+                    currentContext = currentContext.replace(regex, newBlock);
+                  } else {
+                    currentContext += `\n${newBlock}\n`;
+                  }
+                  console.log("[webview] Refreshed package.json in context");
+                }
+              } catch (e) {
+                console.error("Failed to refresh package.json context", e);
+              }
+            }
+
+            const isTsConfigChange =
+              step.description.match(/tsconfig|typescript/i) ||
+              (result.modifiedFiles && result.modifiedFiles.has("tsconfig.json"));
+
+            if (isTsConfigChange) {
+              try {
+                const tsContent = await readFileAsync("tsconfig.json");
+                if (tsContent) {
+                   const regex = /=== tsconfig\.json ===[\s\S]*?={10,}/;
+                   const newBlock = `=== tsconfig.json ===\n${tsContent}\n=====================`;
+                   if (regex.test(currentContext)) {
+                     currentContext = currentContext.replace(regex, newBlock);
+                   } else {
+                     currentContext += `\n${newBlock}\n`;
+                   }
+                   console.log("[webview] Refreshed tsconfig.json in context");
+                }
+              } catch (e) {
+                console.error("Failed to refresh tsconfig.json context", e);
+              }
+            }
+            // -----------------------------------------
+
             // CRITICAL: Update history so the agent knows what it just did!
             // This prevents looping and "Step 1" hallucinations.
             messageArray.push({
