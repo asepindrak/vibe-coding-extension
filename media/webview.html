@@ -2963,8 +2963,8 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
 
         if (!planButton) return;
 
-        // improved regex to match "- [ ] Step 1: ..." or "- [x] Step 1: ..."
-        const taskRegex = /^\s*-\s*\[([ x🔄✅❌])\]\s*(Step\s+\d+.*)$/gm;
+        // Relaxed regex to match any task list item, not just "Step N"
+        const taskRegex = /^\s*-\s*\[([ x🔄✅❌])\]\s*(.*)$/gm;
         let match;
         let totalTasks = 0;
         let completedTasks = 0;
@@ -2997,7 +2997,7 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
         }
 
         if (totalTasks > 0) {
-          const progressText = `${completedTasks}/${totalTasks} Tasks done`;
+          const progressText = `${completedTasks}/${totalTasks}`;
           planButton.innerHTML = `📋 ${progressText}`;
           planButton.title = `Plan: ${progressText} completed`;
           planButton.style.display = "flex"; // Make sure it's visible!
@@ -3005,6 +3005,14 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
           // Update the container above input
           if (planStatusContent) {
             planStatusContent.innerHTML = taskHtml;
+          }
+        } else if (planMarkdown && planMarkdown.trim().length > 0) {
+          // Fallback: If no structured tasks found, but plan exists, show generic button
+          planButton.innerHTML = `📋 Plan`;
+          planButton.title = `Show Plan`;
+          planButton.style.display = "flex";
+          if (planStatusContent) {
+            planStatusContent.innerHTML = `<div class="text-xs text-gray-400">${planMarkdown.substring(0, 100)}...</div>`;
           }
         } else {
           planButton.style.display = "none";
@@ -3017,34 +3025,47 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
 
         const planContent = document.getElementById("planContent");
         if (planContent) {
-          // Extract only the task list without thoughts or other content
-          const taskLines = planMarkdown
-            .split("\n")
-            .filter(
-              (line) =>
-                line.includes("Step ") &&
-                (line.includes("[ ]") ||
-                  line.includes("🔄") ||
-                  line.includes("✅") ||
-                  line.includes("❌")),
-            );
-
-          console.log("updatePlanPopup - Raw planMarkdown:", planMarkdown);
-          console.log("updatePlanPopup - Filtered taskLines:", taskLines);
-
+          // Extract task lines using regex
+          const taskRegex = /^\s*-\s*\[([ x🔄✅❌])\]\s*(.*)$/gm;
+          let match;
           let html = '<div style="font-size: 0.875rem;">';
-          taskLines.forEach((line) => {
-            if (line.includes("[ ] Step")) {
-              html += `<div style="display: flex; align-items: center; padding: 4px 8px; cursor: pointer;" onmouseover="this.style.backgroundColor='#30363d'" onmouseout="this.style.backgroundColor='transparent'"><span style="color: #8b949e; margin-right: 8px;">◻</span><span style="color: #c9d1d9;">${line.replace("- [ ] Step ", "")}</span></div>`;
-            } else if (line.includes("[🔄] Step")) {
-              html += `<div style="display: flex; align-items: center; padding: 4px 8px; cursor: pointer;" onmouseover="this.style.backgroundColor='#30363d'" onmouseout="this.style.backgroundColor='transparent'"><span style="color: #d29922; margin-right: 8px;">🔄</span><span style="color: #d29922;">${line.replace("- [🔄] Step ", "")}</span></div>`;
-            } else if (line.includes("[✅] Step")) {
-              html += `<div style="display: flex; align-items: center; padding: 4px 8px; cursor: pointer;" onmouseover="this.style.backgroundColor='#30363d'" onmouseout="this.style.backgroundColor='transparent'"><span style="color: #3fb950; margin-right: 8px;">✅</span><span style="color: #3fb950;">${line.replace("- [✅] Step ", "")}</span></div>`;
-            } else if (line.includes("[❌] Step")) {
-              html += `<div style="display: flex; align-items: center; padding: 4px 8px; cursor: pointer;" onmouseover="this.style.backgroundColor='#30363d'" onmouseout="this.style.backgroundColor='transparent'"><span style="color: #f85149; margin-right: 8px;">❌</span><span style="color: #f85149;">${line.replace("- [❌] Step ", "")}</span></div>`;
+          let foundTasks = false;
+
+          while ((match = taskRegex.exec(planMarkdown)) !== null) {
+            foundTasks = true;
+            const statusChar = match[1];
+            const taskText = match[2];
+
+            let icon = "◻";
+            let color = "#8b949e"; // gray
+            let textColor = "#c9d1d9"; // white-ish
+
+            if (statusChar === "✅" || statusChar === "x") {
+              icon = "✅";
+              color = "#3fb950"; // green
+              textColor = "#3fb950";
+            } else if (statusChar === "🔄") {
+              icon = "🔄";
+              color = "#d29922"; // yellow
+              textColor = "#d29922";
+            } else if (statusChar === "❌") {
+              icon = "❌";
+              color = "#f85149"; // red
+              textColor = "#f85149";
             }
-          });
+
+            html += `<div style="display: flex; align-items: flex-start; padding: 4px 8px; cursor: pointer;" onmouseover="this.style.backgroundColor='#30363d'" onmouseout="this.style.backgroundColor='transparent'">
+                <span style="color: ${color}; margin-right: 8px; margin-top: 2px;">${icon}</span>
+                <span style="color: ${textColor}; line-height: 1.4;">${taskText}</span>
+             </div>`;
+          }
+
           html += "</div>";
+
+          if (!foundTasks && planMarkdown && planMarkdown.trim().length > 0) {
+            // Fallback for non-task content
+            html = `<div style="padding: 12px; font-size: 0.8rem; color: #8b949e; white-space: pre-wrap;">${planMarkdown}</div>`;
+          }
 
           planContent.innerHTML = html;
         }
