@@ -2908,44 +2908,47 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
           "messageInputContainer",
         );
         console.log("showPlanPopup called");
-        console.log("planPopup:", planPopup);
-        console.log("planButton:", planButton);
-        console.log("messageInputContainer:", messageInputContainer);
+
         if (planPopup && planButton && messageInputContainer) {
-          // First, make popup visible to get dimensions
+          // Make visible first
           planPopup.style.display = "block";
 
-          // Position popup above the message input container
-          const rect = messageInputContainer.getBoundingClientRect();
-          console.log("Container rect:", rect);
-          console.log("Popup offsetHeight:", planPopup.offsetHeight);
+          // Get dimensions
+          const containerRect = messageInputContainer.getBoundingClientRect();
+          const buttonRect = planButton.getBoundingClientRect();
 
-          // Calculate position - ensure it's visible on screen
-          let top = rect.top - planPopup.offsetHeight - 5;
-          let left = rect.left;
+          // Use BOTTOM positioning so it grows upwards automatically
+          // Distance from bottom of viewport to top of container + gap
+          const bottomDistance = window.innerHeight - containerRect.top + 5;
 
-          // Ensure popup doesn't go off the top of the screen
-          if (top < 10) {
-            top = 10;
+          planPopup.style.top = "auto";
+          planPopup.style.bottom = bottomDistance + "px";
+
+          // Align left with the plan button, but keep it on screen
+          let left = buttonRect.left;
+
+          // Prevent going off right edge
+          if (left + planPopup.offsetWidth > window.innerWidth) {
+            left = window.innerWidth - planPopup.offsetWidth - 10;
           }
+          // Prevent going off left edge
+          if (left < 10) left = 10;
 
-          // Ensure popup doesn't go off the left side
-          if (left < 10) {
-            left = 10;
-          }
-
-          planPopup.style.top = top + "px";
           planPopup.style.left = left + "px";
-          console.log("Popup positioned at:", top, left);
-          console.log("Popup should be visible now");
-        } else {
-          // Fallback: just show the popup with default positioning
+
           console.log(
-            "Fallback positioning - showing popup with default position",
+            "Popup positioned with bottom:",
+            bottomDistance,
+            "left:",
+            left,
           );
-          planPopup.style.top = "50px";
-          planPopup.style.left = "50px";
-          planPopup.style.display = "block";
+        } else {
+          // Fallback
+          if (planPopup) {
+            planPopup.style.display = "block";
+            planPopup.style.top = "50px";
+            planPopup.style.left = "50px";
+          }
         }
       }
 
@@ -2998,7 +3001,7 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
 
         if (totalTasks > 0) {
           const progressText = `${completedTasks}/${totalTasks}`;
-          planButton.innerHTML = `📋 ${progressText}`;
+          planButton.innerHTML = `✅ ${progressText} Tasks done`;
           planButton.title = `Plan: ${progressText} completed`;
           planButton.style.display = "flex"; // Make sure it's visible!
 
