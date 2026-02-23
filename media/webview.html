@@ -116,14 +116,6 @@
             "
             onmouseover="this.style.backgroundColor = '#30363d'"
             onmouseout="this.style.backgroundColor = '#21262d'"
-            onfocus="
-              this.style.boxShadow = '0 0 0 3px rgba(88, 166, 255, 0.15)';
-              this.style.borderColor = '#58a6ff';
-            "
-            onblur="
-              this.style.boxShadow = 'none';
-              this.style.borderColor = '#30363d';
-            "
             title="Show Plan Status"
           >
             📋 Plan
@@ -134,6 +126,21 @@
         id="attachment-preview"
         class="flex flex-wrap gap-2 mb-2 hidden"
       ></div>
+
+      <!-- ADDED: Plan Status Container above input -->
+      <div
+        id="planStatusContainer"
+        class="hidden mb-2 p-2 bg-gray-900 border border-gray-700 rounded text-xs text-gray-300 max-h-32 overflow-y-auto"
+      >
+        <div class="flex justify-between items-center mb-1">
+          <span class="font-bold text-blue-400">Current Plan</span>
+          <button id="closePlanStatus" class="text-gray-500 hover:text-white">
+            &times;
+          </button>
+        </div>
+        <div id="planStatusContent" class="whitespace-pre-wrap"></div>
+      </div>
+
       <div id="composerRow" class="flex items-center">
         <input
           type="file"
@@ -396,9 +403,16 @@
           attachments = [];
           renderAttachments();
 
-          // Reset plan button
+          // Reset plan button and status
           const planButton = document.getElementById("planButton");
           if (planButton) planButton.style.display = "none";
+          const planStatusContainer = document.getElementById(
+            "planStatusContainer",
+          );
+          if (planStatusContainer) planStatusContainer.classList.add("hidden");
+          const planStatusContent =
+            document.getElementById("planStatusContent");
+          if (planStatusContent) planStatusContent.innerHTML = "";
 
           saveState();
         } catch (e) {
@@ -641,21 +655,18 @@
 
         // Plan Button Logic
         const planButton = document.getElementById("planButton");
-        const planPopup = document.getElementById("planPopup");
-        const planContent = document.getElementById("planContent");
+        const planStatusContainer = document.getElementById(
+          "planStatusContainer",
+        );
+        const closePlanStatus = document.getElementById("closePlanStatus");
 
-        if (planButton && planPopup && planContent) {
+        if (planButton) {
           planButton.addEventListener("click", togglePlanPopup);
+        }
 
-          // Close popup when clicking outside
-          document.addEventListener("click", (e) => {
-            if (
-              planPopup &&
-              !planPopup.contains(e.target) &&
-              e.target !== planButton
-            ) {
-              hidePlanPopup();
-            }
+        if (closePlanStatus && planStatusContainer) {
+          closePlanStatus.addEventListener("click", () => {
+            planStatusContainer.classList.add("hidden");
           });
         }
 
@@ -1283,18 +1294,15 @@
         renderAttachments();
 
         try {
-          const response = await fetch(
-            "http://103.250.10.249:13100/api/message",
-            {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${data.token}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(data),
-              signal: abortController.signal,
+          const response = await fetch("http://localhost:13100/api/message", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${data.token}`,
+              "Content-Type": "application/json",
             },
-          );
+            body: JSON.stringify(data),
+            signal: abortController.signal,
+          });
 
           if (!response.ok) {
             const clone = response.clone();
@@ -1626,7 +1634,7 @@
           try {
             // 1. Request Plan
             const response = await fetch(
-              "http://103.250.10.249:13100/api/agent/plan",
+              "http://localhost:13100/api/agent/plan",
               {
                 method: "POST",
                 headers: {
@@ -1726,32 +1734,50 @@
             }
 
             // Render Plan
-            let cleanDescription = step.description.replace(
-              /^Step\s+\d+[:.]\s*/i,
-              "",
-            );
-            let currentStepMarkdown = `**Step ${iteration}:** ${cleanDescription}\n`;
-            // Add Checkbox for the step
-            currentStepMarkdown += `- [ ] ${cleanDescription}\n`;
+            let currentStepMarkdown = "";
+            let planSteps = planData.plan;
+
+            // If the FIRST step is complete, we are done.
+            if (planSteps[0].type === "complete") {
+              updateMessagesAssistant({
+                uniqueId: `assistant-${currentUniqueId}`,
+                content: `✅ **Task Completed:** ${planSteps[0].description}`,
+              });
+              messageArray.push({
+                role: "assistant",
+                content: `✅ Task Completed: ${planSteps[0].description}`,
+              });
+              saveState();
+              resetUI();
+              return;
+            }
+
+            // Build markdown for ALL steps
+            planSteps.forEach((s, i) => {
+              const stepNum = i + 1;
+              let cleanDesc = s.description.replace(/^Step\s+\d+[:.]\s*/i, "");
+              currentStepMarkdown += `**Step ${stepNum}:** ${cleanDesc}\n- [ ] ${cleanDesc}\n\n`;
+
+              // Append to global plan for popup
+              window.currentPlanMarkdown =
+                (window.currentPlanMarkdown || "") +
+                `- [ ] Step ${stepNum}: ${s.description}\n`;
+            });
+
+            updatePlanPopup(window.currentPlanMarkdown);
+            updatePlanButtonTitle(window.currentPlanMarkdown);
 
             // Wrap in thinking block for auto-collapse
-            const thinkingContent = `[thinking title="Step ${iteration}: ${cleanDescription.substring(0, 50)}${cleanDescription.length > 50 ? "..." : ""}"]\n${currentStepMarkdown}\n[/thinking]`;
+            const thinkingContent = `[thinking title="Executing Plan (${planSteps.length} Steps)"]\n${currentStepMarkdown}\n[/thinking]`;
 
             updateMessagesAssistant({
               uniqueId: `assistant-${currentUniqueId}`,
               content: thinkingContent,
             });
 
-            // Append to global plan for popup
-            window.currentPlanMarkdown =
-              (window.currentPlanMarkdown || "") +
-              `- [ ] Step ${iteration}: ${step.description}\n`;
-            updatePlanPopup(window.currentPlanMarkdown);
-            updatePlanButtonTitle(window.currentPlanMarkdown);
-
-            // Execute Plan
+            // Execute Plan (pass ALL steps)
             const result = await executePlan(
-              [step],
+              planSteps,
               currentUniqueId,
               userId,
               token,
@@ -1768,60 +1794,17 @@
               result.modifiedFiles.forEach((f) => currentModifiedFiles.add(f));
             }
 
-            // --- REFRESH CRITICAL FILES IN CONTEXT ---
-            // If we installed packages or modified config, refresh package.json/tsconfig.json
-            const isPackageChange =
-              step.description.match(/install|add|remove|dependency/i) ||
-              (result.modifiedFiles && result.modifiedFiles.has("package.json"));
-
-            if (isPackageChange) {
-              try {
-                const pkgContent = await readFileAsync("package.json");
-                if (pkgContent) {
-                  // Regex to replace existing block or append
-                  const regex = /=== package\.json ===[\s\S]*?={10,}/;
-                  const newBlock = `=== package.json ===\n${pkgContent}\n====================`;
-                  if (regex.test(currentContext)) {
-                    currentContext = currentContext.replace(regex, newBlock);
-                  } else {
-                    currentContext += `\n${newBlock}\n`;
-                  }
-                  console.log("[webview] Refreshed package.json in context");
-                }
-              } catch (e) {
-                console.error("Failed to refresh package.json context", e);
-              }
-            }
-
-            const isTsConfigChange =
-              step.description.match(/tsconfig|typescript/i) ||
-              (result.modifiedFiles && result.modifiedFiles.has("tsconfig.json"));
-
-            if (isTsConfigChange) {
-              try {
-                const tsContent = await readFileAsync("tsconfig.json");
-                if (tsContent) {
-                   const regex = /=== tsconfig\.json ===[\s\S]*?={10,}/;
-                   const newBlock = `=== tsconfig.json ===\n${tsContent}\n=====================`;
-                   if (regex.test(currentContext)) {
-                     currentContext = currentContext.replace(regex, newBlock);
-                   } else {
-                     currentContext += `\n${newBlock}\n`;
-                   }
-                   console.log("[webview] Refreshed tsconfig.json in context");
-                }
-              } catch (e) {
-                console.error("Failed to refresh tsconfig.json context", e);
-              }
-            }
-            // -----------------------------------------
-
             // CRITICAL: Update history so the agent knows what it just did!
             // This prevents looping and "Step 1" hallucinations.
+            const executedDescriptions = planSteps
+              .map((s) => s.description)
+              .join("\n- ");
             messageArray.push({
               role: "assistant",
-              content: `[Step ${iteration} Completed]
-Description: ${step.description}
+              content: `[Plan Execution Completed]
+Executed Steps:
+- ${executedDescriptions}
+
 Execution Result:
 ${result.summary || "Executed successfully."}`,
             });
@@ -1831,6 +1814,20 @@ ${result.summary || "Executed successfully."}`,
               // The recursive call has taken over. We stop this loop.
               return;
             }
+
+            // FORCE STOP after full plan execution (User Requirement: 1 Plan only)
+            // The agent has executed all steps in the single comprehensive plan.
+            updateMessagesAssistant({
+              uniqueId: `assistant-${currentUniqueId}`,
+              content: `✅ **All Tasks Completed.**\n\n${result.summary || ""}`,
+            });
+            messageArray.push({
+              role: "assistant",
+              content: `✅ All Tasks Completed.\n\n${result.summary || ""}`,
+            });
+            saveState();
+            resetUI();
+            return;
           } catch (err) {
             if (err.name === "AbortError") {
               updateMessagesAssistant({
@@ -1922,7 +1919,7 @@ ${result.summary || "Executed successfully."}`,
             });
 
             const thinkResponse = await fetch(
-              "http://103.250.10.249:13100/api/agent/execute",
+              "http://localhost:13100/api/agent/execute",
               {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -2221,7 +2218,7 @@ ${result.summary || "Executed successfully."}`,
             }
 
             const response = await fetch(
-              "http://103.250.10.249:13100/api/agent/execute",
+              "http://localhost:13100/api/agent/execute",
               {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -2740,7 +2737,7 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
             });
 
             const summaryResponse = await fetch(
-              "http://103.250.10.249:13100/api/agent/summary",
+              "http://localhost:13100/api/agent/summary",
               {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -2807,14 +2804,22 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
 
       // Plan-related functions
       function togglePlanPopup() {
+        const container = document.getElementById("planStatusContainer");
         const planPopup = document.getElementById("planPopup");
-        const planButton = document.getElementById("planButton");
-        console.log("togglePlanPopup called, planButton:", planButton);
-        console.log("planPopup hidden:", planPopup.style.display === "none");
-        if (planPopup.style.display === "none") {
-          showPlanPopup();
-        } else {
-          hidePlanPopup();
+
+        // Toggle inline container
+        if (container) {
+          if (container.classList.contains("hidden")) {
+            container.classList.remove("hidden");
+            container.scrollTop = container.scrollHeight;
+          } else {
+            container.classList.add("hidden");
+          }
+        }
+
+        // Hide old popup if it exists
+        if (planPopup) {
+          planPopup.style.display = "none";
         }
       }
 
@@ -2949,46 +2954,64 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
       }
 
       function updatePlanButtonTitle(planMarkdown) {
-        console.log("updatePlanButtonTitle called with:", planMarkdown);
+        console.log("updatePlanButtonTitle called");
         const planButton = document.getElementById("planButton");
-        if (planButton) {
-          // Count tasks by looking for the specific markdown pattern
-          const totalTasks = (
-            planMarkdown.match(/^\s*-\s*\[[ x🔄✅❌]\]\s*Step\s+\d+:/gm) || []
-          ).length;
-          const completedTasks = (
-            planMarkdown.match(/^\s*-\s*\[✅\]\s*Step\s+\d+:/gm) || []
-          ).length;
+        const planStatusContent = document.getElementById("planStatusContent");
 
-          console.log(
-            `Total tasks: ${totalTasks}, Completed: ${completedTasks}`,
-          );
-          console.log(
-            "All task matches:",
-            planMarkdown.match(/^\s*-\s*\[[ x🔄✅❌]\]\s*Step\s+\d+:/gm),
-          );
-          console.log(
-            "Completed task matches:",
-            planMarkdown.match(/^\s*-\s*\[✅\]\s*Step\s+\d+:/gm),
-          );
+        if (!planButton) return;
 
-          if (totalTasks > 0) {
-            // Update both title and button text
-            const progressText = `${completedTasks}/${totalTasks}`;
-            planButton.title = `Tasks ${progressText} done`;
-            planButton.innerHTML = `📋 Tasks ${progressText} done`;
-            console.log("Updated button title and text to:", progressText);
-          } else {
-            planButton.title = "Show Plan Status";
-            planButton.innerHTML = "📋 Plan";
-            console.log("Updated button title and text to default");
+        // improved regex to match "- [ ] Step 1: ..." or "- [x] Step 1: ..."
+        const taskRegex = /^\s*-\s*\[([ x🔄✅❌])\]\s*(Step\s+\d+.*)$/gm;
+        let match;
+        let totalTasks = 0;
+        let completedTasks = 0;
+        let taskHtml = "";
+
+        while ((match = taskRegex.exec(planMarkdown)) !== null) {
+          totalTasks++;
+          const statusChar = match[1]; // ' ', 'x', '🔄', '✅', '❌'
+          const taskText = match[2];
+
+          let icon = "◻";
+          let color = "text-gray-400";
+
+          if (statusChar === "✅" || statusChar === "x") {
+            completedTasks++;
+            icon = "✅";
+            color = "text-green-500";
+          } else if (statusChar === "🔄") {
+            icon = "🔄";
+            color = "text-yellow-500";
+          } else if (statusChar === "❌") {
+            icon = "❌";
+            color = "text-red-500";
+          }
+
+          taskHtml += `<div class="flex items-start gap-2 py-1 ${color}">
+            <span>${icon}</span>
+            <span class="flex-1">${taskText}</span>
+          </div>`;
+        }
+
+        if (totalTasks > 0) {
+          const progressText = `${completedTasks}/${totalTasks} Tasks done`;
+          planButton.innerHTML = `📋 ${progressText}`;
+          planButton.title = `Plan: ${progressText} completed`;
+          planButton.style.display = "flex"; // Make sure it's visible!
+
+          // Update the container above input
+          if (planStatusContent) {
+            planStatusContent.innerHTML = taskHtml;
           }
         } else {
-          console.log("planButton not found!");
+          planButton.style.display = "none";
         }
       }
 
       function updatePlanPopup(planMarkdown) {
+        // Ensure button and inline status are also updated
+        updatePlanButtonTitle(planMarkdown);
+
         const planContent = document.getElementById("planContent");
         if (planContent) {
           // Extract only the task list without thoughts or other content
@@ -3122,19 +3145,16 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
                                     </button>
                                 `;
 
-          const response = await fetch(
-            "http://103.250.10.249:13100/api/login",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                email: formEmail,
-                token: tokenParam,
-              }),
+          const response = await fetch("http://localhost:13100/api/login", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
             },
-          );
+            body: JSON.stringify({
+              email: formEmail,
+              token: tokenParam,
+            }),
+          });
 
           if (!response.ok) {
             console.log("login gagal");
@@ -3213,19 +3233,16 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
 
           const tokenData = localStorage.getItem("token");
 
-          const response = await fetch(
-            "http://103.250.10.249:13100/api/workspace",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                token: tokenData,
-                workspaces: workspacesParam,
-              }),
+          const response = await fetch("http://localhost:13100/api/workspace", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
             },
-          );
+            body: JSON.stringify({
+              token: tokenData,
+              workspaces: workspacesParam,
+            }),
+          });
 
           if (!response.ok) {
             console.log("update workspaces gagal");
@@ -3318,7 +3335,7 @@ ${(typeof message === "string" ? message : JSON.stringify(message || "")).replac
         }
         try {
           const response = await fetch(
-            `http://103.250.10.249:13100/api/history/?token=${token}&userId=${userId}`,
+            `http://localhost:13100/api/history/?token=${token}&userId=${userId}`,
             {
               method: "GET",
               headers: {
