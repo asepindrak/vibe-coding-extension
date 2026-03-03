@@ -888,12 +888,6 @@ function activate(context) {
         let fileName = "";
         let selectedLine = "";
         let whitelist = [];
-        // Dapatkan semua file yang sedang terbuka (whitelist)
-        whitelist = vscode.workspace.textDocuments
-            .filter((doc) => doc.uri.scheme === "file")
-            .map((doc) => path.basename(doc.fileName));
-        // Unikkan whitelist
-        whitelist = [...new Set(whitelist)];
         if (editor) {
             filePath = editor.document.fileName;
             fileName = path.basename(filePath);
