@@ -1426,7 +1426,8 @@
                     }
 
                     if (messageEvent.command === "workspaceDirty") {
-                        isWorkspaceDirty = messageEvent.isDirty
+                        // Workspace dirty sync prompt is disabled; never block sending flow.
+                        isWorkspaceDirty = false
                         const btnWorkspace = document.getElementById("button-workspace")
                         if (btnWorkspace) {
                             btnWorkspace.style.display = "none"
@@ -1978,26 +1979,9 @@
                     "gpt-5-mini",
                 )
 
-                // NEW: Check if workspace is dirty before sending
+                // Workspace dirty auto-sync is disabled; do not block send flow.
                 if (mode === "agent" && isWorkspaceDirty && !isRetry) {
-                    console.log("Workspace is dirty, auto-updating...")
-
-                    // Show a temporary bubble or just the loader?
-                    // Let's use the pending message logic
-                    pendingMessage = message
-                    pendingAttachments = currentAttachments
-
-                    // Remove the user bubble we just added to avoid duplication on retry?
-                    // Actually, if we just stop here, the user bubble is already in messageArray.
-                    // When retry happens, isRetry=true, so we won't add it again.
-                    // But we need to make sure the assistant bubble is ready or removed.
-                    // The assistant bubble is added above.
-                    // Let's remove the assistant bubble so it doesn't look stuck
-                    const bubble = document.getElementById(`assistant-${uniqueId}`)
-                    if (bubble) bubble.parentElement.remove()
-
-                    await updateWorkspaces(true) // Silent update
-                    return
+                    isWorkspaceDirty = false
                 }
 
                 if (!isRetry || !pendingPromptAccess) {
@@ -2192,12 +2176,30 @@
                 isRetry = false,
                 aiConfig = {},
             ) {
+                const resolveVerificationModeFromRequest = (text) => {
+                    const src = String(text || "")
+                    const explicit =
+                        /\bverification_mode\s*[:=]\s*(minimal|normal|strict)\b/i.exec(src)
+                    if (explicit && explicit[1]) {
+                        return explicit[1].toLowerCase()
+                    }
+                    if (
+                        /\b(simple|sederhana)\b/i.test(src) ||
+                        /\b(logo|favicon|icon|text|copy|styling|css)\b/i.test(src)
+                    ) {
+                        return "minimal"
+                    }
+                    return "normal"
+                }
                 const token = localStorage.getItem("token")
                 const userId = localStorage.getItem("userId")
                 const selectedModel = ensureSupportedModel(
                     aiConfig.model || currentAiSettings.selectedModel || "gpt-5-mini",
                 )
                 const userApiKey = aiConfig.userApiKey || ""
+                const verificationMode =
+                    aiConfig.verificationMode ||
+                    resolveVerificationModeFromRequest(message)
                 try {
                     console.log(
                         "agent attachments",
@@ -2222,6 +2224,7 @@
                 let repeatedPlanCount = 0
                 let lastPlanSignature = ""
                 let consecutiveFailedIterations = 0
+                let consecutiveVerificationOnlyIterations = 0
                 const workflowMeta = {
                     changeVersion: 0,
                     lastVerifiedVersion: -1,
@@ -2262,6 +2265,18 @@
                     /^(tsc|eslint|pytest|go test|cargo test|vitest|jest|playwright|cypress)\b/i.test(
                         String(cmd || "").trim(),
                     )
+                const isVerificationOnlyStep = (step) => {
+                    const t = String(step?.type || "").toLowerCase()
+                    const desc = String(step?.description || "")
+                    const cmd = String(step?.command || "")
+                    if (["file_read", "search", "find_files", "analyze"].includes(t)) {
+                        return true
+                    }
+                    if (t === "terminal_command") {
+                        return isVerificationCommandLite(cmd)
+                    }
+                    return /\b(read|check|verify|validat|confirm|inspect)\b/i.test(desc)
+                }
                 const isManualVerificationStep = (step) => {
                     const raw = `${step?.description || ""}\n${step?.command || ""}`
                     return /(\bopen\b.*\b(browser|url|index\.html|file:\/\/)\b|\bfile:\/\/\b|\bclick play\b|\bopen index\.html\b|\bvia a static server\b|\bmodern browser\b)/i.test(
@@ -2384,7 +2399,7 @@
                 // Add explicit autonomous behavior instruction
                 currentContext += `\n=== CRITICAL INSTRUCTION ===\nYou are an AUTONOMOUS agent. Do NOT ask the user what to do next. You MUST decide the best course of action yourself and proceed to execute it immediately. If there are multiple options, choose the most reasonable one and ACT on it. Do not stop to ask for permission or preference. Complete the user's request end-to-end.\n`
                 currentContext += `\n=== PLANNING & EXECUTION STRATEGY ===\n1. **PHASE 1: PLAN**: At the very beginning, CREATE A COMPREHENSIVE, NUMBERED PLAN. List all steps required to solve the user's request.\n2. **PHASE 2: EXECUTE**: Execute the plan step-by-step. Do not deviate unless a step fails.\n3. **VERIFY**: After applying a fix, verify only with short-lived commands (build/test/lint). NEVER run server/dev commands.\n4. **NO LOOPING**: If a step fails, do not retry the exact same action. Analyze the error and adjust your plan.\n5. **HISTORY AWARENESS**: Review the 'History' to see what steps have already been completed. DO NOT REPEAT COMPLETED STEPS.\n============================\n`
-                currentContext += `\n=== MEMORY POLICY ===\n- In empty workspace, NEVER create .vico/memory.md as first action.\n- First action must scaffold/init framework.\n- Update memory only after real code implementation exists.\n============================\n`
+                currentContext += `\n=== MEMORY POLICY ===\n- In empty workspace, NEVER create .vico/memory.md as first action.\n- First action must scaffold/init framework.\n- Update memory only after real code implementation exists.\n- If .vico/* is not writable by whitelist/guardrails, skip memory append silently and continue core task.\n- Never trigger REPLAN only to request permission for optional memory updates.\n============================\n`
                 currentContext += `\n=== VERIFICATION POLICY ===\n- Run build/test/lint ONLY at the end, after implementation steps are done.\n- Do NOT repeat the same verification command if it already passed and no new code changes occurred.\n- For simple vanilla HTML/JS requests, verification is lightweight and optional; do not force integration/e2e test loops.\n- NEVER propose manual verification requiring GUI actions (open browser/url/file, click buttons, open file://).\n- If implementation is already persisted and there is no critical build/runtime error, finalize without extra strict verification loops.\n============================\n`
                 currentContext += `\n=== FILE STRUCTURE AWARENESS ===\nBefore creating any new file or component, you MUST check the 'PROJECT FILE STRUCTURE' provided in the context. \n- If this is a Next.js project, verify if it uses the 'app/' directory (App Router) or 'pages/' directory (Pages Router). \n- Do NOT create 'pages/index.js' if 'app/page.tsx' exists. \n- Do NOT mix TypeScript (.ts/.tsx) and JavaScript (.js/.jsx) unless the project already does. Follow existing patterns.\n================================\n`
                 currentContext += `\n=== DEFAULT WEB POLICY ===\nIf user asks for a web app and does not specify framework, default to Next.js + Tailwind CSS using NON-INTERACTIVE scaffold command.\n- Preferred scaffold command: npx create-next-app . --yes --ts --eslint --tailwind --app --use-npm\n- Never run npm install/build/test before dependency file exists.\n================================\n`
@@ -2545,6 +2560,7 @@
                                     token,
                                     model: selectedModel,
                                     userApiKey,
+                                    verification_mode: verificationMode,
                                     message,
                                     attachments,
                                     history: messageArray,
@@ -2835,6 +2851,7 @@
                             {
                                 model: selectedModel,
                                 userApiKey,
+                                verificationMode,
                             },
                         )
 
@@ -2868,6 +2885,41 @@ Executed Steps:
 Execution Result:
 ${result.summary || "Executed successfully."}`,
                         })
+                        const isSimpleAssetTask = /\b(logo|favicon|icon|branding)\b/i.test(
+                            String(message || ""),
+                        )
+                        const verificationOnlyPlan =
+                            planSteps.length > 0 &&
+                            planSteps.every((s) => isVerificationOnlyStep(s))
+                        const noFileChangesThisIteration =
+                            !result.modifiedFiles || result.modifiedFiles.size === 0
+                        if (
+                            verificationOnlyPlan &&
+                            noFileChangesThisIteration &&
+                            !result.autoFixTriggered &&
+                            !result.hadStepError
+                        ) {
+                            consecutiveVerificationOnlyIterations++
+                        } else {
+                            consecutiveVerificationOnlyIterations = 0
+                        }
+                        if (
+                            consecutiveVerificationOnlyIterations >=
+                            (isSimpleVanillaTask || isSimpleAssetTask ? 1 : 2)
+                        ) {
+                            updateMessagesAssistant({
+                                uniqueId: `assistant-${currentUniqueId}`,
+                                content: `${result.summary || ""}\n\n✅ **Task Completed:** Verification-only loop stopped. No further code changes required.`,
+                            })
+                            messageArray.push({
+                                role: "assistant",
+                                content:
+                                    "✅ Task Completed: Verification-only loop stopped; implementation already sufficient.",
+                            })
+                            saveState()
+                            resetUI()
+                            return
+                        }
                         const hasPersistedImplementation =
                             !!(result.modifiedFiles && result.modifiedFiles.size > 0)
                         const criticalFailurePattern =
@@ -3035,6 +3087,8 @@ ${result.summary || "Executed successfully."}`,
                         aiConfig.model || currentAiSettings.selectedModel || "gpt-5-mini",
                     )
                 const userApiKey = aiConfig.userApiKey || ""
+                const verificationMode =
+                    (aiConfig && aiConfig.verificationMode) || "normal"
                 const userRequestedVanillaNoFrameworkLocal =
                     /(\bno framework\b|\btanpa framework\b|\bvanilla\b|\bplain html\b|\bhtml dan javascript\b|\bhtml\s*\+\s*javascript\b|\bsingle html\b)/i.test(
                         String(originalRequest || ""),
@@ -3095,6 +3149,18 @@ ${result.summary || "Executed successfully."}`,
                     stepHistoryBlocks.push(
                         `\n[thinking title="${escapeTerminalAttr(title)}"]\n\`\`\`\n${safeBody}\n\`\`\`\n[/thinking]\n`,
                     )
+                }
+                const isVerificationOnlyStep = (step) => {
+                    const t = String(step?.type || "").toLowerCase()
+                    const desc = String(step?.description || "")
+                    const cmd = String(step?.command || "")
+                    if (["file_read", "search", "find_files", "analyze", "chat"].includes(t)) {
+                        return /\b(read|check|verify|validat|confirm|inspect)\b/i.test(desc) || t !== "chat"
+                    }
+                    if (t === "terminal_command") {
+                        return isVerificationCommandLite(cmd)
+                    }
+                    return /\b(read|check|verify|validat|confirm|inspect)\b/i.test(desc)
                 }
 
                 for (let i = 0; i < plan.length; i++) {
@@ -3169,6 +3235,7 @@ ${result.summary || "Executed successfully."}`,
                                         token,
                                         model: selectedModel,
                                         userApiKey,
+                                        verification_mode: verificationMode,
                                         step,
                                         context, // Pass the accumulated context
                                         mode: "think",
@@ -3479,6 +3546,7 @@ ${result.summary || "Executed successfully."}`,
                                     token,
                                     model: selectedModel,
                                     userApiKey,
+                                    verification_mode: verificationMode,
                                     step,
                                     context,
                                     mode: "execute",
@@ -3634,6 +3702,18 @@ ${result.summary || "Executed successfully."}`,
                             const replanReason = replanMatch
                                 ? replanMatch[1].trim()
                                 : "Replanning required."
+                            const isOptionalMemoryWhitelistReplan =
+                                /whitelist/i.test(replanReason) &&
+                                /\.vico\/|memory\.md|lessons\.md/i.test(replanReason)
+                            if (isOptionalMemoryWhitelistReplan) {
+                                context += `\n[System Feedback] REPLAN due to .vico whitelist restriction was treated as optional/non-fatal. Skip memory update and continue main implementation without asking user.\n`
+                                planMarkdown += `\n> *ℹ️ Skipping optional .vico memory update (not whitelisted). Continuing main task.*\n`
+                                updateMessagesAssistant({
+                                    uniqueId: `assistant-${uniqueId}`,
+                                    content: planMarkdown,
+                                })
+                                continue
+                            }
 
                             // Check if currentStepMarkdown is defined, if not, fallback to planMarkdown or empty string
                             if (typeof currentStepMarkdown !== "undefined") {
