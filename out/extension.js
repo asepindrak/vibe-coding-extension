@@ -77,6 +77,41 @@ let lastRequestLine = null;
 let lastRequestPrefix = null;
 let lastTypedAt = Date.now();
 let lastWasNewLine = false;
+const recentAppliedDiffFingerprints = new Map();
+function buildDiffFingerprint(filePath, searchText, replaceText) {
+    return crypto
+        .createHash("md5")
+        .update(`${filePath}\n---SEARCH---\n${searchText}\n---REPLACE---\n${replaceText}`)
+        .digest("hex");
+}
+function markAndCheckRecentDiff(fingerprint) {
+    const now = Date.now();
+    const last = recentAppliedDiffFingerprints.get(fingerprint);
+    // Treat same diff as duplicate for 10 minutes to avoid looped reinserts.
+    const isDuplicate = typeof last === "number" && now - last < 10 * 60 * 1000;
+    recentAppliedDiffFingerprints.set(fingerprint, now);
+    // Cleanup old entries
+    for (const [k, t] of recentAppliedDiffFingerprints.entries()) {
+        if (now - t > 30 * 60 * 1000) {
+            recentAppliedDiffFingerprints.delete(k);
+        }
+    }
+    return isDuplicate;
+}
+function collapseAdjacentDuplicateJsxInvocations(content) {
+    const lines = content.split(/\r?\n/);
+    const out = [];
+    const jsxSelfClosing = /^\s*<([A-Z][A-Za-z0-9_]*)\b[^>]*\/>\s*$/;
+    for (const line of lines) {
+        const prev = out.length > 0 ? out[out.length - 1] : "";
+        const sameTrimmed = prev.trim() === line.trim();
+        if (sameTrimmed && jsxSelfClosing.test(line) && jsxSelfClosing.test(prev)) {
+            continue;
+        }
+        out.push(line);
+    }
+    return out.join("\n");
+}
 async function fetchSuggestions(context, editor) {
     if (!isInlineEnabled())
         return;
@@ -271,6 +306,78 @@ async function handleDiff(fileUri, fileContent, relativePath, context) {
         return { success: false, originalContent: null };
     }
 }
+function detectEol(text) {
+    return text.includes("\r\n") ? "\r\n" : "\n";
+}
+function toLf(text) {
+    return text.replace(/\r\n/g, "\n");
+}
+function fromLf(text, eol) {
+    return eol === "\r\n" ? text.replace(/\n/g, "\r\n") : text;
+}
+function replaceFirstOccurrence(text, search, replace) {
+    const idx = text.indexOf(search);
+    if (idx === -1)
+        return text;
+    return text.slice(0, idx) + replace + text.slice(idx + search.length);
+}
+function trimEdgeBlankLines(lines) {
+    let start = 0;
+    let end = lines.length;
+    while (start < end && lines[start].trim() === "")
+        start++;
+    while (end > start && lines[end - 1].trim() === "")
+        end--;
+    return lines.slice(start, end);
+}
+function replaceByTrimmedLineMatch(currentLf, searchLf, replaceLf) {
+    const currentLines = currentLf.split("\n");
+    const searchLinesRaw = searchLf.split("\n");
+    const searchLines = trimEdgeBlankLines(searchLinesRaw);
+    if (searchLines.length === 0) {
+        return { matched: false, next: currentLf };
+    }
+    for (let i = 0; i <= currentLines.length - searchLines.length; i++) {
+        let ok = true;
+        for (let j = 0; j < searchLines.length; j++) {
+            if (currentLines[i + j].trimEnd() !== searchLines[j].trimEnd()) {
+                ok = false;
+                break;
+            }
+        }
+        if (!ok)
+            continue;
+        const nextLines = [
+            ...currentLines.slice(0, i),
+            ...replaceLf.split("\n"),
+            ...currentLines.slice(i + searchLines.length),
+        ];
+        return { matched: true, next: nextLines.join("\n") };
+    }
+    return { matched: false, next: currentLf };
+}
+function applySearchReplaceWithFallback(currentContent, searchText, replaceText) {
+    if (searchText && currentContent.includes(searchText)) {
+        return {
+            matched: true,
+            next: replaceFirstOccurrence(currentContent, searchText, replaceText),
+            strategy: "exact",
+        };
+    }
+    const eol = detectEol(currentContent);
+    const currentLf = toLf(currentContent);
+    const searchLf = toLf(searchText);
+    const replaceLf = toLf(replaceText);
+    if (searchLf && currentLf.includes(searchLf)) {
+        const nextLf = replaceFirstOccurrence(currentLf, searchLf, replaceLf);
+        return { matched: true, next: fromLf(nextLf, eol), strategy: "normalized-eol" };
+    }
+    const loose = replaceByTrimmedLineMatch(currentLf, searchLf, replaceLf);
+    if (loose.matched) {
+        return { matched: true, next: fromLf(loose.next, eol), strategy: "trimmed-line" };
+    }
+    return { matched: false, next: currentContent, strategy: "none" };
+}
 async function writeFileVico(context, editor, sidebarProvider) {
     vico_logger_1.default.info("writeFileVico called");
     const writeContent = context.globalState.get("writeContent");
@@ -283,6 +390,46 @@ async function writeFileVico(context, editor, sidebarProvider) {
         return;
     }
     const projectRoot = vscode.workspace.workspaceFolders[0].uri;
+    const projectRootPath = projectRoot.fsPath;
+    const dependencyMarkers = [
+        "package.json",
+        "requirements.txt",
+        "pyproject.toml",
+        "go.mod",
+        "Cargo.toml",
+        "pom.xml",
+        "build.gradle",
+        "composer.json",
+    ];
+    const hasDependencyFile = dependencyMarkers.some((f) => fs.existsSync(path.join(projectRootPath, f)));
+    let blockedMetaWrites = 0;
+    const resolveWorkspaceTarget = async (rawRelativePath) => {
+        let cleanPath = rawRelativePath.trim().replace(/^\.\//, "");
+        if (cleanPath.startsWith("/") || cleanPath.startsWith("\\")) {
+            cleanPath = cleanPath.substring(1);
+        }
+        const directUri = vscode.Uri.joinPath(projectRoot, cleanPath);
+        if (fs.existsSync(directUri.fsPath)) {
+            return { fileUri: directUri, relativePath: cleanPath };
+        }
+        const hasPathSeparator = cleanPath.includes("/") || cleanPath.includes("\\");
+        if (!hasPathSeparator) {
+            const excludePattern = "**/{node_modules,.git,dist,build,out,coverage,.vscode,.idea,tmp,temp,venv,__pycache__,.vico}/**";
+            const matches = await vscode.workspace.findFiles(`**/${cleanPath}`, excludePattern, 20);
+            if (matches.length > 0) {
+                const sorted = matches
+                    .map((u) => vscode.workspace.asRelativePath(u).replace(/\\/g, "/"))
+                    .sort((a, b) => a.length - b.length);
+                const resolvedRelative = sorted[0];
+                vico_logger_1.default.info(`[writeFile] Resolved target "${rawRelativePath}" -> "${resolvedRelative}"`);
+                return {
+                    fileUri: vscode.Uri.joinPath(projectRoot, resolvedRelative),
+                    relativePath: resolvedRelative,
+                };
+            }
+        }
+        return { fileUri: directUri, relativePath: cleanPath };
+    };
     try {
         // 1. Extract block [writeFile]...[/writeFile]
         // Supports both single block or multiple blocks if the AI outputs them sequentially
@@ -307,16 +454,26 @@ async function writeFileVico(context, editor, sidebarProvider) {
         }
         // 2. Parse [file name="path"]...[/file] OR [diff name="path"]...[/diff]
         // Improved regex to handle newlines and various attributes robustly
-        const fileRegex = /\[file\s+name="([^"]+)"(?:\s+type="[^"]+")?\]([\s\S]*?)\[\/file\]/g;
-        const diffRegex = /\[diff\s+name="([^"]+)"\]([\s\S]*?)\[\/diff\]/g;
+        const fileRegex = /\[file\s+(?:name|path)=["']([^"']+)["'](?:\s+type=["'][^"']+["'])?\]([\s\S]*?)\[\/file\]/g;
+        const diffRegex = /\[diff\s+(?:name|path)=["']([^"']+)["']\]([\s\S]*?)\[\/diff\]/g;
         let fileMatch;
         let filesCreated = 0;
         let duplicateSkipped = false;
+        let sawWritableBlocks = false;
         const fileChanges = [];
         // 2.1 Handle [file] blocks (Full file writes)
         while ((fileMatch = fileRegex.exec(contentToProcess)) !== null) {
+            sawWritableBlocks = true;
             const relativePath = fileMatch[1].trim();
             let fileContent = fileMatch[2].trim();
+            const normalizedRelative = relativePath.replace(/\\/g, "/");
+            const isVicoMetaTarget = normalizedRelative.startsWith(".vico/") ||
+                normalizedRelative === "memory.md";
+            if (isVicoMetaTarget && !hasDependencyFile) {
+                blockedMetaWrites++;
+                vico_logger_1.default.warn(`Blocked pre-scaffold metadata write: ${relativePath}. Scaffold first.`);
+                continue;
+            }
             // STRIP MARKDOWN CODE BLOCKS FROM CONTENT
             // Often agents wrap the content in ```typescript ... ```
             // IMPROVED: Use a more robust check that handles any language identifier and whitespace
@@ -332,18 +489,20 @@ async function writeFileVico(context, editor, sidebarProvider) {
                     fileContent = lines.join("\n").trim();
                 }
             }
-            const fileUri = vscode.Uri.joinPath(projectRoot, relativePath);
+            const resolvedTarget = await resolveWorkspaceTarget(relativePath);
+            const effectiveRelativePath = resolvedTarget.relativePath;
+            const fileUri = resolvedTarget.fileUri;
             const dirUri = vscode.Uri.file(path.dirname(fileUri.fsPath));
             // 3. Create directory if it doesn't exist
             await vscode.workspace.fs.createDirectory(dirUri);
             // Special handling for history.md, lessons.md, architecture.md, and style.md:
             // Append and write directly (no diff) for log files.
             // Overwrite directly for structural/style definition files (architecture.md, style.md) as they are source of truth.
-            const isLogFile = relativePath.toLowerCase().endsWith("history.md") ||
-                relativePath.toLowerCase().endsWith("lessons.md") ||
-                relativePath.toLowerCase().endsWith("memory.md");
-            const isStructuralFile = relativePath.toLowerCase().endsWith("architecture.md") ||
-                relativePath.toLowerCase().endsWith("style.md");
+            const isLogFile = effectiveRelativePath.toLowerCase().endsWith("history.md") ||
+                effectiveRelativePath.toLowerCase().endsWith("lessons.md") ||
+                effectiveRelativePath.toLowerCase().endsWith("memory.md");
+            const isStructuralFile = effectiveRelativePath.toLowerCase().endsWith("architecture.md") ||
+                effectiveRelativePath.toLowerCase().endsWith("style.md");
             if (isLogFile || isStructuralFile) {
                 let newContent = fileContent;
                 let originalContent = null;
@@ -379,7 +538,7 @@ async function writeFileVico(context, editor, sidebarProvider) {
                     await vscode.workspace.fs.writeFile(fileUri, Buffer.from(newContent, "utf8"));
                     filesCreated++;
                     fileChanges.push({
-                        filePath: relativePath,
+                        filePath: effectiveRelativePath,
                         originalContent: originalContent,
                     });
                     continue; // Skip handleDiff
@@ -390,62 +549,134 @@ async function writeFileVico(context, editor, sidebarProvider) {
                 }
             }
             // 4. Handle Diff & Write
-            const result = await handleDiff(fileUri, fileContent, relativePath, context);
+            const result = await handleDiff(fileUri, fileContent, effectiveRelativePath, context);
             if (result && result.success) {
                 filesCreated++;
                 fileChanges.push({
-                    filePath: relativePath,
+                    filePath: effectiveRelativePath,
                     originalContent: result.originalContent,
                 });
             }
         }
         // 2.2 Handle [diff] blocks (Partial targeted diffs)
+        const liveContentByPath = new Map();
+        const originalContentByPath = new Map();
+        const changedPaths = new Set();
         while ((fileMatch = diffRegex.exec(contentToProcess)) !== null) {
+            sawWritableBlocks = true;
             const relativePath = fileMatch[1].trim();
             const diffContent = fileMatch[2].trim();
-            const fileUri = vscode.Uri.joinPath(projectRoot, relativePath);
+            const normalizedRelative = relativePath.replace(/\\/g, "/");
+            const isVicoMetaTarget = normalizedRelative.startsWith(".vico/") ||
+                normalizedRelative === "memory.md";
+            if (isVicoMetaTarget && !hasDependencyFile) {
+                blockedMetaWrites++;
+                vico_logger_1.default.warn(`Blocked pre-scaffold metadata diff: ${relativePath}. Scaffold first.`);
+                continue;
+            }
             try {
-                const existingBytes = await vscode.workspace.fs.readFile(fileUri);
-                let currentContent = Buffer.from(existingBytes).toString("utf8");
+                const resolvedTarget = await resolveWorkspaceTarget(relativePath);
+                const effectiveRelativePath = resolvedTarget.relativePath;
+                const fileUri = resolvedTarget.fileUri;
+                let currentContent = liveContentByPath.get(relativePath);
+                if (typeof currentContent !== "string") {
+                    const existingBytes = await vscode.workspace.fs.readFile(fileUri);
+                    const originalContent = Buffer.from(existingBytes).toString("utf8");
+                    currentContent = originalContent;
+                    liveContentByPath.set(relativePath, originalContent);
+                    originalContentByPath.set(relativePath, originalContent);
+                }
                 // Extract SEARCH/REPLACE blocks
-                const searchReplaceRegex = /<<<<<<< SEARCH\s*[\r\n]+([\s\S]*?)[\r\n]+=======[\r\n]+([\s\S]*?)[\r\n]+>>>>>>> REPLACE/g;
+                const searchReplaceRegex = /<<<<<<<\s*SEARCH\s*[\r\n]*([\s\S]*?)\s*=======[\r\n]*([\s\S]*?)\s*>>>>>>>\s*REPLACE/g;
                 let srMatch;
-                let newContent = currentContent;
-                let foundMatch = false;
+                let matchedBlocks = 0;
+                let totalBlocks = 0;
+                let failedBlocks = 0;
+                let lastReplaceText = "";
+                let nextContent = currentContent;
                 while ((srMatch = searchReplaceRegex.exec(diffContent)) !== null) {
+                    totalBlocks++;
                     const searchText = srMatch[1];
                     const replaceText = srMatch[2];
-                    // Try to match with exact content first
-                    if (newContent.includes(searchText)) {
-                        newContent = newContent.replace(searchText, replaceText);
-                        foundMatch = true;
+                    lastReplaceText = replaceText;
+                    const diffFingerprint = buildDiffFingerprint(relativePath, searchText, replaceText);
+                    const isDuplicateDiff = markAndCheckRecentDiff(diffFingerprint);
+                    if (isDuplicateDiff &&
+                        replaceText.trim().length > 0 &&
+                        nextContent.includes(replaceText.trim())) {
+                        matchedBlocks++;
+                        vico_logger_1.default.warn(`Skipped duplicate diff block for ${relativePath} (fingerprint repeated).`);
+                        continue;
+                    }
+                    const applyResult = applySearchReplaceWithFallback(nextContent, searchText, replaceText);
+                    if (applyResult.matched) {
+                        nextContent = applyResult.next;
+                        matchedBlocks++;
+                        vico_logger_1.default.info(`Applied diff block in ${relativePath} using strategy=${applyResult.strategy}`);
                     }
                     else {
-                        // Fallback: try to match with trimmed whitespace if exact match fails
-                        const trimmedSearch = searchText.trim();
-                        if (trimmedSearch && newContent.includes(trimmedSearch)) {
-                            // Find the actual content in newContent to replace it accurately
-                            // This is a bit risky but helps with minor whitespace mismatches
-                            newContent = newContent.replace(trimmedSearch, replaceText.trim());
-                            foundMatch = true;
-                        }
-                        else {
-                            vico_logger_1.default.warn(`Search text not found in ${relativePath}:\n${searchText}`);
-                        }
+                        failedBlocks++;
+                        vico_logger_1.default.warn(`Search text not found in ${relativePath}:\n${searchText}`);
                     }
                 }
-                if (foundMatch) {
-                    const result = await handleDiff(fileUri, newContent, relativePath, context);
+                // Multi-block diffs are treated as transactional to avoid corrupted partial files.
+                if (totalBlocks > 1 && failedBlocks > 0) {
+                    vico_logger_1.default.warn(`Aborting partial multi-block diff for ${relativePath}: matched=${matchedBlocks}, failed=${failedBlocks}, total=${totalBlocks}.`);
+                    vscode.window.showWarningMessage(`Could not safely apply multi-step diff to ${relativePath} (partial match). Re-run with full file overwrite to avoid corrupted code.`);
+                    continue;
+                }
+                currentContent = nextContent;
+                if (matchedBlocks > 0) {
+                    if (/\.(tsx|jsx)$/i.test(relativePath)) {
+                        currentContent = collapseAdjacentDuplicateJsxInvocations(currentContent);
+                    }
+                    const result = await handleDiff(fileUri, currentContent, effectiveRelativePath, context);
                     if (result && result.success) {
-                        filesCreated++;
-                        fileChanges.push({
-                            filePath: relativePath,
-                            originalContent: currentContent,
-                        });
+                        liveContentByPath.set(relativePath, currentContent);
+                        if (!changedPaths.has(relativePath)) {
+                            changedPaths.add(relativePath);
+                            filesCreated++;
+                            fileChanges.push({
+                                filePath: effectiveRelativePath,
+                                originalContent: originalContentByPath.get(relativePath) ||
+                                    result.originalContent,
+                            });
+                        }
                     }
                 }
                 else {
-                    vscode.window.showWarningMessage(`Could not apply any changes to ${relativePath}. SEARCH block not found.`);
+                    const canFallbackToFullRewrite = totalBlocks === 1 &&
+                        ((lastReplaceText.trim().length > 200 &&
+                            /(export\s+default|function\s+\w+|\breturn\s*\()/i.test(lastReplaceText)) ||
+                            (effectiveRelativePath.replace(/\\/g, "/").toLowerCase() ===
+                                "app/page.tsx" &&
+                                lastReplaceText.trim().length > 0));
+                    if (canFallbackToFullRewrite) {
+                        let rewritten = lastReplaceText;
+                        if (/\.(tsx|jsx)$/i.test(relativePath)) {
+                            rewritten = collapseAdjacentDuplicateJsxInvocations(rewritten);
+                        }
+                        vico_logger_1.default.warn(`SEARCH not found for ${relativePath}. Using controlled full-rewrite fallback.`);
+                        const fallbackResult = await handleDiff(fileUri, rewritten, effectiveRelativePath, context);
+                        if (fallbackResult && fallbackResult.success) {
+                            liveContentByPath.set(relativePath, rewritten);
+                            if (!changedPaths.has(relativePath)) {
+                                changedPaths.add(relativePath);
+                                filesCreated++;
+                                fileChanges.push({
+                                    filePath: effectiveRelativePath,
+                                    originalContent: originalContentByPath.get(relativePath) ||
+                                        fallbackResult.originalContent,
+                                });
+                            }
+                        }
+                        else {
+                            vscode.window.showWarningMessage(`Could not apply changes to ${relativePath}. SEARCH block not found and fallback rewrite failed.`);
+                        }
+                    }
+                    else {
+                        vscode.window.showWarningMessage(`Could not apply changes to ${relativePath}. SEARCH block not found (exact/eol/trimmed match failed).`);
+                    }
                 }
             }
             catch (err) {
@@ -457,13 +688,24 @@ async function writeFileVico(context, editor, sidebarProvider) {
         if (filesCreated === 0) {
             const xmlRegex = /<file\s+path="([^"]+)">([\s\S]*?)<\/file>/g;
             while ((fileMatch = xmlRegex.exec(contentToProcess)) !== null) {
+                sawWritableBlocks = true;
                 const relativePath = fileMatch[1].trim();
                 const fileContent = fileMatch[2].trim();
-                const fileUri = vscode.Uri.joinPath(projectRoot, relativePath);
+                const normalizedRelative = relativePath.replace(/\\/g, "/");
+                const isVicoMetaTarget = normalizedRelative.startsWith(".vico/") ||
+                    normalizedRelative === "memory.md";
+                if (isVicoMetaTarget && !hasDependencyFile) {
+                    blockedMetaWrites++;
+                    vico_logger_1.default.warn(`Blocked pre-scaffold metadata XML write: ${relativePath}. Scaffold first.`);
+                    continue;
+                }
+                const resolvedTarget = await resolveWorkspaceTarget(relativePath);
+                const effectiveRelativePath = resolvedTarget.relativePath;
+                const fileUri = resolvedTarget.fileUri;
                 const dirUri = vscode.Uri.file(path.dirname(fileUri.fsPath));
                 await vscode.workspace.fs.createDirectory(dirUri);
                 // Special handling for memory.md: Append and write directly (no diff)
-                if (relativePath.toLowerCase().endsWith("memory.md")) {
+                if (effectiveRelativePath.toLowerCase().endsWith("memory.md")) {
                     let newContent = fileContent;
                     let originalContent = null;
                     try {
@@ -487,7 +729,7 @@ async function writeFileVico(context, editor, sidebarProvider) {
                         await vscode.workspace.fs.writeFile(fileUri, Buffer.from(newContent, "utf8"));
                         filesCreated++;
                         fileChanges.push({
-                            filePath: relativePath,
+                            filePath: effectiveRelativePath,
                             originalContent: originalContent,
                         });
                         continue;
@@ -496,11 +738,11 @@ async function writeFileVico(context, editor, sidebarProvider) {
                         vico_logger_1.default.error(`Failed to write memory.md:`, e);
                     }
                 }
-                const result = await handleDiff(fileUri, fileContent, relativePath, context);
+                const result = await handleDiff(fileUri, fileContent, effectiveRelativePath, context);
                 if (result && result.success) {
                     filesCreated++;
                     fileChanges.push({
-                        filePath: relativePath,
+                        filePath: effectiveRelativePath,
                         originalContent: result.originalContent,
                     });
                 }
@@ -521,10 +763,14 @@ async function writeFileVico(context, editor, sidebarProvider) {
                 });
             }
         }
-        else if (!duplicateSkipped) {
+        else if (!duplicateSkipped && !sawWritableBlocks) {
+            if (blockedMetaWrites > 0) {
+                vscode.window.showWarningMessage("Blocked .vico/memory writes because project is not scaffolded yet. Initialize framework first.");
+                return;
+            }
             // Log content to debug why regex failed
             vico_logger_1.default.warn("No file blocks found. Content preview:", contentToProcess.substring(0, 200));
-            vscode.window.showWarningMessage('No file blocks found to create. Format: [file name="path"]content[/file]');
+            vscode.window.showWarningMessage('No writable blocks found. Use [file name="path"]...[/file] or [diff name="path"]...[/diff] inside [writeFile].');
         }
     }
     catch (err) {

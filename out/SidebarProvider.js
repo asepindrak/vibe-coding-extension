@@ -49,7 +49,16 @@ class SidebarProvider {
     isWorkspaceDirty = false;
     _abortController = null;
     childProcesses = [];
+    activeCommandProcess = null;
+    activeCommandBuffer = "";
+    inputPromptCooldownAt = 0;
     recentActions = new Map();
+    static FREE_PROMPT_LIMIT = 20;
+    static DEFAULT_MODEL = "gpt-5-mini";
+    static FREE_MODELS = new Set(["gpt-5-mini", "gpt-4o-mini"]);
+    static USER_API_KEY_SECRET = "vico.userOpenAIApiKey";
+    static MODEL_SETTING_KEY = "vico.selectedModel";
+    static MACHINE_PROMPT_USAGE_KEY_PREFIX = "vico.machinePromptUsage";
     checkDuplicateAction(actionType, payload) {
         const hash = crypto
             .createHash("md5")
@@ -106,6 +115,90 @@ class SidebarProvider {
         }
         return undefined;
     }
+    isTransientVicoArtifactPath(relativePath) {
+        const p = (relativePath || "").replace(/\\/g, "/").toLowerCase();
+        return (/(^|\/)vico_backup_[^/]+/.test(p) ||
+            /(^|\/)vico_diff_[^/]+/.test(p));
+    }
+    normalizeCommandForNonInteractive(commandText) {
+        let command = commandText.trim();
+        if (!command)
+            return { command };
+        if (!/\bnpx\s+create-next-app\b/i.test(command)) {
+            return { command };
+        }
+        const addedFlags = [];
+        if (!/\s--yes\b/.test(command)) {
+            command += " --yes";
+            addedFlags.push("--yes");
+        }
+        if (!/\s--(ts|typescript|js|javascript)\b/.test(command)) {
+            command += " --ts";
+            addedFlags.push("--ts");
+        }
+        if (!/\s--eslint\b/.test(command)) {
+            command += " --eslint";
+            addedFlags.push("--eslint");
+        }
+        if (!/\s--tailwind\b/.test(command)) {
+            command += " --tailwind";
+            addedFlags.push("--tailwind");
+        }
+        if (!/\s--(app|no-app)\b/.test(command)) {
+            command += " --app";
+            addedFlags.push("--app");
+        }
+        if (!/\s--use-(npm|pnpm|yarn|bun)\b/.test(command)) {
+            command += " --use-npm";
+            addedFlags.push("--use-npm");
+        }
+        const note = addedFlags.length > 0
+            ? `Normalized interactive scaffold command with flags: ${addedFlags.join(" ")}`
+            : undefined;
+        return { command, note };
+    }
+    isLikelyInteractivePrompt(buffer) {
+        const text = buffer.toLowerCase();
+        return (/would you like/.test(text) ||
+            /use arrow-keys/.test(text) ||
+            /select an option/.test(text) ||
+            /press enter to continue/.test(text) ||
+            /\?\s*$/.test(text.trim()));
+    }
+    isPersistentServerCommand(commandText) {
+        const cmd = commandText.trim().toLowerCase();
+        return (/^(npm|pnpm|yarn|bun)\s+run\s+(dev|start)\b/.test(cmd) ||
+            /^(npm|pnpm|yarn|bun)\s+(dev|start)\b/.test(cmd) ||
+            /^(next|vite|nuxt|ng)\s+dev\b/.test(cmd) ||
+            /^(flask|uvicorn)\b/.test(cmd) ||
+            /^python\s+manage\.py\s+runserver\b/.test(cmd) ||
+            /^rails\s+s\b/.test(cmd) ||
+            /^php\s+artisan\s+serve\b/.test(cmd));
+    }
+    workspaceHasDependencyFile(workspaceFolder) {
+        const markers = [
+            "package.json",
+            "requirements.txt",
+            "pyproject.toml",
+            "go.mod",
+            "Cargo.toml",
+            "pom.xml",
+            "build.gradle",
+            "composer.json",
+        ];
+        return markers.some((file) => fs.existsSync(path.join(workspaceFolder, file)));
+    }
+    requiresProjectContext(commandText) {
+        const cmd = commandText.trim().toLowerCase();
+        if (/^(npm|pnpm|yarn|bun)\s+(init|create)\b/.test(cmd))
+            return false;
+        if (/^npx\s+create-[\w-]+(\s|$)/.test(cmd))
+            return false;
+        if (/^npx\s+degit(\s|$)/.test(cmd))
+            return false;
+        return (/^(npm|pnpm|yarn|bun)\s+(install|i|run|test|t|exec|add)\b/.test(cmd) ||
+            /^(npm|pnpm|yarn|bun)\s+run\s+\w+/.test(cmd));
+    }
     sendLog(message) {
         console.log(message);
         if (this._view) {
@@ -114,6 +207,19 @@ class SidebarProvider {
                 message: message,
             });
         }
+    }
+    normalizeModel(model) {
+        const clean = String(model || "").trim();
+        return clean || SidebarProvider.DEFAULT_MODEL;
+    }
+    getMachinePromptUsage() {
+        const usageKey = `${SidebarProvider.MACHINE_PROMPT_USAGE_KEY_PREFIX}:${vscode.env.machineId}`;
+        const raw = this.context.globalState.get(usageKey, 0);
+        return Number.isFinite(raw) ? Number(raw) : 0;
+    }
+    async setMachinePromptUsage(count) {
+        const usageKey = `${SidebarProvider.MACHINE_PROMPT_USAGE_KEY_PREFIX}:${vscode.env.machineId}`;
+        await this.context.globalState.update(usageKey, Math.max(0, Math.floor(count)));
     }
     postMessage(message) {
         if (this._view) {
@@ -284,6 +390,86 @@ class SidebarProvider {
                     // Simpan token di globalState
                     this.context.globalState.update("token", message.token);
                     return;
+                case "getAiSettings": {
+                    const selectedModel = this.normalizeModel(this.context.globalState.get(SidebarProvider.MODEL_SETTING_KEY, SidebarProvider.DEFAULT_MODEL));
+                    const userApiKey = (await this.context.secrets.get(SidebarProvider.USER_API_KEY_SECRET)) || "";
+                    const usage = this.getMachinePromptUsage();
+                    const remaining = Math.max(0, SidebarProvider.FREE_PROMPT_LIMIT - usage);
+                    webviewView.webview.postMessage({
+                        command: "aiSettings",
+                        selectedModel,
+                        hasUserApiKey: userApiKey.trim().length > 0,
+                        freePromptLimit: SidebarProvider.FREE_PROMPT_LIMIT,
+                        machinePromptUsed: usage,
+                        machinePromptRemaining: remaining,
+                    });
+                    return;
+                }
+                case "saveAiSettings": {
+                    const selectedModel = this.normalizeModel(message.model);
+                    await this.context.globalState.update(SidebarProvider.MODEL_SETTING_KEY, selectedModel);
+                    const keepExistingApiKey = !!message.keepExistingApiKey;
+                    const userApiKey = String(message.userApiKey || "").trim();
+                    if (userApiKey) {
+                        await this.context.secrets.store(SidebarProvider.USER_API_KEY_SECRET, userApiKey);
+                    }
+                    else if (!keepExistingApiKey) {
+                        await this.context.secrets.delete(SidebarProvider.USER_API_KEY_SECRET);
+                    }
+                    const savedApiKey = (await this.context.secrets.get(SidebarProvider.USER_API_KEY_SECRET)) || "";
+                    const usage = this.getMachinePromptUsage();
+                    webviewView.webview.postMessage({
+                        command: "aiSettingsSaved",
+                        selectedModel,
+                        hasUserApiKey: savedApiKey.trim().length > 0,
+                        freePromptLimit: SidebarProvider.FREE_PROMPT_LIMIT,
+                        machinePromptUsed: usage,
+                        machinePromptRemaining: Math.max(0, SidebarProvider.FREE_PROMPT_LIMIT - usage),
+                    });
+                    return;
+                }
+                case "consumePromptQuota": {
+                    const requestId = message.requestId || Date.now().toString();
+                    const mode = String(message.mode || "chat").toLowerCase();
+                    const selectedModel = this.normalizeModel(message.model ||
+                        this.context.globalState.get(SidebarProvider.MODEL_SETTING_KEY, SidebarProvider.DEFAULT_MODEL));
+                    const userApiKey = (await this.context.secrets.get(SidebarProvider.USER_API_KEY_SECRET)) || "";
+                    const hasUserApiKey = userApiKey.trim().length > 0;
+                    let usage = this.getMachinePromptUsage();
+                    let allowed = true;
+                    let reason = "";
+                    const isCountedMode = mode === "agent" || mode === "chat";
+                    if (isCountedMode && !hasUserApiKey) {
+                        if (!SidebarProvider.FREE_MODELS.has(selectedModel)) {
+                            allowed = false;
+                            reason = `Model ${selectedModel} is not included in free quota. Free quota only supports gpt-5-mini and gpt-4o-mini. Please set your own OpenAI API key.`;
+                        }
+                        else if (usage >= SidebarProvider.FREE_PROMPT_LIMIT) {
+                            allowed = false;
+                            reason =
+                                "Free quota reached (20 prompts per machine). Please set your own OpenAI API key.";
+                        }
+                        else {
+                            usage += 1;
+                            await this.setMachinePromptUsage(usage);
+                        }
+                    }
+                    const remaining = Math.max(0, SidebarProvider.FREE_PROMPT_LIMIT - usage);
+                    webviewView.webview.postMessage({
+                        command: "promptQuotaResult",
+                        requestId,
+                        allowed,
+                        reason,
+                        selectedModel,
+                        freePromptLimit: SidebarProvider.FREE_PROMPT_LIMIT,
+                        machinePromptUsed: usage,
+                        machinePromptRemaining: remaining,
+                        hasUserApiKey,
+                        userApiKey: hasUserApiKey ? userApiKey : "",
+                        machineId: vscode.env.machineId,
+                    });
+                    return;
+                }
                 case "validateToken":
                     // Simpan token di globalState
                     let workspacePath = "";
@@ -416,6 +602,7 @@ class SidebarProvider {
                         const rootPath = workspaceFolders[0].uri.fsPath;
                         // Clean path
                         let cleanPath = message.filePath.trim();
+                        cleanPath = cleanPath.replace(/^\.\//, "");
                         if (cleanPath.startsWith("/") || cleanPath.startsWith("\\")) {
                             cleanPath = cleanPath.substring(1);
                         }
@@ -429,9 +616,33 @@ class SidebarProvider {
                             });
                         }
                         else {
+                            // Fallback: resolve bare filename (e.g., "VideoPlayer.tsx")
+                            const hasPathSeparator = cleanPath.includes("/") || cleanPath.includes("\\");
+                            if (!hasPathSeparator) {
+                                const excludePattern = "**/{node_modules,.git,dist,build,out,coverage,.vscode,.idea,tmp,temp,venv,__pycache__,.vico}/**";
+                                const matches = await vscode.workspace.findFiles(`**/${cleanPath}`, excludePattern, 20);
+                                if (matches.length > 0) {
+                                    const sorted = matches
+                                        .map((u) => vscode.workspace.asRelativePath(u))
+                                        .sort((a, b) => a.length - b.length);
+                                    const resolvedRelative = sorted[0];
+                                    const resolvedFull = path.join(rootPath, resolvedRelative);
+                                    if (fs.existsSync(resolvedFull)) {
+                                        const content = fs.readFileSync(resolvedFull, "utf8");
+                                        this.sendLog(`[ReadFile] Resolved "${message.filePath}" -> "${resolvedRelative}"`);
+                                        webviewView.webview.postMessage({
+                                            command: "readFileResult",
+                                            content,
+                                            filePath: message.filePath,
+                                            resolvedPath: resolvedRelative,
+                                        });
+                                        return;
+                                    }
+                                }
+                            }
                             webviewView.webview.postMessage({
                                 command: "readFileResult",
-                                error: "File not found",
+                                error: `File not found: ${message.filePath}`,
                                 filePath: message.filePath,
                             });
                         }
@@ -517,9 +728,13 @@ class SidebarProvider {
                         }
                         this.sendLog(`[Search] Completed. Found ${results.length} matches.`);
                         const output = results.length > 0 ? results.join("\n") : "No matches found.";
+                        const filteredOutput = output
+                            .split("\n")
+                            .filter((line) => !this.isTransientVicoArtifactPath(line))
+                            .join("\n");
                         webviewView.webview.postMessage({
                             command: "searchResult",
-                            results: output,
+                            results: filteredOutput || "No matches found.",
                         });
                     }
                     catch (error) {
@@ -565,10 +780,11 @@ class SidebarProvider {
                         cts.dispose();
                         this.sendLog(`[ListFiles] Found ${files.length} files.`);
                         const filePaths = files.map((file) => vscode.workspace.asRelativePath(file));
-                        filePaths.sort();
+                        const filteredFilePaths = filePaths.filter((p) => !this.isTransientVicoArtifactPath(p));
+                        filteredFilePaths.sort();
                         webviewView.webview.postMessage({
                             command: "listFilesResult",
-                            files: filePaths,
+                            files: filteredFilePaths,
                         });
                     }
                     catch (error) {
@@ -617,6 +833,8 @@ class SidebarProvider {
                             }
                         }
                         this.childProcesses = [];
+                        this.activeCommandProcess = null;
+                        this.activeCommandBuffer = "";
                         if (stoppedCount > 0) {
                             this.sendLog(`[System] Stopped ${stoppedCount} running tasks.`);
                         }
@@ -627,6 +845,35 @@ class SidebarProvider {
                     }
                     catch (e) {
                         console.error("Error stopping command:", e);
+                    }
+                    return;
+                case "commandInput":
+                    try {
+                        const rawInput = typeof message.input === "string" ? message.input : "";
+                        const input = rawInput.endsWith("\n")
+                            ? rawInput
+                            : `${rawInput}\n`;
+                        if (this.activeCommandProcess &&
+                            !this.activeCommandProcess.killed &&
+                            this.activeCommandProcess.stdin) {
+                            this.activeCommandProcess.stdin.write(input);
+                            webviewView.webview.postMessage({
+                                command: "commandOutput",
+                                output: `\n[Sent Input] ${rawInput}\n`,
+                            });
+                        }
+                        else {
+                            webviewView.webview.postMessage({
+                                command: "commandOutput",
+                                output: "\n[Input ignored] No active interactive command process.\n",
+                            });
+                        }
+                    }
+                    catch (err) {
+                        webviewView.webview.postMessage({
+                            command: "commandOutput",
+                            output: `\n[Input error] ${err?.message || String(err)}\n`,
+                        });
                     }
                     return;
                 case "executeCommand":
@@ -675,14 +922,72 @@ class SidebarProvider {
                     // Unfortunately, VS Code Task API doesn't easily return stdout.
                     // WORKAROUND: Use child_process for short commands like 'ls' or 'mkdir'
                     // to ensure we capture output for the agent.
-                    const commandText = (message.command || "").trim();
+                    const commandTextRaw = (message.command || "").trim();
+                    const normalized = this.normalizeCommandForNonInteractive(commandTextRaw);
+                    const commandText = normalized.command;
+                    if (normalized.note) {
+                        this.sendLog(`[System] ${normalized.note}`);
+                        webviewView.webview.postMessage({
+                            command: "commandOutput",
+                            output: `\n[Debug] ${normalized.note}\n`,
+                        });
+                    }
+                    const workspaceFolder = vscode.workspace.workspaceFolders
+                        ? vscode.workspace.workspaceFolders[0].uri.fsPath
+                        : undefined;
+                    webviewView.webview.postMessage({
+                        command: "commandOutput",
+                        output: `\n[Debug] Dispatch command: ${commandText}\n`,
+                    });
+                    if (this.isPersistentServerCommand(commandText)) {
+                        const msg = "Blocked: persistent server command is not allowed for agent verification. Use build/test/lint command instead (e.g., npm run build, npm test, tsc --noEmit).";
+                        webviewView.webview.postMessage({
+                            command: "commandOutput",
+                            output: `\n[Debug] Guard blocked (server command): ${commandText}\n`,
+                        });
+                        webviewView.webview.postMessage({
+                            command: "commandFinished",
+                            exitCode: 2,
+                            output: msg,
+                        });
+                        return;
+                    }
+                    if (workspaceFolder &&
+                        this.requiresProjectContext(commandText) &&
+                        !this.workspaceHasDependencyFile(workspaceFolder)) {
+                        const msg = "Blocked: workspace has no dependency file yet. Scaffold/init project first (example: npx create-next-app . --yes --ts --eslint --tailwind --app --use-npm).";
+                        webviewView.webview.postMessage({
+                            command: "commandOutput",
+                            output: `\n[Debug] Guard blocked (missing dependency file): ${commandText}\n` +
+                                `[Debug] Hint: run scaffold command first.\n`,
+                        });
+                        webviewView.webview.postMessage({
+                            command: "commandFinished",
+                            exitCode: 2,
+                            output: msg,
+                        });
+                        return;
+                    }
+                    if (workspaceFolder &&
+                        /\bnpx\s+create-next-app\b/i.test(commandText) &&
+                        this.workspaceHasDependencyFile(workspaceFolder)) {
+                        const msg = "Blocked: workspace already has dependency file. Do not scaffold again; continue with implementation/build/test.";
+                        webviewView.webview.postMessage({
+                            command: "commandOutput",
+                            output: `\n[Debug] Guard blocked (already scaffolded): ${commandText}\n` +
+                                `[Debug] Hint: skip create-next-app and continue feature implementation.\n`,
+                        });
+                        webviewView.webview.postMessage({
+                            command: "commandFinished",
+                            exitCode: 3,
+                            output: msg,
+                        });
+                        return;
+                    }
                     const isShortCommand = /^(ls|dir|mkdir|cat|type|echo|pwd|find|grep|rm|cp|mv|tree|head|tail)/i.test(commandText);
                     const isBuildOrTestCommand = /^(npm|pnpm|yarn|bun|npx|node|python|pip|pytest|go|cargo|dotnet|mvn|gradle|java|javac|tsc|vite|next|nuxt|ng)\b/i.test(commandText);
                     const shouldCaptureOutput = isShortCommand || isBuildOrTestCommand;
                     if (shouldCaptureOutput) {
-                        const workspaceFolder = vscode.workspace.workspaceFolders
-                            ? vscode.workspace.workspaceFolders[0].uri.fsPath
-                            : undefined;
                         if (workspaceFolder) {
                             let childProcess;
                             let combinedOutput = "";
@@ -706,6 +1011,16 @@ class SidebarProvider {
                                 if (!text)
                                     return;
                                 combinedOutput += text;
+                                this.activeCommandBuffer = (this.activeCommandBuffer + text).slice(-4000);
+                                const now = Date.now();
+                                if (this.isLikelyInteractivePrompt(this.activeCommandBuffer) &&
+                                    now - this.inputPromptCooldownAt > 3000) {
+                                    this.inputPromptCooldownAt = now;
+                                    webviewView.webview.postMessage({
+                                        command: "commandNeedsInput",
+                                        prompt: this.activeCommandBuffer.slice(-1000),
+                                    });
+                                }
                                 webviewView.webview.postMessage({
                                     command: "commandOutput",
                                     output: text,
@@ -714,6 +1029,10 @@ class SidebarProvider {
                             const onExit = () => {
                                 if (childProcess) {
                                     this.childProcesses = this.childProcesses.filter((c) => c !== childProcess);
+                                    if (this.activeCommandProcess === childProcess) {
+                                        this.activeCommandProcess = null;
+                                        this.activeCommandBuffer = "";
+                                    }
                                     console.log(`[SidebarProvider] Child process exited. Total: ${this.childProcesses.length}`);
                                 }
                             };
@@ -730,6 +1049,12 @@ class SidebarProvider {
                                 });
                             }
                             if (childProcess) {
+                                this.activeCommandProcess = childProcess;
+                                this.activeCommandBuffer = "";
+                                webviewView.webview.postMessage({
+                                    command: "commandOutput",
+                                    output: `[Debug] Process started (pid=${childProcess.pid || "n/a"})\n`,
+                                });
                                 childProcess.stdout?.on("data", streamChunk);
                                 childProcess.stderr?.on("data", streamChunk);
                                 childProcess.on("error", (err) => {
@@ -798,9 +1123,10 @@ class SidebarProvider {
     async getAllWorkspaceFiles() {
         try {
             const files = await vscode.workspace.findFiles("**/*", "{**/node_modules/**,**/dist/**,**/build/**,**/out/**,**/.git/**,**/.svn/**,**/.hg/**,**/.next/**,**/.nuxt/**,**/.expo/**,**/vendor/**,**/__pycache__/**,**/.pytest_cache/**,**/venv/**,**/.venv/**,**/.idea/**,**/.vscode/**,**/.vs/**,**/coverage/**,**/bin/**,**/obj/**,**/target/**,**/Pods/**,**/env/**,**/.env/**,**/tmp/**,**/temp/**,**/.vico/**,**/.vico,**/*.log,**/*.lock,**/*.zip,**/*.png,**/*.jpg,**/*.jpeg,**/*.gif,**/*.exe,**/*.dll,**/*.bin,**/*.class,**/*.so,**/*.o,**/*.a}");
+            const filteredFiles = files.filter((f) => !this.isTransientVicoArtifactPath(vscode.workspace.asRelativePath(f)));
             // Generate a lightweight file tree/list so the agent knows the structure
             // even if file contents are truncated.
-            const filePaths = files.map((f) => vscode.workspace.asRelativePath(f));
+            const filePaths = filteredFiles.map((f) => vscode.workspace.asRelativePath(f));
             // Sort for consistent view
             filePaths.sort();
             const structureHeader = "// ===== PROJECT STRUCTURE (Tree View) =====\n";
@@ -811,7 +1137,7 @@ class SidebarProvider {
                 .join("\n");
             const structureSection = structureHeader + structureContent + "\n\n";
             const folderBuckets = {};
-            for (const file of files) {
+            for (const file of filteredFiles) {
                 if (!this.isTextFile(file.fsPath))
                     continue;
                 const document = await vscode.workspace.openTextDocument(file);
@@ -902,7 +1228,7 @@ class SidebarProvider {
                 }
             }
             // Add package.json dependencies to help AI understand the tech stack
-            const packageJsonFiles = files.filter((f) => f.fsPath.endsWith("package.json"));
+            const packageJsonFiles = filteredFiles.filter((f) => f.fsPath.endsWith("package.json"));
             for (const pkgFile of packageJsonFiles) {
                 try {
                     const doc = await vscode.workspace.openTextDocument(pkgFile);
