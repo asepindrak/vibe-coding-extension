@@ -158,7 +158,7 @@ async function fetchSuggestions(context, editor) {
     // 👉 simpan posisi cursor saat request dikirim
     const requestLine = cursorLine;
     try {
-        const response = await fetch("http://103.250.10.249:13100/api/suggest", {
+        const response = await fetch("http://localhost:13100/api/suggest", {
             method: "POST",
             signal: controller.signal,
             headers: {
@@ -305,13 +305,15 @@ async function writeFileVico(context, editor, sidebarProvider) {
                 contentToProcess = writeContent;
             }
         }
-        // 2. Parse [file name="path"]...[/file]
+        // 2. Parse [file name="path"]...[/file] OR [diff name="path"]...[/diff]
         // Improved regex to handle newlines and various attributes robustly
         const fileRegex = /\[file\s+name="([^"]+)"(?:\s+type="[^"]+")?\]([\s\S]*?)\[\/file\]/g;
+        const diffRegex = /\[diff\s+name="([^"]+)"\]([\s\S]*?)\[\/diff\]/g;
         let fileMatch;
         let filesCreated = 0;
         let duplicateSkipped = false;
         const fileChanges = [];
+        // 2.1 Handle [file] blocks (Full file writes)
         while ((fileMatch = fileRegex.exec(contentToProcess)) !== null) {
             const relativePath = fileMatch[1].trim();
             let fileContent = fileMatch[2].trim();
@@ -395,6 +397,60 @@ async function writeFileVico(context, editor, sidebarProvider) {
                     filePath: relativePath,
                     originalContent: result.originalContent,
                 });
+            }
+        }
+        // 2.2 Handle [diff] blocks (Partial targeted diffs)
+        while ((fileMatch = diffRegex.exec(contentToProcess)) !== null) {
+            const relativePath = fileMatch[1].trim();
+            const diffContent = fileMatch[2].trim();
+            const fileUri = vscode.Uri.joinPath(projectRoot, relativePath);
+            try {
+                const existingBytes = await vscode.workspace.fs.readFile(fileUri);
+                let currentContent = Buffer.from(existingBytes).toString("utf8");
+                // Extract SEARCH/REPLACE blocks
+                const searchReplaceRegex = /<<<<<<< SEARCH\s*[\r\n]+([\s\S]*?)[\r\n]+=======[\r\n]+([\s\S]*?)[\r\n]+>>>>>>> REPLACE/g;
+                let srMatch;
+                let newContent = currentContent;
+                let foundMatch = false;
+                while ((srMatch = searchReplaceRegex.exec(diffContent)) !== null) {
+                    const searchText = srMatch[1];
+                    const replaceText = srMatch[2];
+                    // Try to match with exact content first
+                    if (newContent.includes(searchText)) {
+                        newContent = newContent.replace(searchText, replaceText);
+                        foundMatch = true;
+                    }
+                    else {
+                        // Fallback: try to match with trimmed whitespace if exact match fails
+                        const trimmedSearch = searchText.trim();
+                        if (trimmedSearch && newContent.includes(trimmedSearch)) {
+                            // Find the actual content in newContent to replace it accurately
+                            // This is a bit risky but helps with minor whitespace mismatches
+                            newContent = newContent.replace(trimmedSearch, replaceText.trim());
+                            foundMatch = true;
+                        }
+                        else {
+                            vico_logger_1.default.warn(`Search text not found in ${relativePath}:\n${searchText}`);
+                        }
+                    }
+                }
+                if (foundMatch) {
+                    const result = await handleDiff(fileUri, newContent, relativePath, context);
+                    if (result && result.success) {
+                        filesCreated++;
+                        fileChanges.push({
+                            filePath: relativePath,
+                            originalContent: currentContent,
+                        });
+                    }
+                }
+                else {
+                    vscode.window.showWarningMessage(`Could not apply any changes to ${relativePath}. SEARCH block not found.`);
+                }
+            }
+            catch (err) {
+                vico_logger_1.default.error(`Failed to apply diff to ${relativePath}:`, err);
+                vscode.window.showErrorMessage(`Failed to read file ${relativePath}`);
             }
         }
         // Fallback: Check for XML-style tags <file path="...">...</file> (sometimes agents use this)
@@ -579,21 +635,36 @@ function activate(context) {
     // Register a command to update the webview with the current file and line information
     context.subscriptions.push(vscode.commands.registerCommand("vibe-coding.updateWebview", () => {
         const editor = vscode.window.activeTextEditor;
+        const webview = sidebarProvider._view;
+        if (!webview)
+            return;
+        let filePath = "";
+        let fileName = "";
+        let selectedLine = "";
+        let whitelist = [];
+        // Dapatkan semua file yang sedang terbuka (whitelist)
+        whitelist = vscode.workspace.textDocuments
+            .filter((doc) => doc.uri.scheme === "file")
+            .map((doc) => path.basename(doc.fileName));
+        // Unikkan whitelist
+        whitelist = [...new Set(whitelist)];
         if (editor) {
-            const filePath = editor.document.fileName;
-            const fileName = path.basename(filePath); // Dapatkan nama file saja
+            filePath = editor.document.fileName;
+            fileName = path.basename(filePath);
             const selection = editor.selection;
-            const startLine = selection.start.line + 1; // Line numbers are 0-based
-            const endLine = selection.end.line + 1; // Line numbers are 0-based
-            const webview = sidebarProvider._view;
-            if (webview) {
-                webview.webview.postMessage({
-                    command: "updateFileInfo",
-                    filePath: fileName, // Kirim nama file saja
-                    selectedLine: `${startLine}-${endLine}`, // Kirim rentang baris yang dipilih
-                });
-            }
+            const startLine = selection.start.line + 1;
+            const endLine = selection.end.line + 1;
+            selectedLine = `${startLine}-${endLine}`;
         }
+        webview.webview.postMessage({
+            command: "updateFileInfo",
+            filePath: fileName,
+            selectedLine: selectedLine,
+            guardrails: {
+                whitelist: whitelist,
+                lineLimits: selectedLine ? { [fileName]: selectedLine } : {},
+            },
+        });
     }));
     context.subscriptions.push(vscode.languages.registerInlineCompletionItemProvider({ scheme: "file" }, {
         async provideInlineCompletionItems(document, position) {
@@ -958,7 +1029,7 @@ async function triggerCodeCompletion(context, comment, allCode) {
         loadingStatusBarItem.text = "🔄 Vibe Coding loading...";
         loadingStatusBarItem.show();
         try {
-            const response = await fetch("http://103.250.10.249:13100/api/suggest", {
+            const response = await fetch("http://localhost:13100/api/suggest", {
                 method: "POST",
                 headers: {
                     Authorization: `Bearer ${token}`,

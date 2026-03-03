@@ -735,9 +735,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             if (this.checkDuplicateAction("executeCommand", message.command)) {
               webviewView.webview.postMessage({
                 command: "commandFinished",
-                exitCode: 0,
+                exitCode: 2,
                 output:
-                  "⚠️ You recently executed this command. Please proceed to the next step to avoid looping.",
+                  "⚠️ Duplicate command blocked to prevent looping. Analyze previous output, apply a fix, then run a different command.",
               });
               return;
             }
@@ -753,20 +753,51 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             // WORKAROUND: Use child_process for short commands like 'ls' or 'mkdir'
             // to ensure we capture output for the agent.
 
+            const commandText = (message.command || "").trim();
             const isShortCommand =
               /^(ls|dir|mkdir|cat|type|echo|pwd|find|grep|rm|cp|mv|tree|head|tail)/i.test(
-                message.command.trim(),
+                commandText,
               );
+            const isBuildOrTestCommand =
+              /^(npm|pnpm|yarn|bun|npx|node|python|pip|pytest|go|cargo|dotnet|mvn|gradle|java|javac|tsc|vite|next|nuxt|ng)\b/i.test(
+                commandText,
+              );
+            const shouldCaptureOutput = isShortCommand || isBuildOrTestCommand;
 
-            if (isShortCommand) {
-              const cp = require("child_process");
+            if (shouldCaptureOutput) {
               const workspaceFolder = vscode.workspace.workspaceFolders
                 ? vscode.workspace.workspaceFolders[0].uri.fsPath
                 : undefined;
-              const maxBuffer = 10 * 1024 * 1024; // 10MB buffer for large outputs
 
               if (workspaceFolder) {
-                let childProcess: any;
+                let childProcess: cp.ChildProcess;
+                let combinedOutput = "";
+                let finished = false;
+
+                const finishCommand = (exitCode: number, extraOutput = "") => {
+                  if (finished) return;
+                  finished = true;
+                  if (extraOutput) {
+                    combinedOutput += extraOutput;
+                  }
+                  onExit();
+                  webviewView.webview.postMessage({
+                    command: "commandFinished",
+                    exitCode,
+                    output: combinedOutput,
+                  });
+                };
+
+                const streamChunk = (chunk: any) => {
+                  const text = chunk ? chunk.toString() : "";
+                  if (!text) return;
+                  combinedOutput += text;
+                  webviewView.webview.postMessage({
+                    command: "commandOutput",
+                    output: text,
+                  });
+                };
+
                 const onExit = () => {
                   if (childProcess) {
                     this.childProcesses = this.childProcesses.filter(
@@ -779,35 +810,26 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                 };
 
                 if (gitBashPath && os.platform() === "win32") {
-                  const cmd = message.command.replace(/"/g, '\\"');
-                  childProcess = cp.exec(
-                    `"${gitBashPath}" -c "${cmd}"`,
-                    { cwd: workspaceFolder, maxBuffer },
-                    (err: any, stdout: string, stderr: string) => {
-                      onExit();
-                      webviewView.webview.postMessage({
-                        command: "commandFinished",
-                        exitCode: err ? err.code || 1 : 0,
-                        output: stdout + stderr,
-                      });
-                    },
-                  );
+                  const cmd = commandText.replace(/"/g, '\\"');
+                  childProcess = cp.spawn(gitBashPath, ["-c", cmd], {
+                    cwd: workspaceFolder,
+                  });
                 } else {
-                  childProcess = cp.exec(
-                    message.command,
-                    { cwd: workspaceFolder, maxBuffer },
-                    (err: any, stdout: string, stderr: string) => {
-                      onExit();
-                      webviewView.webview.postMessage({
-                        command: "commandFinished",
-                        exitCode: err ? err.code || 1 : 0,
-                        output: stdout + stderr,
-                      });
-                    },
-                  );
+                  childProcess = cp.spawn(commandText, {
+                    cwd: workspaceFolder,
+                    shell: true,
+                  });
                 }
 
                 if (childProcess) {
+                  childProcess.stdout?.on("data", streamChunk);
+                  childProcess.stderr?.on("data", streamChunk);
+                  childProcess.on("error", (err: any) => {
+                    finishCommand(-1, err?.message ? `\n${err.message}\n` : "");
+                  });
+                  childProcess.on("close", (code: number | null) => {
+                    finishCommand(typeof code === "number" ? code : 1);
+                  });
                   this.childProcesses.push(childProcess);
                   console.log(
                     `[SidebarProvider] Started child process. Total: ${this.childProcesses.length}`,
