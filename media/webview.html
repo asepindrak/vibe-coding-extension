@@ -9,6 +9,83 @@
         <link rel="stylesheet" href="%PRISM_PATH%" />
         <!-- Link to the Prism CSS for syntax highlighting -->
         <link rel="stylesheet" href="%STYLES_PATH%" />
+        <style>
+            .step-history-details {
+                margin-top: 8px;
+                border: 1px solid #30363d;
+                border-radius: 8px;
+                background: #0d1117;
+            }
+
+            .step-history-details > summary {
+                cursor: pointer;
+                list-style: none;
+                padding: 8px 10px;
+                font-size: 12px;
+                color: #8b949e;
+                border-bottom: 1px solid transparent;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .step-history-details > div,
+            .step-history-details > pre {
+                padding: 8px 10px;
+            }
+
+            .step-history-details ul,
+            .step-history-details ol {
+                margin: 4px 0 4px 0;
+                padding-left: 18px;
+                list-style-position: outside;
+            }
+
+            .step-history-details li {
+                margin-left: 0;
+                padding-left: 0;
+            }
+
+            .step-history-details[open] > summary {
+                border-bottom-color: #30363d;
+                color: #c9d1d9;
+            }
+
+            .step-history-details > summary::-webkit-details-marker {
+                display: none;
+            }
+
+            .step-history-details > summary::before {
+                content: none;
+            }
+
+            .step-history-details[open] > summary::before {
+                content: none;
+            }
+
+            .writefile-panel .terminal-pre {
+                max-height: 240px;
+            }
+
+            .collapse-icon {
+                color: #8b949e;
+                font-size: 11px;
+                width: 12px;
+                flex: 0 0 12px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                transition: transform 120ms ease;
+            }
+
+            .step-history-details[open] > summary .collapse-icon {
+                transform: rotate(90deg);
+                color: #c9d1d9;
+            }
+        </style>
     </head>
 
     <body>
@@ -17,7 +94,7 @@
                 <img src="%LOGO_NAV_PATH%" alt="Logo" />
             </div>
             <div id="header-controls" class="header-controls">
-                <button id="button-workspace" class="btn-elegant" style="height: 32px; font-size: 12px">
+                <button id="button-workspace" class="btn-elegant" style="height: 32px; font-size: 12px; display: none;">
                     Teach AI 🔄
                 </button>
                 <button id="newChatButton" class="btn-elegant" style="height: 32px; padding: 0 10px; margin-left: 5px"
@@ -411,6 +488,13 @@
                 return isFreeQuotaModel(lastAllowedModel)
                     ? lastAllowedModel
                     : "gpt-5-mini"
+            }
+
+            function hideWorkspacePrompt() {
+                const btnWorkspace = document.getElementById("button-workspace")
+                if (btnWorkspace) {
+                    btnWorkspace.style.display = "none"
+                }
             }
 
             function resetSendUiAfterEarlyExit() {
@@ -1081,6 +1165,7 @@
                 }
                 vscode.postMessage({ type: "getAiSettings" })
                 updatePlaceholder()
+                hideWorkspacePrompt()
                 if (token && userId) {
                     vscode.postMessage({ type: "validateToken", token, userId })
                 } else {
@@ -1091,7 +1176,9 @@
                 const sendMessageButton = document.getElementById("sendMessageButton")
                 sendMessageButton.addEventListener("click", handleSendMessage)
                 const btnWorkspace = document.getElementById("button-workspace")
-                btnWorkspace.addEventListener("click", updateWorkspaces)
+                if (btnWorkspace) {
+                    btnWorkspace.style.display = "none"
+                }
                 const logoutButton = document.getElementById("logoutButton")
                 logoutButton.addEventListener("click", logout)
 
@@ -1341,12 +1428,8 @@
                     if (messageEvent.command === "workspaceDirty") {
                         isWorkspaceDirty = messageEvent.isDirty
                         const btnWorkspace = document.getElementById("button-workspace")
-                        if (isWorkspaceDirty) {
-                            btnWorkspace.innerHTML = `Teach AI Current Code 🔄 (Changes detected)`
-                            btnWorkspace.classList.add("bg-yellow-600") // Visual indicator
-                        } else {
-                            btnWorkspace.innerHTML = `Teach AI Current Code 🔄`
-                            btnWorkspace.classList.remove("bg-yellow-600")
+                        if (btnWorkspace) {
+                            btnWorkspace.style.display = "none"
                         }
                         return
                     }
@@ -2307,6 +2390,7 @@
                 currentContext += `\n=== WEB FRAMEWORK OVERRIDE ===\nIf user explicitly asks for HTML/CSS/JavaScript without framework (for example: 'tanpa framework', 'no framework', 'vanilla'), DO NOT scaffold Next.js/Vite/React.\nImplement directly with plain files (for example: index.html + script.js), and use Tailwind via CDN unless user requests another setup.\n================================\n`
                 currentContext += `\n=== DEPENDENCY & IMPORT POLICY ===\nBefore writing any external import (for example: import Hls from 'hls.js'), verify dependency source first.\n- For explicit vanilla/no-framework requests: NEVER use bare npm imports. Use CDN/browser script import and global object fallback.\n- If project has dependency manifest and framework-based build is used: install missing package first, then import.\n- Never reference non-existent local files in import path.\n================================\n`
                 currentContext += `\n=== CONTENT FIDELITY POLICY ===\n- Use literal values from user prompt exactly. Never replace provided URL with placeholders.\n- Forbidden placeholder patterns: example.com, your-*.m3u8, final-*.m3u8, TODO placeholder URLs.\n- Do not add extra branding words like 'Final' unless user explicitly asked for it.\n- For this task, keep naming exactly: 'PJTV Live'.\n================================\n`
+                currentContext += `\n=== PRODUCTION COPY POLICY ===\nDo not leak prompt meta constraints into user-facing copy/code.\n- Forbidden in generated UI text/comments: 'no framework', 'tanpa framework', 'without framework', 'vanilla'.\n- These are implementation constraints, not product copy.\n================================\n`
                 if (requestedUrls.length > 0) {
                     currentContext += `\n=== REQUIRED LITERAL URLS ===\n${requestedUrls.map((u) => `- ${u}`).join("\n")}\nUse these exact URLs in output code where relevant.\n================================\n`
                 }
@@ -2721,7 +2805,7 @@
                         planSteps.forEach((s, i) => {
                             const stepNum = i + 1
                             let cleanDesc = s.description.replace(/^Step\s+\d+[:.]\s*/i, "")
-                            currentStepMarkdown += `**Step ${stepNum}:** ${cleanDesc}\n- [ ] ${cleanDesc}\n\n`
+                            currentStepMarkdown += `[thinking title="Step ${stepNum}: ${cleanDesc}"]\n- [ ] ${cleanDesc}\n[/thinking]\n\n`
 
                             // Append to global plan for popup
                             window.currentPlanMarkdown += `- [ ] Step ${stepNum}: ${s.description}\n`
@@ -2730,12 +2814,9 @@
                         updatePlanPopup(window.currentPlanMarkdown)
                         updatePlanButtonTitle(window.currentPlanMarkdown)
 
-                        // Wrap in thinking block for auto-collapse
-                        const thinkingContent = `[thinking title="Executing Plan (${planSteps.length} Steps)"]\n${currentStepMarkdown}\n[/thinking]`
-
                         updateMessagesAssistant({
                             uniqueId: `assistant-${currentUniqueId}`,
-                            content: thinkingContent,
+                            content: currentStepMarkdown,
                         })
 
                         // Execute Plan (pass ALL steps)
@@ -2796,7 +2877,7 @@ ${result.summary || "Executed successfully."}`,
                                 updateMessagesAssistant({
                                     uniqueId: `assistant-${currentUniqueId}`,
                                     content:
-                                        "**Task Completed:** Implementasi sudah tersimpan. Recovery loop dihentikan untuk simple vanilla task.",
+                                        `${result.summary || ""}\n\n**Task Completed:** Implementasi sudah tersimpan. Recovery loop dihentikan untuk simple vanilla task.`,
                                 })
                                 messageArray.push({
                                     role: "assistant",
@@ -2812,7 +2893,7 @@ ${result.summary || "Executed successfully."}`,
                             updateMessagesAssistant({
                                 uniqueId: `assistant-${currentUniqueId}`,
                                 content:
-                                    "⚠️ **Command failed. Agent will continue with automatic recovery and replanning.**",
+                                    `${result.summary || ""}\n\n⚠️ **Command failed. Agent will continue with automatic recovery and replanning.**`,
                             })
                             continue
                         }
@@ -2826,7 +2907,7 @@ ${result.summary || "Executed successfully."}`,
                                 updateMessagesAssistant({
                                     uniqueId: `assistant-${currentUniqueId}`,
                                     content:
-                                        "**Task Completed:** Perubahan utama sudah persisten. Replanning dihentikan agar tidak looping.",
+                                        `${result.summary || ""}\n\n**Task Completed:** Perubahan utama sudah persisten. Replanning dihentikan agar tidak looping.`,
                                 })
                                 messageArray.push({
                                     role: "assistant",
@@ -2842,7 +2923,7 @@ ${result.summary || "Executed successfully."}`,
                             updateMessagesAssistant({
                                 uniqueId: `assistant-${currentUniqueId}`,
                                 content:
-                                    "⚠️ **Ada step yang gagal. Agent lanjutkan otomatis dengan replanning.**",
+                                    `${result.summary || ""}\n\n⚠️ **Ada step yang gagal. Agent lanjutkan otomatis dengan replanning.**`,
                             })
                             continue
                         }
@@ -2863,7 +2944,7 @@ ${result.summary || "Executed successfully."}`,
                             updateMessagesAssistant({
                                 uniqueId: `assistant-${currentUniqueId}`,
                                 content:
-                                    "**Task Completed:** Simple vanilla coding selesai tanpa verifikasi terminal tambahan.",
+                                    `${result.summary || ""}\n\n**Task Completed:** Simple vanilla coding selesai tanpa verifikasi terminal tambahan.`,
                             })
                             messageArray.push({
                                 role: "assistant",
@@ -2876,7 +2957,7 @@ ${result.summary || "Executed successfully."}`,
                         }
                         updateMessagesAssistant({
                             uniqueId: `assistant-${currentUniqueId}`,
-                            content: `✅ **Plan iterasi ${iteration} selesai. Melanjutkan validasi completion...**`,
+                            content: `${result.summary || ""}\n\n✅ **Plan iterasi ${iteration} selesai. Melanjutkan validasi completion...**`,
                         })
                         continue
                     } catch (err) {
@@ -2932,12 +3013,17 @@ ${result.summary || "Executed successfully."}`,
                         aiConfig.model || currentAiSettings.selectedModel || "gpt-5-mini",
                     )
                 const userApiKey = aiConfig.userApiKey || ""
+                const userRequestedVanillaNoFrameworkLocal =
+                    /(\bno framework\b|\btanpa framework\b|\bvanilla\b|\bplain html\b|\bhtml dan javascript\b|\bhtml\s*\+\s*javascript\b|\bsingle html\b)/i.test(
+                        String(originalRequest || ""),
+                    )
                 let planMarkdown = initialMarkdown
                 // Ensure currentStepMarkdown is initialized
                 let currentStepMarkdown = planMarkdown
                 let modifiedFiles = new Set()
                 let autoFixTriggered = false
                 let hadStepError = false
+                const stepHistoryBlocks = []
                 const escapeRegExp = (s) =>
                     String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
                 const normalizeSignatureText = (s) =>
@@ -2971,6 +3057,16 @@ ${result.summary || "Executed successfully."}`,
                     String(s || "").replace(/\[\/terminal\]/g, "[/terminal-escaped]")
                 const buildTerminalBlock = (command, output, status = "running") =>
                     `\n[terminal command="${escapeTerminalAttr(command)}" status="${status}"]${sanitizeTerminalBody(output)}[/terminal]\n`
+                const pushStepHistory = (stepNum, stepDesc, body, status = "done") => {
+                    const safeBody = String(body || "")
+                        .replace(/\[\/thinking\]/g, "[/thinking-escaped]")
+                        .slice(0, 12000)
+                    const label = status === "error" ? "Failed" : "Completed"
+                    const title = `Step ${stepNum} ${label}: ${String(stepDesc || "").slice(0, 90)}`
+                    stepHistoryBlocks.push(
+                        `\n[thinking title="${escapeTerminalAttr(title)}"]\n\`\`\`\n${safeBody}\n\`\`\`\n[/thinking]\n`,
+                    )
+                }
 
                 for (let i = 0; i < plan.length; i++) {
                     const step = plan[i]
@@ -3466,6 +3562,12 @@ ${result.summary || "Executed successfully."}`,
                         // But we also need to update the local 'context' variable for the next iteration of the loop
                         // (even though executePlan loop usually only has 1 step now)
                         context = newContext
+                        pushStepHistory(
+                            stepNum,
+                            step.description,
+                            `Step Type: ${step.type || "unknown"}\n\n${stepOutput}`,
+                            "done",
+                        )
 
                         // Update to Complete in the chat bubble
                         const completeRegex = new RegExp(
@@ -3722,7 +3824,7 @@ ${result.summary || "Executed successfully."}`,
                                     window.fileContentMap.set(tPath, afterContent)
                                     context += `\nFile Content (${tPath}):\n${afterContent}\n`
                                     if (
-                                        userRequestedVanillaNoFramework &&
+                                        userRequestedVanillaNoFrameworkLocal &&
                                         /\.(html|js|mjs|cjs|ts|tsx|jsx)$/i.test(tPath)
                                     ) {
                                         const bareImportMatches = [
@@ -3772,6 +3874,14 @@ ${result.summary || "Executed successfully."}`,
                                             />\s*[^<]*\bfinal\b[^<]*</i.test(afterContent)
                                         ) {
                                             context += `\n[Write Feedback] Unexpected word 'Final' found in UI copy in ${tPath}. Remove it unless explicitly requested.\n`
+                                            if (workflowMeta && workflowMeta.forceFullRewriteFiles) {
+                                                workflowMeta.forceFullRewriteFiles.add(tPath)
+                                            }
+                                        }
+                                        const metaConstraintLeakPattern =
+                                            /\b(no framework|tanpa framework|without framework|vanilla)\b/i
+                                        if (metaConstraintLeakPattern.test(afterContent)) {
+                                            context += `\n[Write Feedback] Prompt meta constraint leaked into output in ${tPath} (e.g., 'no framework'/'vanilla'). Remove these phrases; keep output production-ready.\n`
                                             if (workflowMeta && workflowMeta.forceFullRewriteFiles) {
                                                 workflowMeta.forceFullRewriteFiles.add(tPath)
                                             }
@@ -3839,6 +3949,18 @@ ${result.summary || "Executed successfully."}`,
                                 } else {
                                     context += `\n[Write Feedback] Unable to read ${tPath} after write.\n[Write Feedback] Do NOT scaffold/init again. Resolve correct path first (e.g., components/VideoPlayer.tsx vs VideoPlayer.tsx), then use full [file] overwrite for that resolved path.\n`
                                 }
+                            }
+                            const writeTargets = Array.from(targetFiles)
+                            if (writeTargets.length > 0) {
+                                planMarkdown += buildTerminalBlock(
+                                    "writeFile",
+                                    `targets:\n${writeTargets.map((f) => `- ${f}`).join("\n")}`,
+                                    "success",
+                                )
+                                updateMessagesAssistant({
+                                    uniqueId: `assistant-${uniqueId}`,
+                                    content: planMarkdown,
+                                })
                             }
                         }
                         if (stepOutput.includes("[command]")) {
@@ -4091,7 +4213,7 @@ ${result.summary || "Executed successfully."}`,
                                     autoFixTriggered = true
                                     hadStepError = true
                                     const failureGuidance = isScaffoldMissingError
-                                        ? userRequestedVanillaNoFramework
+                                        ? userRequestedVanillaNoFrameworkLocal
                                             ? `\n[System Feedback] Command "${command}" was blocked because no dependency manifest exists.\n[System Feedback] User explicitly requested NO FRAMEWORK/vanilla web. Do NOT scaffold Next.js.\n[System Feedback] Continue with direct file edits (index.html/script.js/styles.css) and avoid npm build/dev unless explicitly required.\n`
                                             : `\n[System Feedback] Command "${command}" was blocked because workspace is not scaffolded yet.\n[System Feedback] NEXT PLAN MUST start with scaffold command:\n[System Feedback] [command] npx create-next-app . --yes --ts --eslint --tailwind --app --use-npm [/command]\n[System Feedback] Do not run npm install/build/test/dev before scaffold succeeds.\n`
                                         : isPackageJsonParseError
@@ -4180,6 +4302,12 @@ ${result.summary || "Executed successfully."}`,
                             })
                             throw err
                         }
+                        pushStepHistory(
+                            stepNum,
+                            step.description,
+                            `Error: ${err.message}`,
+                            "error",
+                        )
                         const errorRegex = new RegExp(
                             `^\\s*-\\s*\\[🔄\\]\\s*(Step\\s+${stepNum}:)`,
                             "gm",
@@ -4251,6 +4379,9 @@ ${result.summary || "Executed successfully."}`,
                         console.error("Failed to generate summary:", e)
                         // Fail silently, don't block the completion
                     }
+                }
+                if (stepHistoryBlocks.length > 0) {
+                    planMarkdown += `\n\n### Step History\n${stepHistoryBlocks.join("\n")}\n`
                 }
 
                 // Move Modified Files section to the end (after summary)
@@ -4711,7 +4842,7 @@ ${result.summary || "Executed successfully."}`,
                     if (logo) logo.style.display = "flex"
 
                     const btnWorkspace = document.getElementById("button-workspace")
-                    if (btnWorkspace) btnWorkspace.style.display = "block"
+                    if (btnWorkspace) btnWorkspace.style.display = "none"
 
                     // Fetch and display chat history
                     fetchHistory()
@@ -4727,10 +4858,14 @@ ${result.summary || "Executed successfully."}`,
             }
 
             async function updateWorkspaces(silent = false) {
+                const btnWorkspace = document.getElementById("button-workspace")
+                if (btnWorkspace) {
+                    btnWorkspace.style.display = "none"
+                }
+                return
                 if (isLoading && !silent && !pendingMessage) return
                 if (!silent) isLoading = true
 
-                const btnWorkspace = document.getElementById("button-workspace")
                 btnWorkspace.innerHTML = `
                                 <svg class="loader-button" viewBox="0 0 24 24" width="16" height="16"> <!-- Adjust width and height -->
                                     <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
@@ -4741,8 +4876,6 @@ ${result.summary || "Executed successfully."}`,
 
             async function updateWorkspacesAPI(workspacesParam) {
                 try {
-                    // Send a message to the extension to find files
-
                     const tokenData = localStorage.getItem("token")
 
                     const response = await fetch("http://localhost:13100/api/workspace", {
@@ -4762,9 +4895,9 @@ ${result.summary || "Executed successfully."}`,
                     }
                     console.log("update workspaces berhasil")
                     const btnWorkspace = document.getElementById("button-workspace")
-                    btnWorkspace.style.display = "block"
-                    btnWorkspace.innerHTML = `Teach AI Current Code 🔄`
-                    btnWorkspace.addEventListener("click", updateWorkspaces)
+                    if (btnWorkspace) {
+                        btnWorkspace.style.display = "none"
+                    }
                     isLoading = false
 
                     if (pendingMessage) {
@@ -4787,9 +4920,9 @@ ${result.summary || "Executed successfully."}`,
             async function cancelUpdateWorkspaces() {
                 isLoading = false
                 const btnWorkspace = document.getElementById("button-workspace")
-                btnWorkspace.style.display = "block"
-                btnWorkspace.innerHTML = `Teach AI Current Code 🔄`
-                btnWorkspace.addEventListener("click", updateWorkspaces)
+                if (btnWorkspace) {
+                    btnWorkspace.style.display = "none"
+                }
             }
 
             async function fetchHistory() {
@@ -4962,7 +5095,14 @@ ${result.summary || "Executed successfully."}`,
                 messageContent.className = `message-bubble ${msg.role === "user" ? "user-message" : "agent-message"}`
                 messageContent.style.whiteSpace = "pre-wrap"
 
-                renderMessageParts(msg.content, messageContent)
+                const renderedContent =
+                    msg.role === "assistant"
+                        ? buildAutoCollapsedAssistantContent(msg.content)
+                        : msg.content
+                renderMessageParts(renderedContent, messageContent)
+                if (msg.role === "assistant") {
+                    forceCollapseAllDetails(messageContent)
+                }
 
                 if (msg.role === "user") {
                     const footerDiv = document.createElement("div")
@@ -5125,8 +5265,82 @@ ${result.summary || "Executed successfully."}`,
             function updateMessagesAssistant(msg) {
                 const messageContent = document.getElementById(msg.uniqueId)
                 if (!messageContent) return
+                const openSummaries = captureOpenDetailSummaries(messageContent)
                 messageContent.innerHTML = ""
-                renderMessageParts(msg.content, messageContent)
+                const renderedContent = buildAutoCollapsedAssistantContent(msg.content)
+                renderMessageParts(renderedContent, messageContent)
+                if (shouldAutoCollapsePlan(msg.content)) {
+                    forceCollapseAllDetails(messageContent)
+                } else {
+                    restoreOpenDetailSummaries(messageContent, openSummaries)
+                }
+            }
+
+            function isCollapsiblePlanLikeText(content) {
+                const text = String(content || "")
+                if (!text.trim()) return false
+                return (
+                    /\*\*Step\s+\d+:/i.test(text) ||
+                    /-\s*\[[^\]]*\]\s*Step\s+\d+/i.test(text) ||
+                    /\bPlan iterasi\b/i.test(text) ||
+                    /\bExecuting Plan\b/i.test(text)
+                )
+            }
+
+            function buildAutoCollapsedAssistantContent(content) {
+                const text = String(content || "")
+                if (!text.trim()) return text
+                if (/\[thinking[\s\S]*?\[\/thinking\]/i.test(text)) return text
+                if (!isCollapsiblePlanLikeText(text)) return text
+                return `[thinking title="Plan & Step Log"]\n${text}\n[/thinking]`
+            }
+
+            function forceCollapseAllDetails(root) {
+                if (!root) return
+                root.querySelectorAll("details").forEach((d) => {
+                    d.open = false
+                })
+            }
+
+            function captureOpenDetailSummaries(root) {
+                if (!root) return new Set()
+                const out = new Set()
+                root.querySelectorAll("details[open] > summary").forEach((s) => {
+                    const label = (s.textContent || "").trim()
+                    if (label) out.add(label)
+                })
+                return out
+            }
+
+            function restoreOpenDetailSummaries(root, openSet) {
+                if (!root || !openSet || openSet.size === 0) return
+                root.querySelectorAll("details > summary").forEach((s) => {
+                    const label = (s.textContent || "").trim()
+                    if (openSet.has(label) && s.parentElement) {
+                        s.parentElement.open = true
+                    }
+                })
+            }
+
+            function shouldAutoCollapsePlan(content) {
+                const text = String(content || "")
+                return (
+                    /\bTask Completed\b/i.test(text) ||
+                    /\bPlan iterasi\s+\d+\s+selesai\b/i.test(text) ||
+                    /\bStopped:\s*Max iterations\b/i.test(text)
+                )
+            }
+
+            function setSummaryWithIcon(summaryEl, text) {
+                if (!summaryEl) return
+                summaryEl.innerHTML = ""
+                const icon = document.createElement("span")
+                icon.className = "collapse-icon"
+                icon.textContent = ">"
+                const label = document.createElement("span")
+                label.textContent = String(text || "")
+                summaryEl.appendChild(icon)
+                summaryEl.appendChild(label)
             }
 
             window.keepAllModifiedFiles = (filePaths) => {
@@ -5150,7 +5364,7 @@ ${result.summary || "Executed successfully."}`,
 
             function renderMessageParts(content, container) {
                 const parts = content.split(
-                    /(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[file name=".*?"\][\s\S]*?\[\/file\]|\[openDiff path=".*?"\]|\[keepAllFiles files=".*?"\]|\[att-img .*?\]|\[att-file .*?\]|\[file\][\s\S]*?\[file\]|\[status\][\s\S]*?\[\/status\]|\[terminal[\s\S]*?\[\/terminal\]|\[thinking[\s\S]*?\[\/thinking\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|####.*|###.*|##.*|#.*|^- .*)/gm,
+                    /(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[writeFile\][\s\S]*?\[\/writeFile\]|\[file name=".*?"\][\s\S]*?\[\/file\]|\[openDiff path=".*?"\]|\[keepAllFiles files=".*?"\]|\[att-img .*?\]|\[att-file .*?\]|\[file\][\s\S]*?\[file\]|\[status\][\s\S]*?\[\/status\]|\[terminal[\s\S]*?\[\/terminal\]|\[thinking[\s\S]*?\[\/thinking\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|####.*|###.*|##.*|#.*|^- .*)/gm,
                 )
 
                 parts
@@ -5161,6 +5375,66 @@ ${result.summary || "Executed successfully."}`,
                             part.endsWith("[selection]")
                         ) {
                             //skip
+                        } else if (
+                            part.startsWith("[writeFile]") &&
+                            part.endsWith("[/writeFile]")
+                        ) {
+                            const match = part.match(/\[writeFile\]([\s\S]*?)\[\/writeFile\]/)
+                            if (match) {
+                                const body = match[1] || ""
+                                const fileMatches = [
+                                    ...body.matchAll(
+                                        /\[(?:file|diff)\s+(?:name|path)=["']([^"']+)["']\]/g,
+                                    ),
+                                ]
+                                const fileList = Array.from(
+                                    new Set(fileMatches.map((m) => m[1]).filter(Boolean)),
+                                )
+                                const panel = document.createElement("div")
+                                panel.className = "terminal-panel writefile-panel"
+                                const head = document.createElement("div")
+                                head.className = "terminal-head"
+                                const title = document.createElement("span")
+                                title.className = "terminal-title"
+                                title.textContent = "Sandbox WriteFile"
+                                const badge = document.createElement("span")
+                                badge.className = "terminal-badge terminal-success"
+                                badge.textContent = "Patch"
+                                head.appendChild(title)
+                                head.appendChild(badge)
+                                panel.appendChild(head)
+
+                                const pre = document.createElement("pre")
+                                pre.className = "terminal-pre custom-scrollbar"
+                                const summary = fileList.length
+                                    ? fileList.map((f) => `> ${f}`).join("\n")
+                                    : body.trim().slice(0, 1200)
+                                pre.textContent = `writeFile targets:\n${summary}`
+                                panel.appendChild(pre)
+
+                                const details = document.createElement("details")
+                                details.className = "step-history-details"
+                                const detailSummary = document.createElement("summary")
+                                setSummaryWithIcon(detailSummary, "Show raw write payload")
+                                details.appendChild(detailSummary)
+                                const raw = document.createElement("pre")
+                                raw.className = "terminal-pre custom-scrollbar"
+                                raw.textContent = body.trim()
+                                details.appendChild(raw)
+                                panel.appendChild(details)
+                                const wrapper = document.createElement("details")
+                                wrapper.className = "step-history-details"
+                                const wrapperSummary = document.createElement("summary")
+                                setSummaryWithIcon(
+                                    wrapperSummary,
+                                    fileList.length > 0
+                                        ? `WriteFile (${fileList.length} target${fileList.length > 1 ? "s" : ""})`
+                                        : "WriteFile",
+                                )
+                                wrapper.appendChild(wrapperSummary)
+                                wrapper.appendChild(panel)
+                                container.appendChild(wrapper)
+                            }
                         } else if (part.startsWith('[file name="')) {
                             // Updated Regex to handle multiple lines properly
                             const match = part.match(
@@ -5258,9 +5532,10 @@ ${result.summary || "Executed successfully."}`,
                                 const title = match[1]
                                 const content = match[2]
                                 const details = document.createElement("details")
+                                details.className = "step-history-details"
 
                                 const summary = document.createElement("summary")
-                                summary.textContent = title
+                                setSummaryWithIcon(summary, title)
                                 details.appendChild(summary)
 
                                 const contentDiv = document.createElement("div")
@@ -5307,8 +5582,16 @@ ${result.summary || "Executed successfully."}`,
                                 pre.className = "terminal-pre custom-scrollbar"
                                 pre.textContent = `${command ? `$ ${command}\n` : ""}${output}`
                                 panel.appendChild(pre)
-
-                                container.appendChild(panel)
+                                const wrapper = document.createElement("details")
+                                wrapper.className = "step-history-details"
+                                const wrapperSummary = document.createElement("summary")
+                                setSummaryWithIcon(
+                                    wrapperSummary,
+                                    command ? `Terminal: ${command}` : "Sandbox Terminal",
+                                )
+                                wrapper.appendChild(wrapperSummary)
+                                wrapper.appendChild(panel)
+                                container.appendChild(wrapper)
                             }
                         } else if (part.startsWith("[file]") && part.endsWith("[file]")) {
                             const textSpan = document.createElement("span")
@@ -5560,6 +5843,11 @@ ${result.summary || "Executed successfully."}`,
     </body>
 
 </html>
+
+
+
+
+
 
 
 
