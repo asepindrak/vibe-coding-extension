@@ -2234,6 +2234,7 @@
                     forceFullRewriteFiles: new Set(),
                     discoveryRunsByVersion: new Map(),
                     scaffoldDone: false,
+                    existingProjectDetected: false,
                     stepAttemptCounts: new Map(),
                     commandAttemptCountsByVersion: new Map(),
                     fileTouchCounts: new Map(),
@@ -2287,6 +2288,29 @@
                     /(\bscaffold\b|\bbootstrap project\b|\binit project\b|\bcreate project\b|next\.?js|react|vue|angular|svelte|nuxt|remix|vite|nestjs|express|django|flask|laravel|rails|spring)/i.test(
                         text || "",
                     )
+                const requestExplicitFramework = (text) =>
+                    /(next\.?js|react|vue|angular|svelte|nuxt|remix|vite|nestjs|express|django|flask|laravel|rails|spring)/i.test(
+                        text || "",
+                    )
+                const isLikelySourceFile = (f) =>
+                    /\.(html?|css|scss|sass|less|js|jsx|ts|tsx|json|php|py|go|rs|java|kt|rb|cs)$/i.test(
+                        String(f || ""),
+                    )
+                const isIgnoredInfraPath = (f) =>
+                    /^(?:\.git\/|\.vscode\/|node_modules\/|dist\/|build\/|coverage\/|\.next\/|\.cache\/|out\/|target\/|\.vico\/)/i.test(
+                        String(f || ""),
+                    )
+                const detectExistingProjectFromFileList = (fileList) => {
+                    const files = Array.isArray(fileList) ? fileList : []
+                    const nonIgnored = files.filter((f) => !isIgnoredInfraPath(f))
+                    if (nonIgnored.length === 0) return false
+                    return nonIgnored.some(
+                        (f) =>
+                            /(^|\/)(index\.html|main\.(js|ts)|app\.(js|ts|tsx)|app\/page\.(js|jsx|ts|tsx)|pages\/index\.(js|jsx|ts|tsx))$/i.test(
+                                f,
+                            ) || isLikelySourceFile(f),
+                    )
+                }
                 const userRequestedVanillaNoFramework = isVanillaWebRequest(message || "")
                 const requestedUrls = Array.from(
                     new Set((message || "").match(/https?:\/\/[^\s"'`<>]+/gi) || []),
@@ -2448,8 +2472,17 @@
                         projectHasDependencyFile = fileList.some((f) =>
                             dependencyMarkers.includes(f),
                         )
+                        workflowMeta.existingProjectDetected =
+                            detectExistingProjectFromFileList(fileList)
                         if (projectHasDependencyFile) {
                             workflowMeta.scaffoldDone = true
+                        }
+                        if (
+                            workflowMeta.existingProjectDetected &&
+                            !projectHasDependencyFile
+                        ) {
+                            currentContext +=
+                                "\n[System Feedback] Existing project files detected (no dependency manifest). Treat as initialized workspace. Do NOT scaffold framework automatically.\n"
                         }
                         // Filter for important directories/files to keep context lean but useful
                         const crucialFiles = fileList.filter(
@@ -2694,30 +2727,37 @@
                             planData.plan = planSteps
                         }
                         const isProjectInitialized =
-                            projectHasDependencyFile || workflowMeta.scaffoldDone
+                            projectHasDependencyFile ||
+                            workflowMeta.scaffoldDone ||
+                            workflowMeta.existingProjectDetected
                         if (!isProjectInitialized && !isScaffoldStep(planSteps[0])) {
                             if (userRequestedVanillaNoFramework) {
                                 currentContext +=
                                     "\n[System Feedback] Empty workspace + explicit no-framework web request detected. Skip framework scaffold and implement with plain files.\n"
                             } else if (isWebRequest(message)) {
-                                planSteps = [
-                                    {
-                                        step: 1,
-                                        type: "terminal_command",
-                                        description:
-                                            "Scaffold Next.js + Tailwind project in current root (non-interactive) before any file/component changes.",
-                                        command:
-                                            "npx create-next-app . --yes --ts --eslint --tailwind --app --use-npm",
-                                    },
-                                ]
-                                planData.plan = planSteps
-                                currentContext +=
-                                    "\n[System Feedback] Empty workspace detected and planner did not start with scaffold. Plan was normalized to scaffold-first.\n"
-                                updateMessagesAssistant({
-                                    uniqueId: `assistant-${currentUniqueId}`,
-                                    content:
-                                        "?? Empty project detected. Enforcing scaffold-first plan before component/code steps.",
-                                })
+                                if (requestExplicitFramework(message)) {
+                                    planSteps = [
+                                        {
+                                            step: 1,
+                                            type: "terminal_command",
+                                            description:
+                                                "Scaffold requested framework in current root (non-interactive) before file/component changes.",
+                                            command:
+                                                "npx create-next-app . --yes --ts --eslint --tailwind --app --use-npm",
+                                        },
+                                    ]
+                                    planData.plan = planSteps
+                                    currentContext +=
+                                        "\n[System Feedback] Empty workspace + explicit framework request detected. Plan normalized to scaffold-first.\n"
+                                    updateMessagesAssistant({
+                                        uniqueId: `assistant-${currentUniqueId}`,
+                                        content:
+                                            "?? Empty project + explicit framework request. Enforcing scaffold-first.",
+                                    })
+                                } else {
+                                    currentContext +=
+                                        "\n[System Feedback] Empty workspace web request without explicit framework. Do not force Next.js scaffold; implement directly unless planner decides otherwise.\n"
+                                }
                             } else if (requestNeedsScaffold(message)) {
                                 currentContext +=
                                     "\n[System Feedback] Empty workspace detected. First step must scaffold/init framework before any code/file write.\n"

@@ -2,9 +2,16 @@
 
 ## [Unreleased]
 
-## [2.0.1] - 2026-02-23
+## [2.0.2] - 2026-03-04
 
 ### Added
+
+## 2.0.2
+
+- Multi Model Support (OpenAI)
+- OpenAI API Key (BYOK)
+- Coding Agent Improvements
+- UI Improvements
 
 ## 2.0.1
 

@@ -187,6 +187,13 @@ MIT License
 
 # 📜 Release Notes
 
+## 2.0.2
+
+- Multi Model Support (OpenAI)
+- OpenAI API Key (BYOK)
+- Coding Agent Improvements
+- UI Improvements
+
 ## 2.0.1
 
 - 🚀 Major Update: Agent Mode (Autonomous Task Execution)
