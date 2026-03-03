@@ -2227,6 +2227,7 @@
                     lastVerifiedVersion: -1,
                     successfulVerificationCommands: new Set(),
                     failedWriteCounts: new Map(),
+                    writePersistenceWarningsByVersion: new Set(),
                     forceFullRewriteFiles: new Set(),
                     discoveryRunsByVersion: new Map(),
                     scaffoldDone: false,
@@ -2384,7 +2385,7 @@
                 currentContext += `\n=== CRITICAL INSTRUCTION ===\nYou are an AUTONOMOUS agent. Do NOT ask the user what to do next. You MUST decide the best course of action yourself and proceed to execute it immediately. If there are multiple options, choose the most reasonable one and ACT on it. Do not stop to ask for permission or preference. Complete the user's request end-to-end.\n`
                 currentContext += `\n=== PLANNING & EXECUTION STRATEGY ===\n1. **PHASE 1: PLAN**: At the very beginning, CREATE A COMPREHENSIVE, NUMBERED PLAN. List all steps required to solve the user's request.\n2. **PHASE 2: EXECUTE**: Execute the plan step-by-step. Do not deviate unless a step fails.\n3. **VERIFY**: After applying a fix, verify only with short-lived commands (build/test/lint). NEVER run server/dev commands.\n4. **NO LOOPING**: If a step fails, do not retry the exact same action. Analyze the error and adjust your plan.\n5. **HISTORY AWARENESS**: Review the 'History' to see what steps have already been completed. DO NOT REPEAT COMPLETED STEPS.\n============================\n`
                 currentContext += `\n=== MEMORY POLICY ===\n- In empty workspace, NEVER create .vico/memory.md as first action.\n- First action must scaffold/init framework.\n- Update memory only after real code implementation exists.\n============================\n`
-                currentContext += `\n=== VERIFICATION POLICY ===\n- Run build/test/lint ONLY at the end, after implementation steps are done.\n- Do NOT repeat the same verification command if it already passed and no new code changes occurred.\n- For simple vanilla HTML/JS requests, verification is lightweight and optional; do not force integration/e2e test loops.\n- NEVER propose manual verification requiring GUI actions (open browser/url/file, click buttons, open file://).\n============================\n`
+                currentContext += `\n=== VERIFICATION POLICY ===\n- Run build/test/lint ONLY at the end, after implementation steps are done.\n- Do NOT repeat the same verification command if it already passed and no new code changes occurred.\n- For simple vanilla HTML/JS requests, verification is lightweight and optional; do not force integration/e2e test loops.\n- NEVER propose manual verification requiring GUI actions (open browser/url/file, click buttons, open file://).\n- If implementation is already persisted and there is no critical build/runtime error, finalize without extra strict verification loops.\n============================\n`
                 currentContext += `\n=== FILE STRUCTURE AWARENESS ===\nBefore creating any new file or component, you MUST check the 'PROJECT FILE STRUCTURE' provided in the context. \n- If this is a Next.js project, verify if it uses the 'app/' directory (App Router) or 'pages/' directory (Pages Router). \n- Do NOT create 'pages/index.js' if 'app/page.tsx' exists. \n- Do NOT mix TypeScript (.ts/.tsx) and JavaScript (.js/.jsx) unless the project already does. Follow existing patterns.\n================================\n`
                 currentContext += `\n=== DEFAULT WEB POLICY ===\nIf user asks for a web app and does not specify framework, default to Next.js + Tailwind CSS using NON-INTERACTIVE scaffold command.\n- Preferred scaffold command: npx create-next-app . --yes --ts --eslint --tailwind --app --use-npm\n- Never run npm install/build/test before dependency file exists.\n================================\n`
                 currentContext += `\n=== WEB FRAMEWORK OVERRIDE ===\nIf user explicitly asks for HTML/CSS/JavaScript without framework (for example: 'tanpa framework', 'no framework', 'vanilla'), DO NOT scaffold Next.js/Vite/React.\nImplement directly with plain files (for example: index.html + script.js), and use Tailwind via CDN unless user requests another setup.\n================================\n`
@@ -2867,6 +2868,27 @@ Executed Steps:
 Execution Result:
 ${result.summary || "Executed successfully."}`,
                         })
+                        const hasPersistedImplementation =
+                            !!(result.modifiedFiles && result.modifiedFiles.size > 0)
+                        const criticalFailurePattern =
+                            /(failed to compile|type error|cannot find name|ejsonparse|invalid package\.json|blocked because workspace is not scaffolded|invalid transient write path|step \d+ error)/i
+                        const hasCriticalFailure = criticalFailurePattern.test(
+                            String(result.summary || ""),
+                        )
+                        if (hasPersistedImplementation && !hasCriticalFailure) {
+                            updateMessagesAssistant({
+                                uniqueId: `assistant-${currentUniqueId}`,
+                                content: `${result.summary || ""}\n\n✅ **Task Completed:** Implementation persisted. Skipping extra strict verification.`,
+                            })
+                            messageArray.push({
+                                role: "assistant",
+                                content:
+                                    "✅ Task Completed: Implementation persisted. Extra verification skipped.",
+                            })
+                            saveState()
+                            resetUI()
+                            return
+                        }
                         if (result.autoFixTriggered) {
                             consecutiveFailedIterations++
                             if (
@@ -3017,6 +3039,13 @@ ${result.summary || "Executed successfully."}`,
                     /(\bno framework\b|\btanpa framework\b|\bvanilla\b|\bplain html\b|\bhtml dan javascript\b|\bhtml\s*\+\s*javascript\b|\bsingle html\b)/i.test(
                         String(originalRequest || ""),
                     )
+                const requestedUrlsLocal = Array.from(
+                    new Set(
+                        (String(originalRequest || "").match(
+                            /https?:\/\/[^\s"'`<>]+/gi,
+                        ) || []),
+                    ),
+                )
                 let planMarkdown = initialMarkdown
                 // Ensure currentStepMarkdown is initialized
                 let currentStepMarkdown = planMarkdown
@@ -3653,6 +3682,53 @@ ${result.summary || "Executed successfully."}`,
                         }
 
                         if (stepOutput.includes("[writeFile]")) {
+                            const recoverTransientPath = (rawPath) => {
+                                const normalized = String(rawPath || "").replace(/\\/g, "/")
+                                const parts = normalized.split("/")
+                                const base = parts.pop() || ""
+                                const m = base.match(
+                                    /^vico_(?:backup|diff)_[0-9a-f]+_(.+)$/i,
+                                )
+                                if (!m) return null
+                                parts.push(m[1])
+                                return parts.join("/")
+                            }
+                            const normalizeWritePayloadPaths = (payload) => {
+                                let changed = false
+                                const unresolved = new Set()
+                                const next = String(payload || "").replace(
+                                    /\[(file|diff)\s+(name|path)=["']([^"']+)["']\]/gi,
+                                    (full, kind, key, pth) => {
+                                        if (!/(?:^|\/)vico_(?:backup|diff)_/i.test(pth)) {
+                                            return full
+                                        }
+                                        const recovered = recoverTransientPath(pth)
+                                        if (!recovered) {
+                                            unresolved.add(pth)
+                                            return full
+                                        }
+                                        changed = true
+                                        return `[${kind} ${key}="${recovered}"]`
+                                    },
+                                )
+                                return { next, changed, unresolved: Array.from(unresolved) }
+                            }
+                            const normalizedPayload = normalizeWritePayloadPaths(stepOutput)
+                            if (normalizedPayload.unresolved.length > 0) {
+                                hadStepError = true
+                                context += `\n[System Feedback] Invalid transient write paths detected: ${normalizedPayload.unresolved.join(", ")}.\n[System Feedback] Do NOT write vico_backup/vico_diff files. Use real project path only.\n`
+                                planMarkdown += `\n> *⚠️ Invalid transient write path detected. Replanning with real target file path.*\n`
+                                updateMessagesAssistant({
+                                    uniqueId: `assistant-${uniqueId}`,
+                                    content: planMarkdown,
+                                })
+                                break
+                            }
+                            if (normalizedPayload.changed) {
+                                stepOutput = normalizedPayload.next
+                                context +=
+                                    "\n[System Feedback] Transient write path was auto-normalized to real project file path (vico_backup/vico_diff -> original path).\n"
+                            }
                             if (
                                 workflowMeta &&
                                 workflowMeta.forceFullRewriteFiles &&
@@ -3861,10 +3937,12 @@ ${result.summary || "Executed successfully."}`,
                                             }
                                         }
                                         if (
-                                            requestedUrls.length > 0 &&
-                                            !requestedUrls.some((u) => afterContent.includes(u))
+                                            requestedUrlsLocal.length > 0 &&
+                                            !requestedUrlsLocal.some((u) =>
+                                                afterContent.includes(u),
+                                            )
                                         ) {
-                                            context += `\n[Write Feedback] Required literal URL missing in ${tPath}. Insert exact URL from prompt: ${requestedUrls.join(", ")}.\n`
+                                            context += `\n[Write Feedback] Required literal URL missing in ${tPath}. Insert exact URL from prompt: ${requestedUrlsLocal.join(", ")}.\n`
                                             if (workflowMeta && workflowMeta.forceFullRewriteFiles) {
                                                 workflowMeta.forceFullRewriteFiles.add(tPath)
                                             }
@@ -3921,7 +3999,13 @@ ${result.summary || "Executed successfully."}`,
                                         }
                                     }
                                     const before = beforeSnapshot.get(tPath)
-                                    if (typeof before === "string" && before === afterContent) {
+                                    const normalizeForPersistCompare = (s) =>
+                                        String(s || "").replace(/\r\n/g, "\n")
+                                    const unchangedAfterWrite =
+                                        typeof before === "string" &&
+                                        normalizeForPersistCompare(before) ===
+                                            normalizeForPersistCompare(afterContent)
+                                    if (unchangedAfterWrite) {
                                         if (workflowMeta && workflowMeta.failedWriteCounts) {
                                             const failedCount =
                                                 (workflowMeta.failedWriteCounts.get(tPath) || 0) + 1
@@ -3930,18 +4014,42 @@ ${result.summary || "Executed successfully."}`,
                                                 failedCount,
                                             )
                                             if (
-                                                failedCount >= 1 &&
+                                                failedCount >= 2 &&
                                                 workflowMeta.forceFullRewriteFiles
                                             ) {
                                                 workflowMeta.forceFullRewriteFiles.add(tPath)
                                             }
                                         }
-                                        context += `\n[Write Feedback] No persisted change detected for ${tPath} after write/diff.\n[Write Feedback] Do NOT scaffold/init again. Keep working on current project files.\n[Write Feedback] Next attempt for this file MUST use full overwrite format: [writeFile][file name="${tPath}"]FULL_FILE_CONTENT[/file][/writeFile].\n`
+                                        const warningKey = `${workflowMeta?.changeVersion ?? 0}:${tPath}`
+                                        if (
+                                            !workflowMeta ||
+                                            !workflowMeta.writePersistenceWarningsByVersion ||
+                                            !workflowMeta.writePersistenceWarningsByVersion.has(
+                                                warningKey,
+                                            )
+                                        ) {
+                                            context += `\n[Write Feedback] No persisted change detected for ${tPath} after write/diff.\n[Write Feedback] Do NOT scaffold/init again. Keep working on current project files.\n[Write Feedback] Retry once with full overwrite only if this happens again for same code version.\n`
+                                            if (
+                                                workflowMeta &&
+                                                workflowMeta.writePersistenceWarningsByVersion
+                                            ) {
+                                                workflowMeta.writePersistenceWarningsByVersion.add(
+                                                    warningKey,
+                                                )
+                                            }
+                                        }
                                     } else {
                                         if (workflowMeta && workflowMeta.failedWriteCounts) {
                                             workflowMeta.failedWriteCounts.delete(tPath)
                                             if (workflowMeta.forceFullRewriteFiles) {
                                                 workflowMeta.forceFullRewriteFiles.delete(tPath)
+                                            }
+                                            if (
+                                                workflowMeta.writePersistenceWarningsByVersion
+                                            ) {
+                                                workflowMeta.writePersistenceWarningsByVersion.delete(
+                                                    `${workflowMeta.changeVersion}:${tPath}`,
+                                                )
                                             }
                                         }
                                         context += `\n[Write Feedback] Persisted change confirmed for ${tPath}.\n`
