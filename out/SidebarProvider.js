@@ -441,6 +441,9 @@ class SidebarProvider {
                     }
                     this.context.globalState.update("chatHistory", currentHistory);
                     return;
+                case "currentSessionId":
+                    this.context.globalState.update("currentSessionId", message.sessionId);
+                    return;
                 case "deleteHistoryItem":
                     let historyToDelete = this.context.globalState.get("chatHistory", []);
                     historyToDelete = historyToDelete.filter((h) => h.id !== message.id);

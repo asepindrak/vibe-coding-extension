@@ -15,6 +15,22 @@ import { DiffManager } from "./DiffManager";
 let lastSuggestion: string | null = null;
 let lastLinePrefix: string | null = null;
 
+// Tracking variables for better context
+let lastClipboardText = "";
+let recentCodingHistory: { file: string; line: number; text: string }[] = [];
+const MAX_HISTORY = 5;
+
+function updateHistory(file: string, line: number, text: string) {
+  if (!text.trim()) return;
+  const entry = { file, line, text: text.trim() };
+  // Avoid duplicate consecutive entries
+  if (recentCodingHistory.length > 0 && recentCodingHistory[0].text === entry.text) return;
+  recentCodingHistory.unshift(entry);
+  if (recentCodingHistory.length > MAX_HISTORY) {
+    recentCodingHistory.pop();
+  }
+}
+
 function debounce(func: (...args: any[]) => void, wait: number) {
   let timeout: NodeJS.Timeout | null;
   return function executedFunction(...args: any[]) {
@@ -167,20 +183,42 @@ async function fetchSuggestions(
           ? "For HTML/XML contexts: produce a complete, syntactically valid element or a closing tag when appropriate. Never output a bare attribute. When starting a new line, begin with '<' or '</'."
           : "";
 
+  // Clipboard context
+  try {
+    const clip = await vscode.env.clipboard.readText();
+    if (clip && clip.trim().length > 0 && clip.length < 500) {
+      lastClipboardText = clip.trim();
+    }
+  } catch (e) {
+    // ignore clipboard read errors
+  }
+
+  // Activity context string
+  let activityContext = "";
+  if (recentCodingHistory.length > 0) {
+    activityContext = "Recent coding activity:\n" +
+      recentCodingHistory.map(h => `- ${h.file}:${h.line + 1}: ${h.text}`).join("\n") + "\n\n";
+  }
+  if (lastClipboardText) {
+    activityContext += `User recently copied this text: "${lastClipboardText}"\n\n`;
+  }
+
   const body = {
     userId: "vscode-user",
+    sessionId: context.globalState.get("currentSessionId"),
     message:
       `File: ${file}\n` +
       `Language: ${lang}\n` +
       `Follow ${lang} best practices and syntax.\n` +
       (styleHints ? `Coding style hints: ${styleHints}\n` : "") +
       (extraHeuristics ? `${extraHeuristics}\n` : "") +
+      (activityContext ? activityContext : "") +
       `Here is the surrounding code context:\n${contextCode}\n\n` +
       (isNewLine
         ? `The user just pressed Enter and is starting a new line.\n` +
-          `Suggest ONLY the next single line of code that should appear here.\n`
+        `Suggest ONLY the next single line of code that should appear here.\n`
         : `The user is currently typing this line: "${cleanedInput}".\n` +
-          `Complete ONLY this line.\n`) +
+        `Complete ONLY this line.\n`) +
       `Return a SINGLE LINE completion only.\n` +
       `Do NOT add new lines.\n` +
       `Do NOT return multiple statements.\n` +
@@ -287,9 +325,8 @@ function deriveStyleHints(document: vscode.TextDocument, lang: string): string {
       }
       indent = four >= two ? "use 4-space indent" : "use 2-space indent";
     }
-    return `${usesSemicolons ? "use semicolons" : "no semicolons"}; ${
-      prefersSingle ? "prefer single quotes" : "prefer double quotes"
-    }; ${indent}`;
+    return `${usesSemicolons ? "use semicolons" : "no semicolons"}; ${prefersSingle ? "prefer single quotes" : "prefer double quotes"
+      }; ${indent}`;
   }
   return "";
 }
@@ -469,9 +506,64 @@ function applyFuzzySearchReplace(
   return { matched: true, next };
 }
 
+/**
+ * Fallback parsing untuk writeFile format yang tidak sempurna
+ * Handle kasus:
+ * - [writeFile] tanpa [/writeFile]
+ * - [file] tanpa [writeFile] wrapper
+ * - Markdown code blocks di dalam content
+ * - Format attribute yang tidak konsisten
+ */
+function parseWriteFileFallback(content: string): { success: boolean; content: string; reason?: string } {
+  logger.info(`[writeFile] Fallback parsing started, content length: ${content.length}`);
+
+  // Coba berbagai strategi parsing
+
+  // Strategi 1: Cari [writeFile]... (tanpa penutup)
+  const writeFileOpenMatch = content.match(/\[writeFile[^\]]*\]([\s\S]*?)(?:\[\/writeFile\s*\]|$)/i);
+  if (writeFileOpenMatch) {
+    logger.info(`[writeFile] Found open [writeFile] tag, extracting content`);
+    // Join all content if multiple [writeFile] blocks exist but aren't closed properly
+    const allMatches = content.matchAll(/\[writeFile[^\]]*\]([\s\S]*?)(?:\[\/writeFile\s*\]|$)/gi);
+    let accumulatedContent = "";
+    for (const match of allMatches) {
+      accumulatedContent += match[1] + "\n";
+    }
+    if (accumulatedContent.trim()) {
+      return { success: true, content: accumulatedContent };
+    }
+  }
+
+  // Strategi 2: Cari langsung [file] atau [diff] blocks tanpa [writeFile] wrapper
+  const hasFileBlocks = /\[file\s+/i.test(content);
+  const hasDiffBlocks = /\[diff\s+/i.test(content);
+
+  if (hasFileBlocks || hasDiffBlocks) {
+    logger.info(`[writeFile] Found [file] or [diff] blocks without [writeFile] wrapper`);
+    return { success: true, content };
+  }
+
+  // Strategi 3: Coba extract markdown code blocks yang mungkin berisi file content
+  const codeBlockMatch = content.match(/```[\s\S]*?\n([\s\S]*?)```/);
+  if (codeBlockMatch) {
+    logger.info(`[writeFile] Found markdown code block, using as fallback`);
+    return { success: true, content: codeBlockMatch[1] };
+  }
+
+  // Strategi 4: Jika content terlihat seperti file content (memiliki extension atau path-like)
+  const looksLikeFileContent = /\w+\.\w+/.test(content) || /[\/\\]/.test(content);
+  if (looksLikeFileContent && content.length > 10) {
+    logger.info(`[writeFile] Content looks like file content, using as fallback`);
+    return { success: true, content };
+  }
+
+  logger.warn(`[writeFile] Fallback parsing failed - no recognizable format found`);
+  return { success: false, content: "", reason: "No recognizable writeFile format found" };
+}
+
 async function writeFileVico(
   context: vscode.ExtensionContext,
-  editor: vscode.TextEditor,
+  editor: vscode.TextEditor | undefined,
   sidebarProvider: SidebarProvider,
 ) {
   logger.info("writeFileVico called");
@@ -570,6 +662,9 @@ async function writeFileVico(
   };
 
   try {
+    logger.info(`[writeFile] Starting parsing, content length: ${writeContent.length}`);
+    logger.debug(`[writeFile] Full content: ${writeContent.substring(0, 500)}${writeContent.length > 500 ? '...' : ''}`);
+
     // 1. Extract block [writeFile]...[/writeFile]
     // Supports both single block or multiple blocks if the AI outputs them sequentially
     const blockRegex = /\[writeFile\s*\]([\s\S]*?)\[\/writeFile\s*\]/gi;
@@ -581,24 +676,37 @@ async function writeFileVico(
       contentToProcess += match[1] + "\n";
     }
 
+    logger.info(`[writeFile] Extracted content length: ${contentToProcess.length}`);
+
     if (!contentToProcess.trim()) {
-      // Fallback: try to parse the whole message if the tags are missing but command was triggered
-      // or if the tag was just [writeFile] without closing (though regex above requires closing)
-      // Let's try to match open tag until end of string if no closing tag found
-      const openTagMatch = writeContent.match(/\[writeFile\s*\]([\s\S]*)/i);
-      if (openTagMatch) {
-        contentToProcess = openTagMatch[1];
+      logger.warn(`[writeFile] No content extracted with proper tags, trying fallback parsing`);
+
+      // Gunakan fallback parsing function yang sudah kita buat
+      const fallbackResult = parseWriteFileFallback(writeContent);
+
+      if (fallbackResult.success) {
+        contentToProcess = fallbackResult.content;
+        logger.info(`[writeFile] Fallback parsing successful, content length: ${contentToProcess.length}`);
       } else {
-        contentToProcess = writeContent;
+        logger.error(`[writeFile] All parsing attempts failed: ${fallbackResult.reason}`);
+        vscode.window.showErrorMessage(
+          `Failed to parse writeFile content: ${fallbackResult.reason}. Please check the agent response format.`
+        );
+        return;
       }
+    } else {
+      logger.info(`[writeFile] Successfully extracted content with proper tags`);
     }
 
+    logger.info(`[writeFile] Starting file/diff parsing, content length: ${contentToProcess.length}`);
+
     // 2. Parse [file name="path"]...[/file] OR [diff name="path"]...[/diff]
-    // Improved regex to handle newlines and various attributes robustly
+    // Improved regex to handle newlines and various attributes robustly, and allow missing closing tags
+    // Stop at the next [file], [diff], or [writeFile] tag
     const fileRegex =
-      /\[file\s+(?:name|path)=["']?([^"'\s\]]+)["']?(?:\s+type=["'][^"']+["'])?\]([\s\S]*?)\[\s*\/file\s*\]/gi;
+      /\[file\s+(?:name|path)=["']?([^"'\s\]]+)["']?(?:\s+type=["'][^"']+["'])?\]([\s\S]*?)(?:\[\s*\/file\s*\]|(?=\[(?:file|diff|writeFile)\s+)|$)/gi;
     const diffRegex =
-      /\[diff\s+(?:name|path)=["']?([^"'\s\]]+)["']?\]([\s\S]*?)\[\s*\/diff\s*\]/gi;
+      /\[diff\s+(?:name|path)=["']?([^"'\s\]]+)["']?\]([\s\S]*?)(?:\[\s*\/diff\s*\]|(?=\[(?:file|diff|writeFile)\s+)|$)/gi;
     let fileMatch;
     let filesCreated = 0;
     let duplicateSkipped = false;
@@ -615,6 +723,10 @@ async function writeFileVico(
       const isVicoMetaTarget =
         normalizedRelative.startsWith(".vico/") ||
         normalizedRelative === "memory.md";
+
+      logger.info(`[writeFile] Processing [file] block: ${relativePath}`);
+      logger.debug(`[writeFile] Raw content length: ${fileContent.length}`);
+
       if (isVicoMetaTarget && !hasDependencyFile) {
         blockedMetaWrites++;
         logger.warn(
@@ -626,17 +738,21 @@ async function writeFileVico(
       // STRIP MARKDOWN CODE BLOCKS FROM CONTENT
       // Often agents wrap the content in ```typescript ... ```
       // IMPROVED: Use a more robust check that handles any language identifier and whitespace
-      if (fileContent.startsWith("```") && fileContent.endsWith("```")) {
+      // and strip it even if there is trailing text outside the block
+      const markdownCodeBlockRegex = /```[\w-]*\n([\s\S]*?)```/g;
+      const markdownMatch = markdownCodeBlockRegex.exec(fileContent);
+      if (markdownMatch) {
+        logger.info(`[writeFile] Stripping markdown code blocks from ${relativePath}`);
+        fileContent = markdownMatch[1].trim();
+        logger.info(`[writeFile] Markdown stripped, new length: ${fileContent.length}`);
+      } else if (fileContent.startsWith("```") && fileContent.endsWith("```")) {
+        // Fallback for one-liner or weirdly formatted blocks
         const lines = fileContent.split("\n");
-        // Check if it looks like a code block (at least 2 lines: opener and closer)
         if (lines.length >= 2) {
-          // Remove first line (```language)
           lines.shift();
-          // Remove last line (```)
           lines.pop();
-
-          // Rejoin
           fileContent = lines.join("\n").trim();
+          logger.info(`[writeFile] Markdown (legacy strip) stripped, new length: ${fileContent.length}`);
         }
       }
 
@@ -646,7 +762,14 @@ async function writeFileVico(
       const dirUri = vscode.Uri.file(path.dirname(fileUri.fsPath));
 
       // 3. Create directory if it doesn't exist
-      await vscode.workspace.fs.createDirectory(dirUri);
+      try {
+        await vscode.workspace.fs.createDirectory(dirUri);
+        logger.info(`[writeFile] Created directory: ${dirUri.fsPath}`);
+      } catch (error) {
+        logger.error(`[writeFile] Failed to create directory ${dirUri.fsPath}: ${error}`);
+        vscode.window.showErrorMessage(`Failed to create directory for ${relativePath}: ${error}`);
+        continue;
+      }
 
       // Special handling for history.md, lessons.md, architecture.md, and style.md:
       // Append and write directly (no diff) for log files.
@@ -688,7 +811,7 @@ async function writeFileVico(
           try {
             const existingBytes = await vscode.workspace.fs.readFile(fileUri);
             originalContent = Buffer.from(existingBytes).toString("utf8");
-          } catch (e) {}
+          } catch (e) { }
         }
 
         try {
@@ -701,33 +824,42 @@ async function writeFileVico(
             filePath: effectiveRelativePath,
             originalContent: originalContent,
           });
+          logger.info(`[writeFile] Successfully wrote ${effectiveRelativePath} (${newContent.length} bytes)`);
           continue; // Skip handleDiff
         } catch (e) {
-          logger.error(`Failed to write .vico file:`, e);
-          // Fallback to handleDiff if direct write fails? No, just log error.
+          logger.error(`[writeFile] Failed to write file ${effectiveRelativePath}:`, e);
+          vscode.window.showErrorMessage(`Failed to write file ${effectiveRelativePath}: ${e}`);
+          // Continue to next file instead of stopping completely
+          continue;
+        }
+      } else {
+        // 4. Handle Diff & Write (only if not a new file write)
+        logger.info(`[writeFile] Calling handleDiff for [file]: ${effectiveRelativePath}`);
+        const result = await handleDiff(
+          fileUri,
+          fileContent,
+          effectiveRelativePath,
+          context,
+        );
+        if (result && result.success) {
+          logger.info(`[writeFile] handleDiff success for [file]: ${effectiveRelativePath}`);
+          filesCreated++;
+          fileChanges.push({
+            filePath: effectiveRelativePath,
+            originalContent: result.originalContent,
+          });
+        } else {
+          logger.warn(`[writeFile] handleDiff failed or returned false for [file]: ${effectiveRelativePath}`);
         }
       }
-
-      // 4. Handle Diff & Write
-      const result = await handleDiff(
-        fileUri,
-        fileContent,
-        effectiveRelativePath,
-        context,
-      );
-      if (result && result.success) {
-        filesCreated++;
-        fileChanges.push({
-          filePath: effectiveRelativePath,
-          originalContent: result.originalContent,
-        });
-      }
-    }
+    } // End of while loop for file blocks
 
     // 2.2 Handle [diff] blocks (Partial targeted diffs)
     const liveContentByPath = new Map<string, string>();
     const originalContentByPath = new Map<string, string>();
     const changedPaths = new Set<string>();
+
+    logger.info(`[writeFile] Starting [diff] block parsing`);
 
     while ((fileMatch = diffRegex.exec(contentToProcess)) !== null) {
       sawWritableBlocks = true;
@@ -737,6 +869,10 @@ async function writeFileVico(
       const isVicoMetaTarget =
         normalizedRelative.startsWith(".vico/") ||
         normalizedRelative === "memory.md";
+
+      logger.info(`[writeFile] Processing [diff] block: ${relativePath}`);
+      logger.debug(`[writeFile] Diff content length: ${diffContent.length}`);
+
       if (isVicoMetaTarget && !hasDependencyFile) {
         blockedMetaWrites++;
         logger.warn(
@@ -751,17 +887,27 @@ async function writeFileVico(
         const fileUri = resolvedTarget.fileUri;
         let currentContent = liveContentByPath.get(relativePath);
         if (typeof currentContent !== "string") {
-          const existingBytes = await vscode.workspace.fs.readFile(fileUri);
-          const originalContent = Buffer.from(existingBytes).toString("utf8");
-          currentContent = originalContent;
-          liveContentByPath.set(relativePath, originalContent);
-          originalContentByPath.set(relativePath, originalContent);
+          logger.info(`[writeFile] Reading existing content for diff: ${effectiveRelativePath}`);
+          try {
+            const existingBytes = await vscode.workspace.fs.readFile(fileUri);
+            const originalContent = Buffer.from(existingBytes).toString("utf8");
+            currentContent = originalContent;
+            liveContentByPath.set(relativePath, originalContent);
+            originalContentByPath.set(relativePath, originalContent);
+            logger.info(`[writeFile] Read ${originalContent.length} bytes from ${effectiveRelativePath}`);
+          } catch (readError) {
+            logger.warn(`[writeFile] File ${effectiveRelativePath} doesn't exist, will create new`);
+            currentContent = "";
+            liveContentByPath.set(relativePath, "");
+            originalContentByPath.set(relativePath, "");
+          }
         }
 
         // Extract SEARCH/REPLACE blocks
-        // Relaxed regex to handle variations in delimiter length and spacing
+        // Delimiters must be on their own lines (using 'm' flag and '^')
+        // Using [\r\n]* to allow flexible newline handling between delimiters and content
         const searchReplaceRegex =
-          /(?:<{3,20}|<[ <]{3,20})\s*SEARCH\s*[\r\n]*([\s\S]*?)\s*(?:={3,20}|=[ =]{3,20})[\r\n]*([\s\S]*?)\s*(?:>{3,20}|>[ >]{3,20})\s*REPLACE/gi;
+          /(?:<{3,}|<[ <]{3,})\s*SEARCH\s*[\r\n]*([\s\S]*?)[\r\n]*(?:={3,}|=[ =]{3,})[\r\n]*([\s\S]*?)[\r\n]*(?:>{3,}|>[ >]{3,})(?:\s*REPLACE)?/gi;
         let srMatch;
         let matchedBlocks = 0;
         let totalBlocks = 0;
@@ -769,11 +915,19 @@ async function writeFileVico(
         let lastReplaceText = "";
         let nextContent = currentContent;
 
+        logger.info(`[writeFile] Starting SEARCH/REPLACE parsing for ${relativePath}`);
+        logger.debug(`[writeFile] Original content length: ${currentContent.length}`);
+
+        // Reset lastIndex because we use 'gm' flag and might reuse the regex object or just to be safe
+        searchReplaceRegex.lastIndex = 0;
         while ((srMatch = searchReplaceRegex.exec(diffContent)) !== null) {
           totalBlocks++;
           const searchText = srMatch[1];
           const replaceText = srMatch[2];
           lastReplaceText = replaceText;
+
+          logger.debug(`[writeFile] Processing block ${totalBlocks}: search length=${searchText.length}, replace length=${replaceText.length}`);
+
           const diffFingerprint = buildDiffFingerprint(
             relativePath,
             searchText,
@@ -809,6 +963,8 @@ async function writeFileVico(
             );
           }
         }
+
+        logger.info(`[writeFile] SEARCH/REPLACE parsing completed for ${relativePath}: total=${totalBlocks}, matched=${matchedBlocks}, failed=${failedBlocks}`);
 
         // Multi-block diffs are treated as transactional to avoid corrupted partial files.
         if (totalBlocks > 1 && failedBlocks > 0) {
@@ -858,6 +1014,7 @@ async function writeFileVico(
             currentContent =
               collapseAdjacentDuplicateJsxInvocations(currentContent);
           }
+          logger.info(`[writeFile] Calling handleDiff for [diff] (matchedBlocks=${matchedBlocks}): ${effectiveRelativePath}`);
           const result = await handleDiff(
             fileUri,
             currentContent,
@@ -865,6 +1022,7 @@ async function writeFileVico(
             context,
           );
           if (result && result.success) {
+            logger.info(`[writeFile] handleDiff success for [diff]: ${effectiveRelativePath}`);
             liveContentByPath.set(relativePath, currentContent);
             if (!changedPaths.has(relativePath)) {
               changedPaths.add(relativePath);
@@ -876,6 +1034,8 @@ async function writeFileVico(
                   result.originalContent,
               });
             }
+          } else {
+            logger.warn(`[writeFile] handleDiff failed or returned false for [diff]: ${effectiveRelativePath}`);
           }
         } else {
           // If no SEARCH/REPLACE blocks found, but diffContent has content, it might be a full rewrite
@@ -899,6 +1059,7 @@ async function writeFileVico(
             logger.warn(
               `SEARCH not found for ${relativePath}. Using controlled full-rewrite fallback.`,
             );
+            logger.info(`[writeFile] Calling handleDiff for [diff] fallback: ${effectiveRelativePath}`);
             const fallbackResult = await handleDiff(
               fileUri,
               rewritten,
@@ -906,6 +1067,7 @@ async function writeFileVico(
               context,
             );
             if (fallbackResult && fallbackResult.success) {
+              logger.info(`[writeFile] handleDiff success for [diff] fallback: ${effectiveRelativePath}`);
               liveContentByPath.set(relativePath, rewritten);
               if (!changedPaths.has(relativePath)) {
                 changedPaths.add(relativePath);
@@ -918,11 +1080,13 @@ async function writeFileVico(
                 });
               }
             } else {
+              logger.warn(`[writeFile] handleDiff failed or returned false for [diff] fallback: ${effectiveRelativePath}`);
               vscode.window.showWarningMessage(
                 `Could not apply changes to ${relativePath}. SEARCH block not found and fallback rewrite failed.`,
               );
             }
           } else {
+            logger.warn(`[writeFile] No SEARCH/REPLACE match found for ${relativePath} and fallback not eligible.`);
             vscode.window.showWarningMessage(
               `Could not apply changes to ${relativePath}. SEARCH block not found (exact/eol/trimmed match failed).`,
             );
@@ -1013,6 +1177,14 @@ async function writeFileVico(
       }
     }
 
+    // Comprehensive summary logging
+    logger.info(`[writeFile] Processing completed:`);
+    logger.info(`[writeFile] - Files created/modified: ${filesCreated}`);
+    logger.info(`[writeFile] - Blocked meta writes: ${blockedMetaWrites}`);
+    logger.info(`[writeFile] - Duplicate content skipped: ${duplicateSkipped}`);
+    logger.info(`[writeFile] - Saw writable blocks: ${sawWritableBlocks}`);
+    logger.info(`[writeFile] - File changes: ${fileChanges.map(f => f.filePath).join(', ')}`);
+
     if (filesCreated > 0) {
       // Check if the only file created is memory.md - if so, be silent
       const isSilentUpdate =
@@ -1024,6 +1196,7 @@ async function writeFileVico(
           `🎉 Successfully created/updated ${filesCreated} files.`,
         );
       }
+      logger.info(`[writeFile] Success: Created/updated ${filesCreated} files`);
       // Send file changes to webview for history tracking
       if (sidebarProvider) {
         sidebarProvider.postMessage({
@@ -1033,6 +1206,7 @@ async function writeFileVico(
       }
     } else if (!duplicateSkipped && !sawWritableBlocks) {
       if (blockedMetaWrites > 0) {
+        logger.warn(`[writeFile] Blocked ${blockedMetaWrites} meta writes - project not scaffolded`);
         vscode.window.showWarningMessage(
           "Blocked .vico/memory writes because project is not scaffolded yet. Initialize framework first.",
         );
@@ -1040,12 +1214,14 @@ async function writeFileVico(
       }
       // Log content to debug why regex failed
       logger.warn(
-        "No file blocks found. Content preview:",
-        contentToProcess.substring(0, 200),
+        `[writeFile] No file blocks found. Content preview: ${contentToProcess.substring(0, 200)}`
       );
+      logger.warn(`[writeFile] Full content length: ${contentToProcess.length}`);
       vscode.window.showWarningMessage(
         'No writable blocks found. Use [file name="path"]...[/file] or [diff name="path"]...[/diff] inside [writeFile].',
       );
+    } else if (duplicateSkipped) {
+      logger.info(`[writeFile] Duplicate content skipped, no changes made`);
     }
   } catch (err: any) {
     logger.error("Failed to write file:", err);
@@ -1058,6 +1234,20 @@ async function writeFileVico(
 let loadingStatusBarItem: vscode.StatusBarItem;
 
 export function activate(context: vscode.ExtensionContext) {
+  // Register the Sidebar Panel FIRST to avoid Temporal Dead Zone
+  const sidebarProvider = new SidebarProvider(context.extensionUri, context);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(
+      "vibe-coding-sidebar",
+      sidebarProvider,
+      {
+        webviewOptions: {
+          retainContextWhenHidden: true,
+        },
+      },
+    ),
+  );
+
   loadingStatusBarItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Right,
     100,
@@ -1070,7 +1260,7 @@ export function activate(context: vscode.ExtensionContext) {
       logger.info("writeFile command triggered");
       await writeFileVico(
         context,
-        vscode.window.activeTextEditor!,
+        vscode.window.activeTextEditor,
         sidebarProvider,
       );
     },
@@ -1200,19 +1390,6 @@ export function activate(context: vscode.ExtensionContext) {
   // Use the console to output diagnostic information (console.log) and errors (console.error)
   // This line of code will only be executed once when your extension is activated
   console.log('Congratulations, your extension "vibe-coding" is now active!');
-  // Register the Sidebar Panel
-  const sidebarProvider = new SidebarProvider(context.extensionUri, context);
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(
-      "vibe-coding-sidebar",
-      sidebarProvider,
-      {
-        webviewOptions: {
-          retainContextWhenHidden: true,
-        },
-      },
-    ),
-  );
 
   // Register a command to update the webview with the current file and line information
   context.subscriptions.push(
@@ -1281,48 +1458,66 @@ export function activate(context: vscode.ExtensionContext) {
   const debouncedFetch = debounce(() => {
     const editor = vscode.window.activeTextEditor;
     if (editor) fetchSuggestions(context, editor);
-  }, 600);
+  }, 850);
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument((e) => {
       const editor = vscode.window.activeTextEditor;
-      if (!editor) return;
+      if (!editor || e.document !== editor.document) return;
 
       const change = e.contentChanges[0];
       if (!change) return;
 
+      // Update history for context
+      const lineText = editor.document.lineAt(change.range.start.line).text;
+      updateHistory(
+        path.basename(editor.document.fileName),
+        change.range.start.line,
+        lineText,
+      );
+
       lastSuggestion = null;
       vscode.commands.executeCommand("editor.action.inlineSuggest.hide");
 
-      const isNewLine = change.text === "\n";
-      const isTyping = change.text.length > 0 && change.text !== "\n";
+      const isNewLine = change.text.includes("\n");
+      const isTyping = change.text.length > 0 && !isNewLine;
+      const isDeleting = change.text.length === 0 && change.rangeLength > 0;
 
-      if (isTyping || isNewLine) {
+      if (isDeleting) return; // Don't trigger on backspace
+
+      // Trigger logic: reduce frequency
+      let shouldTrigger = false;
+      if (isNewLine) {
+        shouldTrigger = true;
+      } else if (isTyping) {
+        const text = change.text;
+        const lastChar = text[text.length - 1];
+        const trimmedLine = lineText.trim();
+
+        // 1. Trigger on specific completion-friendly characters
+        if ([" ", ".", "(", "=", "{", ":", ",", "[", ">"].includes(lastChar)) {
+          shouldTrigger = true;
+        }
+        // 2. Or if the user has typed a meaningful amount on this line
+        else if (trimmedLine.length >= 3) {
+          // But only if it's not a comment or just symbols
+          if (!trimmedLine.startsWith("//") && !trimmedLine.startsWith("#")) {
+            shouldTrigger = true;
+          }
+        }
+      }
+
+      if (shouldTrigger) {
         debouncedFetch();
       }
 
       if (isNewLine) {
         setTimeout(() => {
           vscode.commands.executeCommand("editor.action.inlineSuggest.trigger");
-        }, 80);
+        }, 100);
       }
     }),
   );
-
-  vscode.workspace.onDidChangeTextDocument((e) => {
-    const editor = vscode.window.activeTextEditor;
-    if (!editor) return;
-
-    const change = e.contentChanges[0];
-    if (!change) return;
-
-    // 👉 Detect user tekan Enter
-    if (change.text === "\n") {
-      setTimeout(() => {
-        vscode.commands.executeCommand("editor.action.inlineSuggest.trigger");
-      }, 50);
-    }
-  });
 
   // Trigger the updateWebview command when the active editor changes or the selection changes
   vscode.window.onDidChangeActiveTextEditor(() => {
@@ -1791,4 +1986,4 @@ async function triggerCodeCompletion(
 //implementasi disini
 
 // This method is called when your extension is deactivated
-export function deactivate() {}
+export function deactivate() { }

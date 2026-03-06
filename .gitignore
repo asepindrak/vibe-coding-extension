@@ -1,2 +1,4 @@
 node_modules
 vibe-coding-*.vsix
+.vscode-test
+out

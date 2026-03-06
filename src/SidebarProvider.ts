@@ -478,6 +478,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             }
             this.context.globalState.update("chatHistory", currentHistory);
             return;
+          case "currentSessionId":
+            this.context.globalState.update("currentSessionId", message.sessionId);
+            return;
           case "deleteHistoryItem":
             let historyToDelete: any[] = this.context.globalState.get(
               "chatHistory",
