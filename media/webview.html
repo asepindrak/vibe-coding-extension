@@ -182,7 +182,7 @@
               border: 1px solid #30363d;
             "
           >
-            <option value="agent">🤖 Agent Mode</option>
+            <option value="agent">🧠 Agent Mode</option>
             <option value="chat">💬 Chat Mode</option>
           </select>
           <select
@@ -197,8 +197,7 @@
               border: 1px solid #30363d;
             "
           >
-            <option value="gpt-5-mini">⚡ gpt-5-mini</option>
-            <option value="gpt-5-nano">⚡ gpt-5-nano</option>
+            <option value="gpt-5.1-codex-mini">🧠 GPT-5.1-Codex-Mini</option>
             <option value="gpt-5.3-codex">🧠 GPT-5.3-Codex</option>
             <option value="gpt-5.2-codex">🧠 GPT-5.2-Codex</option>
             <option value="gpt-5.1-codex">🧠 GPT-5.1-Codex</option>
@@ -679,7 +678,7 @@
       var attachments = [];
       var pendingPromptAccess = null;
       var currentAiSettings = {
-        selectedModel: "gpt-5-mini",
+        selectedModel: "gpt-5.1-codex-mini",
         hasUserApiKey: false,
         freePromptLimit: 20,
         machinePromptUsed: 0,
@@ -689,7 +688,7 @@
       var contextPickerAllEntries = [];
       var selectedContextRefs = [];
       var contextSearchTimer = null;
-      var lastAllowedModel = "gpt-5-mini";
+      var lastAllowedModel = "gpt-5.1-codex-mini";
 
       const vscode = acquireVsCodeApi();
       const persistedState = vscode.getState() || {};
@@ -702,6 +701,9 @@
 
       // Store file paths for caching search results
       window.filePathCache = new Map();
+      var workspaceVersion = 0;
+      var cachedProjectContext = "";
+      var cachedContextVersion = -1;
 
       function updateQuotaBadgeFromSettings() {
         const badge = document.getElementById("quotaBadge");
@@ -732,7 +734,7 @@
               .filter(Boolean),
           );
         }
-        return new Set(["gpt-5-mini", "gpt-4o-mini"]);
+        return new Set(["gpt-5.1-codex-mini", "gpt-4o-mini"]);
       }
 
       function ensureSupportedModel(selected) {
@@ -741,14 +743,16 @@
         if (allowed.has(candidate)) {
           return candidate;
         }
-        if (allowed.has("gpt-5-mini")) {
-          return "gpt-5-mini";
+        if (allowed.has("gpt-5.1-codex-mini")) {
+          return "gpt-5.1-codex-mini";
         }
-        return Array.from(allowed)[0] || "gpt-5-mini";
+        return Array.from(allowed)[0] || "gpt-5.1-codex-mini";
       }
 
       function isFreeQuotaModel(model) {
-        return ["gpt-5-mini", "gpt-4o-mini"].includes(String(model || ""));
+        return ["gpt-5.1-codex-mini", "gpt-4o-mini"].includes(
+          String(model || ""),
+        );
       }
 
       function resolveAllowedModelOrFallback(model) {
@@ -758,7 +762,7 @@
         }
         return isFreeQuotaModel(lastAllowedModel)
           ? lastAllowedModel
-          : "gpt-5-mini";
+          : "gpt-5.1-codex-mini";
       }
 
       function hideWorkspacePrompt() {
@@ -1034,7 +1038,7 @@
             resolve({
               allowed: false,
               reason: "Quota check timeout. Please try again.",
-              selectedModel: model || "gpt-5-mini",
+              selectedModel: model || "gpt-5.1-codex-mini",
               userApiKey: "",
             });
           }, 10000);
@@ -1095,7 +1099,7 @@
           model:
             (modelSelect && modelSelect.value) ||
             currentAiSettings.selectedModel ||
-            "gpt-5-mini",
+            "gpt-5.1-codex-mini",
           userApiKey: input.value.trim(),
         });
         closeApiKeyModal();
@@ -1112,7 +1116,7 @@
           model: ensureSupportedModel(
             document.getElementById("modelSelect")?.value ??
               currentAiSettings.selectedModel ??
-              "gpt-5-mini",
+              "gpt-5.1-codex-mini",
           ),
           currentSessionId: currentSessionId,
           filePathCache: Array.from(window.filePathCache.entries()), // Persist cache
@@ -1389,7 +1393,7 @@
         if (modelSelect) {
           modelSelect.addEventListener("change", () => {
             const requestedModel = ensureSupportedModel(
-              modelSelect.value || "gpt-5-mini",
+              modelSelect.value || "gpt-5.1-codex-mini",
             );
             if (
               !currentAiSettings.hasUserApiKey &&
@@ -1682,6 +1686,8 @@
               }
               lastMsg.changes.push(...changes);
               saveState();
+              // Re-render the last message to show the changes
+              updateMessagesAssistant(lastMsg);
             }
             return;
           }
@@ -1711,11 +1717,18 @@
           }
 
           if (messageEvent.command === "workspaceDirty") {
-            // Workspace dirty sync prompt is disabled; never block sending flow.
-            isWorkspaceDirty = false;
+            if (typeof messageEvent.workspaceVersion === "number") {
+              workspaceVersion = messageEvent.workspaceVersion;
+            }
+            isWorkspaceDirty = !!messageEvent.isDirty;
+            if (isWorkspaceDirty) {
+              cachedContextVersion = -1;
+            }
             const btnWorkspace = document.getElementById("button-workspace");
             if (btnWorkspace) {
-              btnWorkspace.style.display = "none";
+              btnWorkspace.style.display = isWorkspaceDirty
+                ? "inline-flex"
+                : "none";
             }
             return;
           }
@@ -2093,7 +2106,7 @@
         const selectedModel = ensureSupportedModel(
           (modelSelect && modelSelect.value) ||
             currentAiSettings.selectedModel ||
-            "gpt-5-mini",
+            "gpt-5.1-codex-mini",
         );
         if (
           (mode === "agent" || mode === "chat") &&
@@ -2261,7 +2274,7 @@
         const selectedModel = ensureSupportedModel(
           (modelSelect && modelSelect.value) ||
             currentAiSettings.selectedModel ||
-            "gpt-5-mini",
+            "gpt-5.1-codex-mini",
         );
 
         // Workspace dirty auto-sync is disabled; do not block send flow.
@@ -2480,7 +2493,9 @@
         const token = localStorage.getItem("token");
         const userId = localStorage.getItem("userId");
         const selectedModel = ensureSupportedModel(
-          aiConfig.model || currentAiSettings.selectedModel || "gpt-5-mini",
+          aiConfig.model ||
+            currentAiSettings.selectedModel ||
+            "gpt-5.1-codex-mini",
         );
         const userApiKey = aiConfig.userApiKey || "";
         const verificationMode =
@@ -2541,6 +2556,20 @@
           /(web|website|frontend|ui|landing|dashboard|streaming|next\.?js|react)/i.test(
             text || "",
           );
+        const requiresConcreteCoding = (text) => {
+          const src = String(text || "");
+          if (!src.trim()) return false;
+          if (
+            /\b(explain|jelaskan|why|kenapa|what is|apa itu|review|analisa|analysis only|diskusi|brainstorm)\b/i.test(
+              src,
+            )
+          ) {
+            return false;
+          }
+          return /(\bfix\b|\bperbaiki\b|\bbug\b|\bcreate\b|\bbuat\b|\bbuild\b|\bimplement\b|\badd\b|\btambah\b|\bupdate\b|\bubah\b|\bmodify\b|\bedit\b|\brefactor\b|\boptimi[sz]e\b|\bcoding\b|\bcode\b)/i.test(
+            src,
+          );
+        };
         const isVanillaWebRequest = (text) =>
           /(\bno framework\b|\btanpa framework\b|\bvanilla\b|\bplain html\b|\bhtml dan javascript\b|\bhtml\s*\+\s*javascript\b|\bsingle html\b)/i.test(
             text || "",
@@ -2603,6 +2632,9 @@
         const requestedUrls = Array.from(
           new Set((message || "").match(/https?:\/\/[^\s"'`<>]+/gi) || []),
         );
+        const requestNeedsConcreteCoding = requiresConcreteCoding(
+          message || "",
+        );
         const isSimpleVanillaTask =
           userRequestedVanillaNoFramework &&
           /\b(simple|sederhana)\b/i.test(message || "");
@@ -2651,175 +2683,188 @@
           });
         };
 
-        // Try to load project memory and other context files
-        try {
-          const vicoFiles = [
-            "memory.md",
-            "architecture.md",
-            "style.md",
-            "history.md",
-            "lessons.md",
-          ];
-          let memoryFound = false;
+        const shouldRebuildContext =
+          !cachedProjectContext ||
+          cachedContextVersion !== workspaceVersion ||
+          isWorkspaceDirty;
 
-          for (const file of vicoFiles) {
-            const vicoPath = `.vico/${file}`;
-            const content = await readFileAsync(vicoPath);
+        if (!shouldRebuildContext) {
+          currentContext = cachedProjectContext;
+          isWorkspaceDirty = false;
+        } else {
+          currentContext = "";
 
-            if (content) {
-              currentContext += `\n=== PROJECT CONTEXT (${vicoPath}) ===\n${content}\n========================================\n`;
+          // Try to load project memory and other context files
+          try {
+            const vicoFiles = [
+              "memory.md",
+              "architecture.md",
+              "style.md",
+              "history.md",
+            ];
+            let memoryFound = false;
 
-              if (
-                file === "memory.md" ||
-                file === "history.md" ||
-                file === "lessons.md"
-              ) {
-                if (file === "memory.md") memoryFound = true;
-                currentContext += `\n=== SYSTEM NOTE ===\nTo update ${vicoPath}, ONLY generate the NEW content to be appended. Do NOT regenerate the entire file.\n===================\n`;
-              }
+            for (const file of vicoFiles) {
+              const vicoPath = `.vico/${file}`;
+              const content = await readFileAsync(vicoPath);
 
-              if (file === "architecture.md" || file === "style.md") {
-                currentContext += `\n=== SYSTEM NOTE ===\nTo update ${vicoPath}, you MUST regenerate the ENTIRE content. This file represents the current state of truth.\n===================\n`;
-              }
+              if (content) {
+                currentContext += `\n=== PROJECT CONTEXT (${vicoPath}) ===\n${content}\n========================================\n`;
 
-              console.log(`[webview] Loaded project context from ${vicoPath}.`);
-            } else if (file === "memory.md") {
-              // Fallback for memory.md in root if not in .vico
-              const rootMemoryPath = "memory.md";
-              const rootMemoryContent = await readFileAsync(rootMemoryPath);
-              if (rootMemoryContent) {
-                memoryFound = true;
-                currentContext += `\n=== PROJECT MEMORY (${rootMemoryPath}) ===\n${rootMemoryContent}\n========================================\n`;
-                currentContext += `\n=== SYSTEM NOTE ===\nTo update ${rootMemoryPath}, ONLY generate the NEW content to be appended. Do NOT regenerate the entire file.\n===================\n`;
+                if (file === "memory.md" || file === "history.md") {
+                  if (file === "memory.md") memoryFound = true;
+                  currentContext += `\n=== SYSTEM NOTE ===\nTo update ${vicoPath}, ONLY generate the NEW content to be appended. Do NOT regenerate the entire file.\n===================\n`;
+                }
+
+                if (file === "architecture.md" || file === "style.md") {
+                  currentContext += `\n=== SYSTEM NOTE ===\nTo update ${vicoPath}, you MUST regenerate the ENTIRE content. This file represents the current state of truth.\n===================\n`;
+                }
+
                 console.log(
-                  `[webview] Loaded project memory from ${rootMemoryPath}.`,
+                  `[webview] Loaded project context from ${vicoPath}.`,
                 );
+              } else if (file === "memory.md") {
+                // Fallback for memory.md in root if not in .vico
+                const rootMemoryPath = "memory.md";
+                const rootMemoryContent = await readFileAsync(rootMemoryPath);
+                if (rootMemoryContent) {
+                  memoryFound = true;
+                  currentContext += `\n=== PROJECT MEMORY (${rootMemoryPath}) ===\n${rootMemoryContent}\n========================================\n`;
+                  currentContext += `\n=== SYSTEM NOTE ===\nTo update ${rootMemoryPath}, ONLY generate the NEW content to be appended. Do NOT regenerate the entire file.\n===================\n`;
+                  console.log(
+                    `[webview] Loaded project memory from ${rootMemoryPath}.`,
+                  );
+                }
               }
             }
-          }
 
-          if (!memoryFound) {
-            // File missing, instruct agent to create it (prefer .vico/memory.md)
-            currentContext += `\n=== SYSTEM NOTE ===\nThe memory file .vico/memory.md does not exist. If this is a new project, run the CLI generator FIRST (e.g., npx create-next-app .). Create .vico/memory.md ONLY AFTER the project structure is ready.\n===================\n`;
-          }
-        } catch (e) {
-          console.log(
-            "[webview] No project memory found or error reading it:",
-            e,
-          );
-        }
-
-        // Add explicit autonomous behavior instruction
-        currentContext += `\n=== CRITICAL INSTRUCTION ===\nYou are an AUTONOMOUS agent. Do NOT ask the user what to do next. You MUST decide the best course of action yourself and proceed to execute it immediately. If there are multiple options, choose the most reasonable one and ACT on it. Do not stop to ask for permission or preference. Complete the user's request end-to-end.\n`;
-        currentContext += `\n=== PLANNING & EXECUTION STRATEGY ===\n1. **PHASE 1: PLAN**: At the very beginning, CREATE A COMPREHENSIVE, NUMBERED PLAN. List all steps required to solve the user's request.\n2. **PHASE 2: EXECUTE**: Execute the plan step-by-step. Do not deviate unless a step fails.\n3. **VERIFY**: After applying a fix, verify only with short-lived commands (build/test/lint). NEVER run server/dev commands.\n4. **NO LOOPING**: If a step fails, do not retry the exact same action. Analyze the error and adjust your plan.\n5. **HISTORY AWARENESS**: Review the 'History' to see what steps have already been completed. DO NOT REPEAT COMPLETED STEPS.\n============================\n`;
-        currentContext += `\n=== MEMORY POLICY ===\n- In empty workspace, NEVER create .vico/memory.md as first action.\n- First action must scaffold/init framework.\n- Update memory only after real code implementation exists.\n- If .vico/* is not writable by whitelist/guardrails, skip memory append silently and continue core task.\n- Never trigger REPLAN only to request permission for optional memory updates.\n============================\n`;
-        currentContext += `\n=== VERIFICATION POLICY ===\n- Run build/test/lint ONLY at the end, after implementation steps are done.\n- Do NOT repeat the same verification command if it already passed and no new code changes occurred.\n- For simple vanilla HTML/JS requests, verification is lightweight and optional; do not force integration/e2e test loops.\n- NEVER propose manual verification requiring GUI actions (open browser/url/file, click buttons, open file://).\n- If implementation is already persisted and there is no critical build/runtime error, finalize without extra strict verification loops.\n============================\n`;
-        currentContext += `\n=== FILE STRUCTURE AWARENESS ===\nBefore creating any new file or component, you MUST check the 'PROJECT FILE STRUCTURE' provided in the context. \n- If this is a Next.js project, verify if it uses the 'app/' directory (App Router) or 'pages/' directory (Pages Router). \n- Do NOT create 'pages/index.js' if 'app/page.tsx' exists. \n- Do NOT mix TypeScript (.ts/.tsx) and JavaScript (.js/.jsx) unless the project already does. Follow existing patterns.\n================================\n`;
-        currentContext += `\n=== DEFAULT WEB POLICY ===\nIf user asks for a web app and does not specify framework, default to Next.js + Tailwind CSS using NON-INTERACTIVE scaffold command.\n- Preferred scaffold command: npx create-next-app . --yes --ts --eslint --tailwind --app --use-npm\n- Never run npm install/build/test before dependency file exists.\n================================\n`;
-        currentContext += `\n=== WEB FRAMEWORK OVERRIDE ===\nIf user explicitly asks for HTML/CSS/JavaScript without framework (for example: 'tanpa framework', 'no framework', 'vanilla'), DO NOT scaffold Next.js/Vite/React.\nImplement directly with plain files (for example: index.html + script.js), and use Tailwind via CDN unless user requests another setup.\n================================\n`;
-        currentContext += `\n=== DEPENDENCY & IMPORT POLICY ===\nBefore writing any external import (for example: import Hls from 'hls.js'), verify dependency source first.\n- For explicit vanilla/no-framework requests: NEVER use bare npm imports. Use CDN/browser script import and global object fallback.\n- If project has dependency manifest and framework-based build is used: install missing package first, then import.\n- Never reference non-existent local files in import path.\n================================\n`;
-        currentContext += `\n=== CONTENT FIDELITY POLICY ===\n- Use literal values from user prompt exactly. Never replace provided URL with placeholders.\n- Forbidden placeholder patterns: example.com, your-*.m3u8, final-*.m3u8, TODO placeholder URLs.\n- Do not add extra branding words like 'Final' unless user explicitly asked for it.\n- For this task, keep naming exactly: 'PJTV Live'.\n================================\n`;
-        currentContext += `\n=== PRODUCTION COPY POLICY ===\nDo not leak prompt meta constraints into user-facing copy/code.\n- Forbidden in generated UI text/comments: 'no framework', 'tanpa framework', 'without framework', 'vanilla'.\n- These are implementation constraints, not product copy.\n================================\n`;
-        if (requestedUrls.length > 0) {
-          currentContext += `\n=== REQUIRED LITERAL URLS ===\n${requestedUrls.map((u) => `- ${u}`).join("\n")}\nUse these exact URLs in output code where relevant.\n================================\n`;
-        }
-        currentContext += `\n=== UI QUALITY BAR ===\nFor web UI tasks, build elegant and modern interface quality by default (not plain boilerplate).\nUse intentional typography, spacing rhythm, cohesive color system, and polished component composition.\n================================\n`;
-
-        // Initial thinking bubble
-        updateMessagesAssistant({
-          uniqueId: `assistant-${currentUniqueId}`,
-          content: "🧠 Thinking & Planning...",
-        });
-
-        // === MANDATORY PROJECT STRUCTURE SCAN ===
-        try {
-          updateMessagesAssistant({
-            uniqueId: `assistant-${currentUniqueId}`,
-            content: "📂 Scanning project structure...",
-          });
-
-          // 1. List Files
-          const fileList = await new Promise((resolve) => {
-            let handleMessage;
-            const timeout = setTimeout(() => {
-              window.removeEventListener("message", handleMessage);
-              resolve([]); // Return empty list on timeout
-            }, 5000);
-
-            handleMessage = (event) => {
-              if (event.data.command === "listFilesResult") {
-                clearTimeout(timeout);
-                window.removeEventListener("message", handleMessage);
-                resolve(event.data.files || []);
-              }
-            };
-            window.addEventListener("message", handleMessage);
-            vscode.postMessage({ command: "listFiles", pattern: "**/*" });
-          });
-
-          if (fileList.length > 0) {
-            projectHasDependencyFile = fileList.some((f) =>
-              dependencyMarkers.includes(f),
-            );
-            workflowMeta.existingProjectDetected =
-              detectExistingProjectFromFileList(fileList);
-            if (projectHasDependencyFile) {
-              workflowMeta.scaffoldDone = true;
+            if (!memoryFound) {
+              // File missing, instruct agent to create it (prefer .vico/memory.md)
+              currentContext += `\n=== SYSTEM NOTE ===\nThe memory file .vico/memory.md does not exist. If this is a new project, run the CLI generator FIRST (e.g., npx create-next-app .). Create .vico/memory.md ONLY AFTER the project structure is ready.\n===================\n`;
             }
-            if (
-              workflowMeta.existingProjectDetected &&
-              !projectHasDependencyFile
-            ) {
-              currentContext +=
-                "\n[System Feedback] Existing project files detected (no dependency manifest). Treat as initialized workspace. Do NOT scaffold framework automatically.\n";
-            }
-            // Filter for important directories/files to keep context lean but useful
-            const crucialFiles = fileList.filter(
-              (f) =>
-                f.match(
-                  /^(package\.json|tsconfig\.json|jsconfig\.json|next\.config\.|vite\.config\.|src\/|app\/|pages\/|components\/|public\/|index\.|main\.)/i,
-                ) || f.split("/").length <= 3, // Include root and depth-2 files
-            );
-
-            // If crucial files are too few, just take top 200 of everything
-            const filesToContext =
-              crucialFiles.length > 0 ? crucialFiles : fileList.slice(0, 200);
-
-            currentContext += `\n=== PROJECT FILE STRUCTURE (Scanned) ===\n${filesToContext.join("\n")}\n========================================\n`;
+          } catch (e) {
             console.log(
-              "[webview] Scanned project structure:",
-              filesToContext.length,
-              "files",
+              "[webview] No project memory found or error reading it:",
+              e,
             );
-
-            // 2. Read package.json if exists
-            if (fileList.includes("package.json")) {
-              const pkgContent = await readFileAsync("package.json");
-              if (pkgContent) {
-                currentContext += `\n=== package.json ===\n${pkgContent}\n====================\n`;
-              }
-            }
-
-            // 3. Read tsconfig.json if exists
-            if (fileList.includes("tsconfig.json")) {
-              const tsConfigContent = await readFileAsync("tsconfig.json");
-              if (tsConfigContent) {
-                currentContext += `\n=== tsconfig.json ===\n${tsConfigContent}\n=====================\n`;
-              }
-            }
           }
 
-          // Restore "Thinking" status
+          // Add explicit autonomous behavior instruction
+          currentContext += `\n=== CRITICAL INSTRUCTION ===\nYou are an AUTONOMOUS agent. Do NOT ask the user what to do next. You MUST decide the best course of action yourself and proceed to execute it immediately. If there are multiple options, choose the most reasonable one and ACT on it. Do not stop to ask for permission or preference. Complete the user's request end-to-end.\n`;
+          currentContext += `\n=== PLANNING & EXECUTION STRATEGY ===\n1. **PHASE 1: PLAN**: At the very beginning, CREATE A COMPREHENSIVE, NUMBERED PLAN. List all steps required to solve the user's request.\n2. **PHASE 2: EXECUTE**: Execute the plan step-by-step. Do not deviate unless a step fails.\n3. **VERIFY**: After applying a fix, verify only with short-lived commands (build/test/lint). NEVER run server/dev commands.\n4. **NO LOOPING**: If a step fails, do not retry the exact same action. Analyze the error and adjust your plan.\n5. **HISTORY AWARENESS**: Review the 'History' to see what steps have already been completed. DO NOT REPEAT COMPLETED STEPS.\n============================\n`;
+          currentContext += `\n=== MEMORY POLICY ===\n- In empty workspace, NEVER create .vico/memory.md as first action.\n- First action must scaffold/init framework.\n- Update memory only after real code implementation exists.\n- If .vico/* is not writable by whitelist/guardrails, skip memory append silently and continue core task.\n- Never trigger REPLAN only to request permission for optional memory updates.\n============================\n`;
+          currentContext += `\n=== HISTORY & LESSONS POLICY ===\n- Never edit .vico/history.md or .vico/lessons.md while planning, thinking, or reading; treat those files as read-only references until functional code is written.\n- Only append or modify history/lessons after all coding steps are complete and verified, and only as a final summary action requested by the user.\n- If the user did not explicitly ask for documentation/recap updates, keep history.md and lessons.md untouched.\n============================\n`;
+          currentContext += `\n=== VERIFICATION POLICY ===\n- Run build/test/lint ONLY at the end, after implementation steps are done.\n- Do NOT repeat the same verification command if it already passed and no new code changes occurred.\n- For simple vanilla HTML/JS requests, verification is lightweight and optional; do not force integration/e2e test loops.\n- NEVER propose manual verification requiring GUI actions (open browser/url/file, click buttons, open file://).\n- If implementation is already persisted and there is no critical build/runtime error, finalize without extra strict verification loops.\n============================\n`;
+          currentContext += `\n=== FILE STRUCTURE AWARENESS ===\nBefore creating any new file or component, you MUST check the 'PROJECT FILE STRUCTURE' provided in the context. \n- If this is a Next.js project, verify if it uses the 'app/' directory (App Router) or 'pages/' directory (Pages Router). \n- Do NOT create 'pages/index.js' if 'app/page.tsx' exists. \n- Do NOT mix TypeScript (.ts/.tsx) and JavaScript (.js/.jsx) unless the project already does. Follow existing patterns.\n================================\n`;
+          currentContext += `\n=== DEFAULT WEB POLICY ===\nIf user asks for a web app and does not specify framework, default to Next.js + Tailwind CSS using NON-INTERACTIVE scaffold command.\n- Preferred scaffold command: npx create-next-app . --yes --ts --eslint --tailwind --app --use-npm\n- Never run npm install/build/test before dependency file exists.\n================================\n`;
+          currentContext += `\n=== WEB FRAMEWORK OVERRIDE ===\nIf user explicitly asks for HTML/CSS/JavaScript without framework (for example: 'tanpa framework', 'no framework', 'vanilla'), DO NOT scaffold Next.js/Vite/React.\nImplement directly with plain files (for example: index.html + script.js), and use Tailwind via CDN unless user requests another setup.\n================================\n`;
+          currentContext += `\n=== DEPENDENCY & IMPORT POLICY ===\nBefore writing any external import (for example: import Hls from 'hls.js'), verify dependency source first.\n- For explicit vanilla/no-framework requests: NEVER use bare npm imports. Use CDN/browser script import and global object fallback.\n- If project has dependency manifest and framework-based build is used: install missing package first, then import.\n- Never reference non-existent local files in import path.\n================================\n`;
+          currentContext += `\n=== CONTENT FIDELITY POLICY ===\n- Use literal values from user prompt exactly. Never replace provided URL with placeholders.\n- Forbidden placeholder patterns: example.com, your-*.m3u8, final-*.m3u8, TODO placeholder URLs.\n- Do not add extra branding words like 'Final' unless user explicitly asked for it.\n================================\n`;
+          currentContext += `\n=== PRODUCTION COPY POLICY ===\nDo not leak prompt meta constraints into user-facing copy/code.\n- Forbidden in generated UI text/comments: 'no framework', 'tanpa framework', 'without framework', 'vanilla'.\n- These are implementation constraints, not product copy.\n================================\n`;
+          if (requestedUrls.length > 0) {
+            currentContext += `\n=== REQUIRED LITERAL URLS ===\n${requestedUrls.map((u) => `- ${u}`).join("\n")}\nUse these exact URLs in output code where relevant.\n================================\n`;
+          }
+          currentContext += `\n=== UI QUALITY BAR ===\nFor web UI tasks, build elegant and modern interface quality by default (not plain boilerplate).\nUse intentional typography, spacing rhythm, cohesive color system, and polished component composition.\n================================\n`;
+
+          // Initial thinking bubble
           updateMessagesAssistant({
             uniqueId: `assistant-${currentUniqueId}`,
             content: "🧠 Thinking & Planning...",
           });
-        } catch (scanError) {
-          console.error("Project scan failed:", scanError);
-          // Continue without scan if it fails
-        }
 
-        currentContext += `\n=== ANTI-PATTERNS (STRICTLY FORBIDDEN) ===\n1. **NO EMPTY SCAFFOLDING**: Do NOT create empty folders or '.gitkeep' files. If you need a folder, create it by writing a REAL file inside it (e.g., 'components/Navbar.tsx', not just 'components/').\n2. **NO PLACEHOLDERS**: Do NOT write files with "// TODO: implement". Write the ACTUAL code requested.\n3. **NO HALLUCINATED COMPLETION**: Do not say "Task Completed" if you have only created folders. You must write the functional code.\n==========================================\n`;
+          // === MANDATORY PROJECT STRUCTURE SCAN ===
+          try {
+            updateMessagesAssistant({
+              uniqueId: `assistant-${currentUniqueId}`,
+              content: "📂 Scanning project structure...",
+            });
+
+            // 1. List Files
+            const fileList = await new Promise((resolve) => {
+              let handleMessage;
+              const timeout = setTimeout(() => {
+                window.removeEventListener("message", handleMessage);
+                resolve([]); // Return empty list on timeout
+              }, 5000);
+
+              handleMessage = (event) => {
+                if (event.data.command === "listFilesResult") {
+                  clearTimeout(timeout);
+                  window.removeEventListener("message", handleMessage);
+                  resolve(event.data.files || []);
+                }
+              };
+              window.addEventListener("message", handleMessage);
+              vscode.postMessage({ command: "listFiles", pattern: "**/*" });
+            });
+
+            if (fileList.length > 0) {
+              projectHasDependencyFile = fileList.some((f) =>
+                dependencyMarkers.includes(f),
+              );
+              workflowMeta.existingProjectDetected =
+                detectExistingProjectFromFileList(fileList);
+              if (projectHasDependencyFile) {
+                workflowMeta.scaffoldDone = true;
+              }
+              if (
+                workflowMeta.existingProjectDetected &&
+                !projectHasDependencyFile
+              ) {
+                currentContext +=
+                  "\n[System Feedback] Existing project files detected (no dependency manifest). Treat as initialized workspace. Do NOT scaffold framework automatically.\n";
+              }
+              // Filter for important directories/files to keep context lean but useful
+              const crucialFiles = fileList.filter(
+                (f) =>
+                  f.match(
+                    /^(package\.json|tsconfig\.json|jsconfig\.json|next\.config\.|vite\.config\.|src\/|app\/|pages\/|components\/|public\/|index\.|main\.)/i,
+                  ) || f.split("/").length <= 3, // Include root and depth-2 files
+              );
+
+              // If crucial files are too few, just take top 200 of everything
+              const filesToContext =
+                crucialFiles.length > 0 ? crucialFiles : fileList.slice(0, 200);
+
+              currentContext += `\n=== PROJECT FILE STRUCTURE (Scanned) ===\n${filesToContext.join("\n")}\n========================================\n`;
+              console.log(
+                "[webview] Scanned project structure:",
+                filesToContext.length,
+                "files",
+              );
+
+              // 2. Read package.json if exists
+              if (fileList.includes("package.json")) {
+                const pkgContent = await readFileAsync("package.json");
+                if (pkgContent) {
+                  currentContext += `\n=== package.json ===\n${pkgContent}\n====================\n`;
+                }
+              }
+
+              // 3. Read tsconfig.json if exists
+              if (fileList.includes("tsconfig.json")) {
+                const tsConfigContent = await readFileAsync("tsconfig.json");
+                if (tsConfigContent) {
+                  currentContext += `\n=== tsconfig.json ===\n${tsConfigContent}\n=====================\n`;
+                }
+              }
+            }
+
+            // Restore "Thinking" status
+            updateMessagesAssistant({
+              uniqueId: `assistant-${currentUniqueId}`,
+              content: "🧠 Thinking & Planning...",
+            });
+          } catch (scanError) {
+            console.error("Project scan failed:", scanError);
+            // Continue without scan if it fails
+          }
+
+          currentContext += `\n=== ANTI-PATTERNS (STRICTLY FORBIDDEN) ===\n1. **NO EMPTY SCAFFOLDING**: Do NOT create empty folders or '.gitkeep' files. If you need a folder, create it by writing a REAL file inside it (e.g., 'components/Navbar.tsx', not just 'components/').\n2. **NO PLACEHOLDERS**: Do NOT write files with "// TODO: implement". Write the ACTUAL code requested.\n3. **NO HALLUCINATED COMPLETION**: Do not say "Task Completed" if you have only created folders. You must write the functional code.\n==========================================\n`;
+          cachedProjectContext = currentContext;
+          cachedContextVersion = workspaceVersion;
+          isWorkspaceDirty = false;
+        }
 
         // Initialize global plan state if starting new workflow
         if (iteration === 1) {
@@ -3408,7 +3453,9 @@ ${result.summary || "Executed successfully."}`,
       ) {
         let context = existingContext; // Initialize with existing context
         const selectedModel = ensureSupportedModel(
-          aiConfig.model || currentAiSettings.selectedModel || "gpt-5-mini",
+          aiConfig.model ||
+            currentAiSettings.selectedModel ||
+            "gpt-5.1-codex-mini",
         );
         const userApiKey = aiConfig.userApiKey || "";
         const verificationMode =
@@ -3443,7 +3490,30 @@ ${result.summary || "Executed successfully."}`,
             (cmd || "").trim(),
           ) ||
           /^(tsc|eslint|pytest|go test|cargo test)\b/i.test((cmd || "").trim());
+        const isSimpleActionStep = (step) => {
+          const stepType = String(step?.type || "").toLowerCase();
+          const desc = String(step?.description || "").toLowerCase();
+          const simpleTypes = new Set([
+            "file_write",
+            "file_modify",
+            "write",
+            "command",
+            "apply_patch",
+            "patch",
+            "chat",
+            "task",
+          ]);
+          if (simpleTypes.has(stepType)) return true;
+          if (
+            /\b(write|apply|patch|create|update|command)\b/.test(desc) &&
+            !/\b(read|search|find|analy[sz]e)\b/.test(desc)
+          ) {
+            return true;
+          }
+          return false;
+        };
         const shouldRunThinkPhase = (step) => {
+          if (isSimpleActionStep(step)) return false;
           const stepType = String(step?.type || "").toLowerCase();
           const desc = String(step?.description || "").toLowerCase();
           if (
@@ -3923,10 +3993,18 @@ ${result.summary || "Executed successfully."}`,
 
             // After execution, remove "Executing..." and append final output
             planMarkdown = planMarkdown.replace(`\n  > *Executing...*\n`, "");
-            // But we want to KEEP the execution log in the assistant message for history!
-            // Actually, usually we summarize. But for debugging, full log is better.
-            // Let's format it nicely.
-            planMarkdown += `\n> *Execution Output:*\n\`\`\`\n${stepOutput.slice(0, 1000)}${stepOutput.length > 1000 ? "..." : ""}\n\`\`\`\n`;
+
+            if (stepOutput.includes("[writeFile]")) {
+              planMarkdown += `\n  > *Writing files...*\n`;
+            }
+
+            // If it contains writeFile, we want to render the panel, so don't wrap the whole thing in backticks
+            // if it's likely to be a writeFile response.
+            if (stepOutput.includes("[writeFile]")) {
+              planMarkdown += `\n${stepOutput}\n`;
+            } else {
+              planMarkdown += `\n> *Execution Output:*\n\`\`\`\n${stepOutput.slice(0, 1000)}${stepOutput.length > 1000 ? "..." : ""}\n\`\`\`\n`;
+            }
 
             updateMessagesAssistant({
               uniqueId: `assistant-${uniqueId}`,
@@ -4203,8 +4281,16 @@ ${result.summary || "Executed successfully."}`,
               while (
                 (targetMatch = targetFileRegex.exec(stepOutput)) !== null
               ) {
-                if (targetMatch[1]) targetFiles.add(targetMatch[1]);
+                if (targetMatch[1]) {
+                  targetFiles.add(targetMatch[1]);
+                  // Visual feedback for each file target
+                  currentStepMarkdown += `\n  > *Targeting file:* ${targetMatch[1]}\n`;
+                }
               }
+              updateMessagesAssistant({
+                uniqueId: `assistant-${uniqueId}`,
+                content: currentStepMarkdown,
+              });
               const beforeSnapshot = new Map();
               for (const tPath of targetFiles) {
                 let prev = window.fileContentMap.get(tPath);

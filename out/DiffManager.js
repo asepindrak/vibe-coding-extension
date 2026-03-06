@@ -69,6 +69,7 @@ class DiffManager {
         try {
             const tempDir = os.tmpdir();
             const fileName = path.basename(fileUri.fsPath);
+            const uriStr = fileUri.toString();
             // 1. Get Existing Content (Old)
             let oldContent = "";
             let fileExists = false;
@@ -80,24 +81,31 @@ class DiffManager {
             catch (e) {
                 // File does not exist
             }
+            // Check if we already have a pending diff for this file
+            // If we do, we want to keep the ORIGINAL content from the first diff
+            const existingEntry = this.pendingDiffs.get(uriStr);
+            const originalContentToKeep = existingEntry
+                ? existingEntry.originalContent
+                : oldContent;
             // 2. Write NEW content to the actual file (Auto Apply)
             const data = Buffer.from(newContent, "utf8");
             await vscode.workspace.fs.writeFile(fileUri, data);
-            // 3. Write OLD content to Temp (for Diff Left Side)
-            // Use hash of file path to ensure only one diff tab per file
+            // 3. Write ORIGINAL content to Temp (for Diff Left Side)
+            // We always show the diff from the ABSOLUTE ORIGINAL state (before the agent turn)
+            // to the LATEST modified state.
             const fileHash = crypto
                 .createHash("md5")
                 .update(fileUri.fsPath)
                 .digest("hex");
             const tempFilePath = path.join(tempDir, `vico_backup_${fileHash}_${fileName}`);
-            fs.writeFileSync(tempFilePath, oldContent);
+            fs.writeFileSync(tempFilePath, originalContentToKeep);
             const tempUri = vscode.Uri.file(tempFilePath);
             // 4. Register in Map
-            this.pendingDiffs.set(fileUri.toString(), {
+            this.pendingDiffs.set(uriStr, {
                 originalUri: fileUri,
                 tempUri,
                 tempFilePath,
-                originalContent: oldContent,
+                originalContent: originalContentToKeep,
             });
             // 5. Open Diff: Left (Old/Backup) <-> Right (Current/New)
             await vscode.commands.executeCommand("vscode.diff", tempUri, // Left: Original / Backup

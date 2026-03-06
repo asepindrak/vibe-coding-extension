@@ -364,19 +364,58 @@ function applySearchReplaceWithFallback(currentContent, searchText, replaceText)
             strategy: "exact",
         };
     }
+    const fuzzy = applyFuzzySearchReplace(currentContent, searchText, replaceText);
+    if (fuzzy.matched) {
+        return {
+            matched: true,
+            next: fuzzy.next,
+            strategy: "fuzzy",
+        };
+    }
     const eol = detectEol(currentContent);
     const currentLf = toLf(currentContent);
     const searchLf = toLf(searchText);
     const replaceLf = toLf(replaceText);
     if (searchLf && currentLf.includes(searchLf)) {
         const nextLf = replaceFirstOccurrence(currentLf, searchLf, replaceLf);
-        return { matched: true, next: fromLf(nextLf, eol), strategy: "normalized-eol" };
+        return {
+            matched: true,
+            next: fromLf(nextLf, eol),
+            strategy: "normalized-eol",
+        };
     }
     const loose = replaceByTrimmedLineMatch(currentLf, searchLf, replaceLf);
     if (loose.matched) {
-        return { matched: true, next: fromLf(loose.next, eol), strategy: "trimmed-line" };
+        return {
+            matched: true,
+            next: fromLf(loose.next, eol),
+            strategy: "trimmed-line",
+        };
     }
     return { matched: false, next: currentContent, strategy: "none" };
+}
+function escapeRegex(text) {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function applyFuzzySearchReplace(currentContent, searchText, replaceText) {
+    if (!searchText)
+        return { matched: false, next: currentContent };
+    const tokens = searchText
+        .split(/\s+/)
+        .map((t) => t.trim())
+        .filter(Boolean);
+    if (tokens.length === 0)
+        return { matched: false, next: currentContent };
+    const pattern = tokens.map(escapeRegex).join("\\s+");
+    const regex = new RegExp(pattern, "m");
+    const match = currentContent.match(regex);
+    if (!match || typeof match.index !== "number") {
+        return { matched: false, next: currentContent };
+    }
+    const next = currentContent.slice(0, match.index) +
+        replaceText +
+        currentContent.slice(match.index + match[0].length);
+    return { matched: true, next };
 }
 async function writeFileVico(context, editor, sidebarProvider) {
     vico_logger_1.default.info("writeFileVico called");
@@ -413,8 +452,8 @@ async function writeFileVico(context, editor, sidebarProvider) {
             return { fileUri: directUri, relativePath: cleanPath };
         }
         const hasPathSeparator = cleanPath.includes("/") || cleanPath.includes("\\");
+        const excludePattern = "**/{node_modules,.git,dist,build,out,coverage,.vscode,.idea,tmp,temp,venv,__pycache__,.vico}/**";
         if (!hasPathSeparator) {
-            const excludePattern = "**/{node_modules,.git,dist,build,out,coverage,.vscode,.idea,tmp,temp,venv,__pycache__,.vico}/**";
             const matches = await vscode.workspace.findFiles(`**/${cleanPath}`, excludePattern, 20);
             if (matches.length > 0) {
                 const sorted = matches
@@ -428,12 +467,27 @@ async function writeFileVico(context, editor, sidebarProvider) {
                 };
             }
         }
+        const baseName = path.basename(cleanPath);
+        if (baseName) {
+            const matches = await vscode.workspace.findFiles(`**/${baseName}`, excludePattern, 20);
+            if (matches.length > 0) {
+                const sorted = matches
+                    .map((u) => vscode.workspace.asRelativePath(u).replace(/\\/g, "/"))
+                    .sort((a, b) => a.length - b.length);
+                const resolvedRelative = sorted[0];
+                vico_logger_1.default.info(`[writeFile] Fallback resolve "${rawRelativePath}" -> "${resolvedRelative}"`);
+                return {
+                    fileUri: vscode.Uri.joinPath(projectRoot, resolvedRelative),
+                    relativePath: resolvedRelative,
+                };
+            }
+        }
         return { fileUri: directUri, relativePath: cleanPath };
     };
     try {
         // 1. Extract block [writeFile]...[/writeFile]
         // Supports both single block or multiple blocks if the AI outputs them sequentially
-        const blockRegex = /\[writeFile\]([\s\S]*?)\[\/writeFile\]/g;
+        const blockRegex = /\[writeFile\s*\]([\s\S]*?)\[\/writeFile\s*\]/gi;
         let match;
         let contentToProcess = "";
         // Accumulate all content within [writeFile] tags
@@ -444,7 +498,7 @@ async function writeFileVico(context, editor, sidebarProvider) {
             // Fallback: try to parse the whole message if the tags are missing but command was triggered
             // or if the tag was just [writeFile] without closing (though regex above requires closing)
             // Let's try to match open tag until end of string if no closing tag found
-            const openTagMatch = writeContent.match(/\[writeFile\]([\s\S]*)/);
+            const openTagMatch = writeContent.match(/\[writeFile\s*\]([\s\S]*)/i);
             if (openTagMatch) {
                 contentToProcess = openTagMatch[1];
             }
@@ -454,8 +508,8 @@ async function writeFileVico(context, editor, sidebarProvider) {
         }
         // 2. Parse [file name="path"]...[/file] OR [diff name="path"]...[/diff]
         // Improved regex to handle newlines and various attributes robustly
-        const fileRegex = /\[file\s+(?:name|path)=["']([^"']+)["'](?:\s+type=["'][^"']+["'])?\]([\s\S]*?)\[\/file\]/g;
-        const diffRegex = /\[diff\s+(?:name|path)=["']([^"']+)["']\]([\s\S]*?)\[\/diff\]/g;
+        const fileRegex = /\[file\s+(?:name|path)=["']?([^"'\s\]]+)["']?(?:\s+type=["'][^"']+["'])?\]([\s\S]*?)\[\s*\/file\s*\]/gi;
+        const diffRegex = /\[diff\s+(?:name|path)=["']?([^"'\s\]]+)["']?\]([\s\S]*?)\[\s*\/diff\s*\]/gi;
         let fileMatch;
         let filesCreated = 0;
         let duplicateSkipped = false;
@@ -587,7 +641,8 @@ async function writeFileVico(context, editor, sidebarProvider) {
                     originalContentByPath.set(relativePath, originalContent);
                 }
                 // Extract SEARCH/REPLACE blocks
-                const searchReplaceRegex = /<<<<<<<\s*SEARCH\s*[\r\n]*([\s\S]*?)\s*=======[\r\n]*([\s\S]*?)\s*>>>>>>>\s*REPLACE/g;
+                // Relaxed regex to handle variations in delimiter length and spacing
+                const searchReplaceRegex = /(?:<{3,20}|<[ <]{3,20})\s*SEARCH\s*[\r\n]*([\s\S]*?)\s*(?:={3,20}|=[ =]{3,20})[\r\n]*([\s\S]*?)\s*(?:>{3,20}|>[ >]{3,20})\s*REPLACE/gi;
                 let srMatch;
                 let matchedBlocks = 0;
                 let totalBlocks = 0;
@@ -623,12 +678,32 @@ async function writeFileVico(context, editor, sidebarProvider) {
                 if (totalBlocks > 1 && failedBlocks > 0) {
                     vico_logger_1.default.warn(`Aborting partial multi-block diff for ${relativePath}: matched=${matchedBlocks}, failed=${failedBlocks}, total=${totalBlocks}.`);
                     vscode.window.showWarningMessage(`Could not safely apply multi-step diff to ${relativePath} (partial match). Re-run with full file overwrite to avoid corrupted code.`);
+                    const fallbackContent = diffContent
+                        .replace(searchReplaceRegex, (_match, _search, replaceText) => replaceText)
+                        .trim();
+                    if (fallbackContent.length > 0) {
+                        vico_logger_1.default.info(`Fallback diff for ${relativePath}: rewriting with replace-only content.`);
+                        const fallbackResult = await handleDiff(fileUri, fallbackContent, effectiveRelativePath, context);
+                        if (fallbackResult && fallbackResult.success) {
+                            liveContentByPath.set(relativePath, fallbackContent);
+                            if (!changedPaths.has(relativePath)) {
+                                changedPaths.add(relativePath);
+                                filesCreated++;
+                                fileChanges.push({
+                                    filePath: effectiveRelativePath,
+                                    originalContent: originalContentByPath.get(relativePath) ||
+                                        fallbackResult.originalContent,
+                                });
+                            }
+                        }
+                    }
                     continue;
                 }
                 currentContent = nextContent;
                 if (matchedBlocks > 0) {
                     if (/\.(tsx|jsx)$/i.test(relativePath)) {
-                        currentContent = collapseAdjacentDuplicateJsxInvocations(currentContent);
+                        currentContent =
+                            collapseAdjacentDuplicateJsxInvocations(currentContent);
                     }
                     const result = await handleDiff(fileUri, currentContent, effectiveRelativePath, context);
                     if (result && result.success) {
@@ -645,7 +720,11 @@ async function writeFileVico(context, editor, sidebarProvider) {
                     }
                 }
                 else {
-                    const canFallbackToFullRewrite = totalBlocks === 1 &&
+                    // If no SEARCH/REPLACE blocks found, but diffContent has content, it might be a full rewrite
+                    if (totalBlocks === 0 && diffContent.trim().length > 0) {
+                        lastReplaceText = diffContent.trim();
+                    }
+                    const canFallbackToFullRewrite = totalBlocks <= 1 &&
                         ((lastReplaceText.trim().length > 200 &&
                             /(export\s+default|function\s+\w+|\breturn\s*\()/i.test(lastReplaceText)) ||
                             (effectiveRelativePath.replace(/\\/g, "/").toLowerCase() ===

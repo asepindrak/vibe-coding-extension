@@ -48,16 +48,25 @@ class SidebarProvider {
     fileWatcher;
     isWorkspaceDirty = false;
     _abortController = null;
+    listFilesCache = new Map();
+    readFileCache = new Map();
+    workspaceVersion = 0;
     childProcesses = [];
     activeCommandProcess = null;
     activeCommandBuffer = "";
     inputPromptCooldownAt = 0;
     recentActions = new Map();
     static FREE_PROMPT_LIMIT = 20;
-    static DEFAULT_MODEL = "gpt-5-mini";
-    static FREE_MODELS = new Set(["gpt-5-mini", "gpt-4o-mini"]);
+    static DEFAULT_MODEL = "gpt-5.1-codex-mini";
+    static FREE_MODELS = new Set([
+        "gpt-5.1-codex-mini",
+        "gpt-4o-mini",
+    ]);
     static USER_API_KEY_SECRET = "vico.userOpenAIApiKey";
     static MODEL_SETTING_KEY = "vico.selectedModel";
+    static LIST_FILES_CACHE_TTL_MS = 30000;
+    static READ_FILE_CACHE_TTL_MS = 15000;
+    static READ_FILE_CACHE_MAX_ITEMS = 300;
     static MACHINE_PROMPT_USAGE_KEY_PREFIX = "vico.machinePromptUsage";
     checkDuplicateAction(actionType, payload) {
         const hash = crypto
@@ -89,16 +98,81 @@ class SidebarProvider {
         this.fileWatcher = vscode.workspace.createFileSystemWatcher("**/*.{js,ts,jsx,tsx,json,py,go,rs,java,c,cpp,h,hpp,css,scss,html,php}");
         const markDirty = () => {
             this.isWorkspaceDirty = true;
+            this.workspaceVersion += 1;
+            this.listFilesCache.clear();
             if (this._view) {
                 this._view.webview.postMessage({
                     command: "workspaceDirty",
                     isDirty: true,
+                    workspaceVersion: this.workspaceVersion,
                 });
             }
         };
         this.fileWatcher.onDidChange(markDirty);
         this.fileWatcher.onDidCreate(markDirty);
         this.fileWatcher.onDidDelete(markDirty);
+    }
+    normalizeCachePath(fullPath) {
+        return path.resolve(fullPath).toLowerCase();
+    }
+    getCachedReadFile(fullPath) {
+        try {
+            const key = this.normalizeCachePath(fullPath);
+            const cached = this.readFileCache.get(key);
+            if (!cached)
+                return null;
+            if (Date.now() - cached.at > SidebarProvider.READ_FILE_CACHE_TTL_MS) {
+                this.readFileCache.delete(key);
+                return null;
+            }
+            const stat = fs.statSync(fullPath);
+            if (stat.mtimeMs !== cached.mtimeMs) {
+                this.readFileCache.delete(key);
+                return null;
+            }
+            return cached.content;
+        }
+        catch (_e) {
+            return null;
+        }
+    }
+    setCachedReadFile(fullPath, content) {
+        try {
+            const stat = fs.statSync(fullPath);
+            const key = this.normalizeCachePath(fullPath);
+            this.readFileCache.set(key, {
+                content,
+                mtimeMs: stat.mtimeMs,
+                at: Date.now(),
+            });
+            if (this.readFileCache.size > SidebarProvider.READ_FILE_CACHE_MAX_ITEMS) {
+                const oldest = this.readFileCache.keys().next().value;
+                if (oldest)
+                    this.readFileCache.delete(oldest);
+            }
+        }
+        catch (_e) { }
+    }
+    getCachedListFiles(pattern) {
+        const cached = this.listFilesCache.get(pattern);
+        if (!cached)
+            return null;
+        if (cached.workspaceVersion !== this.workspaceVersion) {
+            this.listFilesCache.delete(pattern);
+            return null;
+        }
+        if (Date.now() - cached.at > SidebarProvider.LIST_FILES_CACHE_TTL_MS) {
+            this.listFilesCache.delete(pattern);
+            return null;
+        }
+        return cached.files;
+    }
+    setCachedListFiles(pattern, files) {
+        this.listFilesCache.set(pattern, {
+            files,
+            at: Date.now(),
+            workspaceVersion: this.workspaceVersion,
+        });
     }
     getGitBashPath() {
         if (os.platform() === "win32") {
@@ -117,8 +191,7 @@ class SidebarProvider {
     }
     isTransientVicoArtifactPath(relativePath) {
         const p = (relativePath || "").replace(/\\/g, "/").toLowerCase();
-        return (/(^|\/)vico_backup_[^/]+/.test(p) ||
-            /(^|\/)vico_diff_[^/]+/.test(p));
+        return /(^|\/)vico_backup_[^/]+/.test(p) || /(^|\/)vico_diff_[^/]+/.test(p);
     }
     normalizeCommandForNonInteractive(commandText) {
         let command = commandText.trim();
@@ -234,6 +307,7 @@ class SidebarProvider {
             webviewView.webview.postMessage({
                 command: "workspaceDirty",
                 isDirty: this.isWorkspaceDirty,
+                workspaceVersion: this.workspaceVersion,
             });
         }, 1000);
         webviewView.webview.options = {
@@ -442,7 +516,7 @@ class SidebarProvider {
                     if (isCountedMode && !hasUserApiKey) {
                         if (!SidebarProvider.FREE_MODELS.has(selectedModel)) {
                             allowed = false;
-                            reason = `Model ${selectedModel} is not included in free quota. Free quota only supports gpt-5-mini and gpt-4o-mini. Please set your own OpenAI API key.`;
+                            reason = `Model ${selectedModel} is not included in free quota. Free quota only supports gpt-5.1-codex-mini and gpt-4o-mini. Please set your own OpenAI API key.`;
                         }
                         else if (usage >= SidebarProvider.FREE_PROMPT_LIMIT) {
                             allowed = false;
@@ -557,6 +631,7 @@ class SidebarProvider {
                             this._view.webview.postMessage({
                                 command: "workspaceDirty",
                                 isDirty: false,
+                                workspaceVersion: this.workspaceVersion,
                             });
                         webviewView.webview.postMessage({
                             command: "workspaceCode",
@@ -608,7 +683,11 @@ class SidebarProvider {
                         }
                         const fullPath = path.join(rootPath, cleanPath);
                         if (fs.existsSync(fullPath)) {
-                            const content = fs.readFileSync(fullPath, "utf8");
+                            const cached = this.getCachedReadFile(fullPath);
+                            const content = cached ?? fs.readFileSync(fullPath, "utf8");
+                            if (cached == null) {
+                                this.setCachedReadFile(fullPath, content);
+                            }
                             webviewView.webview.postMessage({
                                 command: "readFileResult",
                                 content: content,
@@ -628,7 +707,11 @@ class SidebarProvider {
                                     const resolvedRelative = sorted[0];
                                     const resolvedFull = path.join(rootPath, resolvedRelative);
                                     if (fs.existsSync(resolvedFull)) {
-                                        const content = fs.readFileSync(resolvedFull, "utf8");
+                                        const cached = this.getCachedReadFile(resolvedFull);
+                                        const content = cached ?? fs.readFileSync(resolvedFull, "utf8");
+                                        if (cached == null) {
+                                            this.setCachedReadFile(resolvedFull, content);
+                                        }
                                         this.sendLog(`[ReadFile] Resolved "${message.filePath}" -> "${resolvedRelative}"`);
                                         webviewView.webview.postMessage({
                                             command: "readFileResult",
@@ -746,13 +829,6 @@ class SidebarProvider {
                     }
                     return;
                 case "listFiles":
-                    if (this.checkDuplicateAction("listFiles", message.pattern)) {
-                        webviewView.webview.postMessage({
-                            command: "listFilesResult",
-                            error: "⚠️ You recently listed these files. Please use the previous results to avoid looping.",
-                        });
-                        return;
-                    }
                     try {
                         const workspaceFolders = vscode.workspace.workspaceFolders;
                         if (!workspaceFolders) {
@@ -768,6 +844,22 @@ class SidebarProvider {
                             !pattern.startsWith("**")) {
                             pattern = `**/${pattern}`;
                         }
+                        const cached = this.getCachedListFiles(pattern);
+                        if (cached) {
+                            this.sendLog(`[ListFiles] Cache hit for pattern "${pattern}" (${cached.length} files).`);
+                            webviewView.webview.postMessage({
+                                command: "listFilesResult",
+                                files: cached,
+                            });
+                            return;
+                        }
+                        if (this.checkDuplicateAction("listFiles", pattern)) {
+                            webviewView.webview.postMessage({
+                                command: "listFilesResult",
+                                error: "You recently listed these files. Please use the previous results to avoid looping.",
+                            });
+                            return;
+                        }
                         this.sendLog(`[ListFiles] Searching with pattern: "${pattern}"`);
                         // Use CancellationTokenSource for timeout (15s)
                         const cts = new vscode.CancellationTokenSource();
@@ -782,6 +874,7 @@ class SidebarProvider {
                         const filePaths = files.map((file) => vscode.workspace.asRelativePath(file));
                         const filteredFilePaths = filePaths.filter((p) => !this.isTransientVicoArtifactPath(p));
                         filteredFilePaths.sort();
+                        this.setCachedListFiles(pattern, filteredFilePaths);
                         webviewView.webview.postMessage({
                             command: "listFilesResult",
                             files: filteredFilePaths,
