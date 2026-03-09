@@ -466,11 +466,11 @@ function parseWriteFileFallback(content) {
     vico_logger_1.default.info(`[writeFile] Fallback parsing started, content length: ${content.length}`);
     // Coba berbagai strategi parsing
     // Strategi 1: Cari [writeFile]... (tanpa penutup)
-    const writeFileOpenMatch = content.match(/\[writeFile[^\]]*\]([\s\S]*?)(?:\[\/writeFile\s*\]|$)/i);
+    const writeFileOpenMatch = content.match(/\[(?:writeFile|writeFileVico)[^\]]*\]([\s\S]*?)(?:\[\/(?:writeFile|writeFileVico)\s*\]|$)/i);
     if (writeFileOpenMatch) {
         vico_logger_1.default.info(`[writeFile] Found open [writeFile] tag, extracting content`);
         // Join all content if multiple [writeFile] blocks exist but aren't closed properly
-        const allMatches = content.matchAll(/\[writeFile[^\]]*\]([\s\S]*?)(?:\[\/writeFile\s*\]|$)/gi);
+        const allMatches = content.matchAll(/\[(?:writeFile|writeFileVico)[^\]]*\]([\s\S]*?)(?:\[\/(?:writeFile|writeFileVico)\s*\]|$)/gi);
         let accumulatedContent = "";
         for (const match of allMatches) {
             accumulatedContent += match[1] + "\n";
@@ -525,6 +525,9 @@ async function writeFileVico(context, editor, sidebarProvider) {
         "composer.json",
     ];
     const hasDependencyFile = dependencyMarkers.some((f) => fs.existsSync(path.join(projectRootPath, f)));
+    const hasProjectFiles = (await vscode.workspace.findFiles("**/*", "**/{node_modules,.git,dist,build,out,coverage,.vscode,.idea,tmp,temp,venv,__pycache__,.vico}/**", 1)).length > 0;
+    const canWriteMetaFiles = hasDependencyFile || hasProjectFiles;
+    vico_logger_1.default.info(`[writeFile] Meta write gate: dependency=${hasDependencyFile}, projectFiles=${hasProjectFiles}, canWriteMeta=${canWriteMetaFiles}`);
     let blockedMetaWrites = 0;
     const resolveWorkspaceTarget = async (rawRelativePath) => {
         let cleanPath = rawRelativePath.trim().replace(/^\.\//, "");
@@ -573,7 +576,7 @@ async function writeFileVico(context, editor, sidebarProvider) {
         vico_logger_1.default.debug(`[writeFile] Full content: ${writeContent.substring(0, 500)}${writeContent.length > 500 ? '...' : ''}`);
         // 1. Extract block [writeFile]...[/writeFile]
         // Supports both single block or multiple blocks if the AI outputs them sequentially
-        const blockRegex = /\[writeFile\s*\]([\s\S]*?)\[\/writeFile\s*\]/gi;
+        const blockRegex = /\[(?:writeFile|writeFileVico)\s*\]([\s\S]*?)\[\/(?:writeFile|writeFileVico)\s*\]/gi;
         let match;
         let contentToProcess = "";
         // Accumulate all content within [writeFile] tags
@@ -602,8 +605,8 @@ async function writeFileVico(context, editor, sidebarProvider) {
         // 2. Parse [file name="path"]...[/file] OR [diff name="path"]...[/diff]
         // Improved regex to handle newlines and various attributes robustly, and allow missing closing tags
         // Stop at the next [file], [diff], or [writeFile] tag
-        const fileRegex = /\[file\s+(?:name|path)=["']?([^"'\s\]]+)["']?(?:\s+type=["'][^"']+["'])?\]([\s\S]*?)(?:\[\s*\/file\s*\]|(?=\[(?:file|diff|writeFile)\s+)|$)/gi;
-        const diffRegex = /\[diff\s+(?:name|path)=["']?([^"'\s\]]+)["']?\]([\s\S]*?)(?:\[\s*\/diff\s*\]|(?=\[(?:file|diff|writeFile)\s+)|$)/gi;
+        const fileRegex = /\[file\s+(?:name|path)=["']?([^"'\s\]]+)["']?(?:\s+type=["'][^"']+["'])?\]([\s\S]*?)(?:\[\s*\/file\s*\]|(?=\[(?:file|diff|writeFile|writeFileVico)\s+)|$)/gi;
+        const diffRegex = /\[diff\s+(?:name|path)=["']?([^"'\s\]]+)["']?\]([\s\S]*?)(?:\[\s*\/diff\s*\]|(?=\[(?:file|diff|writeFile|writeFileVico)\s+)|$)/gi;
         let fileMatch;
         let filesCreated = 0;
         let duplicateSkipped = false;
@@ -619,7 +622,7 @@ async function writeFileVico(context, editor, sidebarProvider) {
                 normalizedRelative === "memory.md";
             vico_logger_1.default.info(`[writeFile] Processing [file] block: ${relativePath}`);
             vico_logger_1.default.debug(`[writeFile] Raw content length: ${fileContent.length}`);
-            if (isVicoMetaTarget && !hasDependencyFile) {
+            if (isVicoMetaTarget && !canWriteMetaFiles) {
                 blockedMetaWrites++;
                 vico_logger_1.default.warn(`Blocked pre-scaffold metadata write: ${relativePath}. Scaffold first.`);
                 continue;
@@ -664,6 +667,7 @@ async function writeFileVico(context, editor, sidebarProvider) {
             // Overwrite directly for structural/style definition files (architecture.md, style.md) as they are source of truth.
             const isLogFile = effectiveRelativePath.toLowerCase().endsWith("history.md") ||
                 effectiveRelativePath.toLowerCase().endsWith("lessons.md") ||
+                effectiveRelativePath.toLowerCase().endsWith("lesson.md") ||
                 effectiveRelativePath.toLowerCase().endsWith("memory.md");
             const isStructuralFile = effectiveRelativePath.toLowerCase().endsWith("architecture.md") ||
                 effectiveRelativePath.toLowerCase().endsWith("style.md");
@@ -746,7 +750,7 @@ async function writeFileVico(context, editor, sidebarProvider) {
                 normalizedRelative === "memory.md";
             vico_logger_1.default.info(`[writeFile] Processing [diff] block: ${relativePath}`);
             vico_logger_1.default.debug(`[writeFile] Diff content length: ${diffContent.length}`);
-            if (isVicoMetaTarget && !hasDependencyFile) {
+            if (isVicoMetaTarget && !canWriteMetaFiles) {
                 blockedMetaWrites++;
                 vico_logger_1.default.warn(`Blocked pre-scaffold metadata diff: ${relativePath}. Scaffold first.`);
                 continue;
@@ -922,7 +926,7 @@ async function writeFileVico(context, editor, sidebarProvider) {
                 const normalizedRelative = relativePath.replace(/\\/g, "/");
                 const isVicoMetaTarget = normalizedRelative.startsWith(".vico/") ||
                     normalizedRelative === "memory.md";
-                if (isVicoMetaTarget && !hasDependencyFile) {
+                if (isVicoMetaTarget && !canWriteMetaFiles) {
                     blockedMetaWrites++;
                     vico_logger_1.default.warn(`Blocked pre-scaffold metadata XML write: ${relativePath}. Scaffold first.`);
                     continue;
@@ -932,8 +936,12 @@ async function writeFileVico(context, editor, sidebarProvider) {
                 const fileUri = resolvedTarget.fileUri;
                 const dirUri = vscode.Uri.file(path.dirname(fileUri.fsPath));
                 await vscode.workspace.fs.createDirectory(dirUri);
-                // Special handling for memory.md: Append and write directly (no diff)
-                if (effectiveRelativePath.toLowerCase().endsWith("memory.md")) {
+                // Special handling for metadata logs: Append and write directly (no diff)
+                const isXmlLogFile = effectiveRelativePath.toLowerCase().endsWith("history.md") ||
+                    effectiveRelativePath.toLowerCase().endsWith("lessons.md") ||
+                    effectiveRelativePath.toLowerCase().endsWith("lesson.md") ||
+                    effectiveRelativePath.toLowerCase().endsWith("memory.md");
+                if (isXmlLogFile) {
                     let newContent = fileContent;
                     let originalContent = null;
                     try {
@@ -963,7 +971,7 @@ async function writeFileVico(context, editor, sidebarProvider) {
                         continue;
                     }
                     catch (e) {
-                        vico_logger_1.default.error(`Failed to write memory.md:`, e);
+                        vico_logger_1.default.error(`Failed to write metadata log file:`, e);
                     }
                 }
                 const result = await handleDiff(fileUri, fileContent, effectiveRelativePath, context);
@@ -1002,7 +1010,7 @@ async function writeFileVico(context, editor, sidebarProvider) {
         else if (!duplicateSkipped && !sawWritableBlocks) {
             if (blockedMetaWrites > 0) {
                 vico_logger_1.default.warn(`[writeFile] Blocked ${blockedMetaWrites} meta writes - project not scaffolded`);
-                vscode.window.showWarningMessage("Blocked .vico/memory writes because project is not scaffolded yet. Initialize framework first.");
+                vscode.window.showWarningMessage("Blocked .vico metadata writes because workspace is still empty. Create main project files first.");
                 return;
             }
             // Log content to debug why regex failed

@@ -2222,9 +2222,17 @@
           console.log("stream finished")
           console.log(assistantMessage)
 
-          // Enhanced writeFile validation
-          const hasWriteFile = assistantMessage.includes("[writeFile]")
-          const hasClosingWriteFile = assistantMessage.includes("[/writeFile]")
+          // Enhanced writeFile validation (supports [writeFileVico] alias)
+          const normalizedAssistantMessage = assistantMessage.replace(
+            /\[(\/?)writeFileVico\s*\]/gi,
+            "[$1writeFile]",
+          )
+          const hasWriteFile = /\[(?:writeFile|writeFileVico)\]/i.test(
+            assistantMessage,
+          )
+          const hasClosingWriteFile = /\[\/(?:writeFile|writeFileVico)\]/i.test(
+            assistantMessage,
+          )
           const hasFileBlock = assistantMessage.includes("[file ")
           const hasDiffBlock = assistantMessage.includes("[diff ")
 
@@ -2238,7 +2246,10 @@
             if (!hasFileBlock && !hasDiffBlock) {
               console.warn("[writeFile] Warning: No [file] or [diff] blocks found inside [writeFile]")
             }
-            vscode.postMessage({ type: "writeFile", assistantMessage })
+            vscode.postMessage({
+              type: "writeFile",
+              assistantMessage: normalizedAssistantMessage,
+            })
           }
 
           // finalize: save and tidy up UI
@@ -3437,6 +3448,40 @@ ${result.summary || "Executed successfully."}`,
             updatePlanButtonTitle(window.currentPlanMarkdown)
           }
 
+          const normalizedStepType = String(step?.type || "")
+            .trim()
+            .toLowerCase()
+          if (normalizedStepType === "complete") {
+            context += `\nStep ${step.step} Completion:\n${step.description}\n`
+            pushStepHistory(
+              stepNum,
+              step.description,
+              `Step Type: complete\n\n${step.description}`,
+              "done",
+            )
+
+            const doneRegex = new RegExp(
+              `^\\s*-\\s*\\[ðŸ”„\\]\\s*(Step\\s+${stepNum}:)`,
+              "gm",
+            )
+            planMarkdown = planMarkdown.replace(doneRegex, `- [âœ…] $1`)
+            updateMessagesAssistant({
+              uniqueId: `assistant-${uniqueId}`,
+              content:
+                planMarkdown +
+                `\n  > *Step ${stepNum}: Completion acknowledged. No further code execution required.*\n`,
+            })
+            if (window.currentPlanMarkdown) {
+              window.currentPlanMarkdown = window.currentPlanMarkdown.replace(
+                doneRegex,
+                `- [âœ…] Step ${stepNum}:`,
+              )
+              updatePlanPopup(window.currentPlanMarkdown)
+              updatePlanButtonTitle(window.currentPlanMarkdown)
+            }
+            continue
+          }
+
           try {
             let thinkOutput = ""
             if (shouldRunThinkPhase(step)) {
@@ -3815,10 +3860,108 @@ ${result.summary || "Executed successfully."}`,
 
             // After execution, remove "Executing..." and append final output
             planMarkdown = planMarkdown.replace(`\n  > *Executing...*\n`, "")
+            // Legacy recovery: some models still return JSON plan payload in execute mode.
+            // Convert legacy JSON output into executable agent tags.
+            const parseEchoRedirectWrite = (commandText) => {
+              const command = String(commandText || "").trim()
+              if (!command) return null
+              const m = command.match(
+                /^\s*echo\s+(['"])([\s\S]*?)\1\s*>\s*([^\s]+)\s*$/i,
+              )
+              if (!m) return null
+              const quote = m[1]
+              let body = m[2] || ""
+              const target = String(m[3] || "")
+                .trim()
+                .replace(/^["']|["']$/g, "")
+              if (!target) return null
 
+              body = body
+                .replace(/\\n/g, "\n")
+                .replace(/\\r/g, "\r")
+                .replace(/\\t/g, "\t")
+              if (quote === '"') {
+                body = body.replace(/\\"/g, '"')
+              } else {
+                body = body.replace(/\\'/g, "'")
+              }
+              body = body.replace(/\\\\/g, "\\")
+
+              return `[writeFile]\n[file name="${target}"]\n${body}\n[/file]\n[/writeFile]`
+            }
+
+            const extractLegacyExecutePayload = (rawText, stepType) => {
+              const text = String(rawText || "").trim()
+              if (!text) return null
+              if (
+                /\[(?:writeFile|writeFileVico|command|REPLAN)\]/i.test(text)
+              ) {
+                return null
+              }
+
+              let jsonText = text
+              const fenced = text.match(/^```(?:json)?\s*([\s\S]*?)```$/i)
+              if (fenced && fenced[1]) {
+                jsonText = fenced[1].trim()
+              }
+
+              let parsed = null
+              try {
+                parsed = JSON.parse(jsonText)
+              } catch (_e) {
+                return null
+              }
+
+              if (!parsed || typeof parsed !== "object") return null
+              const resolveCommand = () => {
+                if (typeof parsed.command === "string" && parsed.command.trim()) {
+                  return parsed.command.trim()
+                }
+                if (Array.isArray(parsed.plan)) {
+                  const cmdStep = parsed.plan.find(
+                    (p) =>
+                      p &&
+                      typeof p.command === "string" &&
+                      p.command.trim(),
+                  )
+                  if (cmdStep && cmdStep.command) {
+                    return String(cmdStep.command).trim()
+                  }
+                }
+                return ""
+              }
+
+              const command = resolveCommand()
+              if (!command) return null
+              if (String(stepType || "").toLowerCase() === "file_write") {
+                const writePayload = parseEchoRedirectWrite(command)
+                if (writePayload) return writePayload
+              }
+              return `[command]\n${command}\n[/command]`
+            }
+
+            const legacyPayload = extractLegacyExecutePayload(
+              stepOutput,
+              step?.type,
+            )
+            if (legacyPayload) {
+              stepOutput = legacyPayload
+              context +=
+                `\n[System Feedback] Execute output was legacy JSON-plan format; auto-converted to executable agent tags.\n`
+              planMarkdown += `\n> *?? Legacy execute output detected and auto-converted to executable tags.*\n`
+              updateMessagesAssistant({
+                uniqueId: `assistant-${uniqueId}`,
+                content: planMarkdown,
+              })
+            }
             // Enhanced writeFile format validation
-            if (stepOutput.includes("[writeFile]")) {
-              const hasClosingTag = stepOutput.includes("[/writeFile]")
+            const hasWriteFileTag = /\[(?:writeFile|writeFileVico)\]/i.test(
+              stepOutput,
+            )
+            if (hasWriteFileTag) {
+              const hasClosingTag = /\[\/(?:writeFile|writeFileVico)\]/i.test(
+                stepOutput,
+              )
               const hasFileBlock = stepOutput.includes("[file ")
               const hasDiffBlock = stepOutput.includes("[diff ")
 
@@ -3837,8 +3980,12 @@ ${result.summary || "Executed successfully."}`,
 
             // If it contains writeFile, we want to render the panel, so don't wrap the whole thing in backticks
             // if it's likely to be a writeFile response.
-            if (stepOutput.includes("[writeFile]")) {
-              planMarkdown += `\n${stepOutput}\n`
+            if (hasWriteFileTag) {
+              const normalizedStepOutput = stepOutput.replace(
+                /\[(\/?)writeFileVico\s*\]/gi,
+                "[$1writeFile]",
+              )
+              planMarkdown += `\n${normalizedStepOutput}\n`
             } else {
               planMarkdown += `\n> *Execution Output:*\n\`\`\`\n${stepOutput.slice(0, 1000)}${stepOutput.length > 1000 ? "..." : ""}\n\`\`\`\n`
             }
@@ -3951,7 +4098,7 @@ ${result.summary || "Executed successfully."}`,
                 : "Replanning required."
               const isOptionalMemoryWhitelistReplan =
                 /whitelist/i.test(replanReason) &&
-                /\.vico\/|memory\.md|lessons\.md/i.test(replanReason)
+                /\.vico\/|memory\.md|lessons?\.md/i.test(replanReason)
               if (isOptionalMemoryWhitelistReplan) {
                 context += `\n[System Feedback] REPLAN due to .vico whitelist restriction was treated as optional/non-fatal. Skip memory update and continue main implementation without asking user.\n`
                 planMarkdown += `\n> *ℹ️ Skipping optional .vico memory update (not whitelisted). Continuing main task.*\n`
@@ -4112,8 +4259,11 @@ ${result.summary || "Executed successfully."}`,
 
               // Collect target files first so we can verify persistence after write.
               const targetFiles = new Set()
+              const diffTargets = new Set()
               const targetFileRegex =
                 /\[(?:file|diff)\s+(?:name|path)=["']([^"']+)["']/g
+              const diffTargetRegex =
+                /\[diff\s+(?:name|path)=["']([^"']+)["']/g
               let targetMatch
               while (
                 (targetMatch = targetFileRegex.exec(stepOutput)) !== null
@@ -4128,6 +4278,12 @@ ${result.summary || "Executed successfully."}`,
                 uniqueId: `assistant-${uniqueId}`,
                 content: currentStepMarkdown,
               })
+              let diffTargetMatch
+              while ((diffTargetMatch = diffTargetRegex.exec(stepOutput)) !== null) {
+                if (diffTargetMatch[1]) {
+                  diffTargets.add(diffTargetMatch[1])
+                }
+              }
               const beforeSnapshot = new Map()
               for (const tPath of targetFiles) {
                 let prev = window.fileContentMap.get(tPath)
@@ -4232,6 +4388,8 @@ ${result.summary || "Executed successfully."}`,
               }
 
               // Persistence check: read target files from disk and compare before/after.
+              let writeRetryRequired = false
+              const writeRetryFiles = new Set()
               for (const tPath of targetFiles) {
                 const afterContent = await readFileForWriteCheck(tPath, 6000)
                 if (typeof afterContent === "string") {
@@ -4340,6 +4498,7 @@ ${result.summary || "Executed successfully."}`,
                     normalizeForPersistCompare(before) ===
                     normalizeForPersistCompare(afterContent)
                   if (unchangedAfterWrite) {
+                    const diffLikelyFailed = diffTargets.has(tPath)
                     if (workflowMeta && workflowMeta.failedWriteCounts) {
                       const failedCount =
                         (workflowMeta.failedWriteCounts.get(tPath) || 0) + 1
@@ -4350,6 +4509,10 @@ ${result.summary || "Executed successfully."}`,
                       ) {
                         workflowMeta.forceFullRewriteFiles.add(tPath)
                       }
+                    }
+                    if (diffLikelyFailed) {
+                      writeRetryRequired = true
+                      writeRetryFiles.add(tPath)
                     }
                     const warningKey = `${workflowMeta?.changeVersion ?? 0}:${tPath}`
                     if (
@@ -4386,6 +4549,28 @@ ${result.summary || "Executed successfully."}`,
                 } else {
                   context += `\n[Write Feedback] Unable to read ${tPath} after write.\n[Write Feedback] Do NOT scaffold/init again. Resolve correct path first (e.g., components/VideoPlayer.tsx vs VideoPlayer.tsx), then use full [file] overwrite for that resolved path.\n`
                 }
+              }
+              if (writeRetryRequired) {
+                const retryList = Array.from(writeRetryFiles)
+                hadStepError = true
+                if (workflowMeta && workflowMeta.forceFullRewriteFiles) {
+                  retryList.forEach((f) => workflowMeta.forceFullRewriteFiles.add(f))
+                }
+                context +=
+                  `\n[Write Feedback] Diff apply failed for: ${retryList.join(", ")}.\n` +
+                  retryList
+                    .map(
+                      (f) =>
+                        `[Write Feedback] Could not apply changes to ${f}. SEARCH block not found (exact/eol/trimmed match failed).`,
+                    )
+                    .join("\n") +
+                  `\n[Write Feedback] Retry required: use [writeFile][file name=\"...\"]FULL_CONTENT[/file][/writeFile] (full overwrite) for those files.\n`
+                planMarkdown += `\n> *⚠️ Diff apply failed (${retryList.join(", ")}). Auto-retry will replan with full file overwrite.*\n`
+                updateMessagesAssistant({
+                  uniqueId: `assistant-${uniqueId}`,
+                  content: planMarkdown,
+                })
+                break
               }
               const writeTargets = Array.from(targetFiles)
               if (writeTargets.length > 0) {
@@ -4697,6 +4882,91 @@ ${result.summary || "Executed successfully."}`,
                 }
               }
             }
+
+            const hasWriteTag = /\[(?:writeFile|writeFileVico)\]/i.test(
+              stepOutput,
+            )
+            const hasCommandTag = /\[command\]/i.test(stepOutput)
+            const hasReplanTag = /\[REPLAN\]/i.test(stepOutput)
+            const rawStepType = String(step?.type || "").toLowerCase()
+            const currentStepType =
+              rawStepType === "command" ? "terminal_command" : rawStepType
+            const looksLikeJsonPlan =
+              /"plan"\s*:\s*\[/.test(stepOutput) &&
+              /"type"\s*:\s*"file_write"/i.test(stepOutput)
+
+            // Fail-fast for action steps: prevent false "done" when model returns planning JSON/non-executable text.
+            if (!hasReplanTag) {
+              if (currentStepType === "file_write" && !hasWriteTag) {
+                hadStepError = true
+                context +=
+                  `\n[System Feedback] Invalid execute output for file_write step: missing [writeFile] block.\n` +
+                  `[System Feedback] Return executable write payload only: [writeFile][file name="..."]...[/file][/writeFile] or [writeFile][diff name="..."]...[/diff][/writeFile].\n` +
+                  (looksLikeJsonPlan
+                    ? `[System Feedback] Previous output was JSON plan text, not execution payload.\n`
+                    : "")
+                planMarkdown += `\n> *⚠️ Invalid execute output: file_write step returned non-write content. Replanning...*\n`
+                updateMessagesAssistant({
+                  uniqueId: `assistant-${uniqueId}`,
+                  content: planMarkdown,
+                })
+
+                const errorRegex = new RegExp(
+                  `^\\s*-\\s*\\[ðŸ”„\\]\\s*(Step\\s+${stepNum}:)`,
+                  "gm",
+                )
+                planMarkdown = planMarkdown.replace(errorRegex, `- [âŒ] $1`)
+                planMarkdown += `\n  > *Step ${stepNum} Failed. Recovery plan will be generated automatically in the next iteration.*\n`
+                if (window.currentPlanMarkdown) {
+                  window.currentPlanMarkdown =
+                    window.currentPlanMarkdown.replace(
+                      errorRegex,
+                      `- [âŒ] Step ${stepNum}:`,
+                    )
+                  updatePlanPopup(window.currentPlanMarkdown)
+                  updatePlanButtonTitle(window.currentPlanMarkdown)
+                }
+                updateMessagesAssistant({
+                  uniqueId: `assistant-${uniqueId}`,
+                  content: planMarkdown,
+                })
+                break
+              }
+
+              if (currentStepType === "terminal_command" && !hasCommandTag) {
+                hadStepError = true
+                context +=
+                  `\n[System Feedback] Invalid execute output for terminal_command step: missing [command] block.\n` +
+                  `[System Feedback] Return exactly one [command]...[/command] block.\n`
+                planMarkdown += `\n> *⚠️ Invalid execute output: terminal_command step returned non-command content. Replanning...*\n`
+                updateMessagesAssistant({
+                  uniqueId: `assistant-${uniqueId}`,
+                  content: planMarkdown,
+                })
+
+                const errorRegex = new RegExp(
+                  `^\\s*-\\s*\\[ðŸ”„\\]\\s*(Step\\s+${stepNum}:)`,
+                  "gm",
+                )
+                planMarkdown = planMarkdown.replace(errorRegex, `- [âŒ] $1`)
+                planMarkdown += `\n  > *Step ${stepNum} Failed. Recovery plan will be generated automatically in the next iteration.*\n`
+                if (window.currentPlanMarkdown) {
+                  window.currentPlanMarkdown =
+                    window.currentPlanMarkdown.replace(
+                      errorRegex,
+                      `- [âŒ] Step ${stepNum}:`,
+                    )
+                  updatePlanPopup(window.currentPlanMarkdown)
+                  updatePlanButtonTitle(window.currentPlanMarkdown)
+                }
+                updateMessagesAssistant({
+                  uniqueId: `assistant-${uniqueId}`,
+                  content: planMarkdown,
+                })
+                break
+              }
+            }
+
             // After loop
             if (autoFixTriggered) break
 
@@ -5797,7 +6067,11 @@ ${result.summary || "Executed successfully."}`,
       }
 
       function renderMessageParts(content, container) {
-        const parts = content.split(
+        const normalizedContent = content.replace(
+          /\[(\/?)writeFileVico\s*\]/gi,
+          "[$1writeFile]",
+        )
+        const parts = normalizedContent.split(
           /(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[writeFile\][\s\S]*?\[\/writeFile\]|\[file name=".*?"\][\s\S]*?\[\/file\]|\[openDiff path=".*?"\]|\[keepAllFiles files=".*?"\]|\[att-img .*?\]|\[att-file .*?\]|\[file\][\s\S]*?\[file\]|\[status\][\s\S]*?\[\/status\]|\[terminal[\s\S]*?\[\/terminal\]|\[thinking[\s\S]*?\[\/thinking\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|####.*|###.*|##.*|#.*|^- .*)/gm,
         )
 
@@ -6279,3 +6553,4 @@ ${result.summary || "Executed successfully."}`,
   </body>
 
 </html>
+
