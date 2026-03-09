@@ -916,8 +916,6 @@
             "gpt-5.1-codex-mini",
           ),
           currentSessionId: currentSessionId,
-          filePathCache: Array.from(window.filePathCache.entries()), // Persist cache
-          fileContentMap: Array.from(window.fileContentMap.entries()), // Persist file content
         })
 
         // Notify extension about the current session ID
@@ -968,6 +966,7 @@
         })
       }
 
+      var isInitialized = false
       function startNewChat(skipSave = false) {
         try {
           if (isLoading) {
@@ -1018,6 +1017,20 @@
             document.getElementById("planStatusContent")
           if (planStatusContent) planStatusContent.innerHTML = ""
 
+          window.fileContentMap.clear()
+          window.filePathCache.clear()
+          cachedProjectContext = ""
+          cachedContextVersion = -1
+          selectedContextRefs = []
+
+          // Mark as initialized to prevent tokenValid from restoring old session state
+          isInitialized = true
+
+          // Clear extension coding history
+          vscode.postMessage({
+            command: "clearCodingHistory",
+          })
+
           saveState()
         } catch (e) {
           console.error("Error in startNewChat:", e)
@@ -1054,6 +1067,16 @@
 
         currentSessionId = session.id
         messageArray = session.messages || []
+        window.fileContentMap.clear()
+        window.filePathCache.clear()
+        cachedProjectContext = ""
+        cachedContextVersion = -1
+        selectedContextRefs = []
+        attachments = []
+        renderAttachments()
+
+        // Mark as initialized to prevent tokenValid from restoring old session state
+        isInitialized = true
 
         // Re-render messages
         const contentDiv = document.getElementById("content")
@@ -1592,117 +1615,102 @@
             localStorage.setItem("token", messageEvent.token)
             localStorage.setItem("userId", messageEvent.userId)
 
-            // Restore file path cache
-            if (persistedState.filePathCache) {
-              try {
-                window.filePathCache = new Map(persistedState.filePathCache)
-                console.log(
-                  "[webview] Restored file path cache:",
-                  window.filePathCache.size,
-                  "entries",
-                )
-              } catch (e) {
-                console.error(
-                  "[webview] Failed to restore file path cache:",
-                  e,
-                )
-              }
-            }
+            window.filePathCache.clear()
+            window.fileContentMap.clear()
+            cachedProjectContext = ""
+            cachedContextVersion = -1
+            selectedContextRefs = []
+            attachments = []
+            renderAttachments()
+            console.log(
+              "[webview] Cleared file caches and context for security - new chat context isolation"
+            )
 
-            // Restore file content map
-            if (persistedState.fileContentMap) {
-              try {
-                window.fileContentMap = new Map(persistedState.fileContentMap)
-                console.log(
-                  "[webview] Restored file content map:",
-                  window.fileContentMap.size,
-                  "entries",
-                )
-              } catch (e) {
-                console.error(
-                  "[webview] Failed to restore file content map:",
-                  e,
-                )
-              }
-            }
+            // Fetch and display chat history ONLY if this is the first initialization
+            // If isInitialized is true, it means we already have a session (either restored or New Chat started)
+            if (!isInitialized) {
+              isInitialized = true
+              if (persistedState.messages && persistedState.messages.length > 0) {
+                messageArray = persistedState.messages
+                displayMessages(messageArray)
 
-            // Fetch and display chat history
-            if (persistedState.messages && persistedState.messages.length > 0) {
-              messageArray = persistedState.messages
-              displayMessages(messageArray)
-
-              document.getElementById("messageInput").value =
-                persistedState.input ?? ""
-              const modeSelect = document.getElementById("modeSelect")
-              if (modeSelect) {
-                modeSelect.value = persistedState.mode ?? "agent"
-              }
-              const modelSelect = document.getElementById("modelSelect")
-              if (modelSelect && persistedState.model) {
-                const allowedModel = resolveAllowedModelOrFallback(
-                  persistedState.model,
-                )
-                modelSelect.value = allowedModel
-                currentAiSettings.selectedModel = allowedModel
-                if (
-                  currentAiSettings.hasUserApiKey ||
-                  isFreeQuotaModel(allowedModel)
-                ) {
-                  lastAllowedModel = allowedModel
+                document.getElementById("messageInput").value =
+                  persistedState.input ?? ""
+                const modeSelect = document.getElementById("modeSelect")
+                if (modeSelect) {
+                  modeSelect.value = persistedState.mode ?? "agent"
                 }
-              }
-              const messageInputContainer = document.getElementById(
-                "messageInputContainer",
-              )
-              messageInputContainer.style.display = "block"
-              var content = document.getElementById("content")
-              content.scrollTop = content.scrollHeight
-              const messageInput = document.getElementById("messageInput")
-              messageInput.style.height = "auto"
-              messageInput.style.height = messageInput.scrollHeight + "px"
-              messageInput.focus()
-            } else if (persistedState.messagesHTML) {
-              document.getElementById("content").innerHTML =
-                persistedState.messagesHTML
-              document.getElementById("messageInput").value =
-                persistedState.input ?? ""
-              const modeSelect = document.getElementById("modeSelect")
-              if (modeSelect) {
-                modeSelect.value = persistedState.mode ?? "agent"
-              }
-              const modelSelect = document.getElementById("modelSelect")
-              if (modelSelect && persistedState.model) {
-                const allowedModel = resolveAllowedModelOrFallback(
-                  persistedState.model,
-                )
-                modelSelect.value = allowedModel
-                currentAiSettings.selectedModel = allowedModel
-                if (
-                  currentAiSettings.hasUserApiKey ||
-                  isFreeQuotaModel(allowedModel)
-                ) {
-                  lastAllowedModel = allowedModel
+                const modelSelect = document.getElementById("modelSelect")
+                if (modelSelect && persistedState.model) {
+                  const allowedModel = resolveAllowedModelOrFallback(
+                    persistedState.model,
+                  )
+                  modelSelect.value = allowedModel
+                  currentAiSettings.selectedModel = allowedModel
+                  if (
+                    currentAiSettings.hasUserApiKey ||
+                    isFreeQuotaModel(allowedModel)
+                  ) {
+                    lastAllowedModel = allowedModel
+                  }
                 }
+                const messageInputContainer = document.getElementById(
+                  "messageInputContainer",
+                )
+                messageInputContainer.style.display = "block"
+                var content = document.getElementById("content")
+                content.scrollTop = content.scrollHeight
+                const messageInput = document.getElementById("messageInput")
+                messageInput.style.height = "auto"
+                messageInput.style.height = messageInput.scrollHeight + "px"
+                messageInput.focus()
+              } else if (persistedState.messagesHTML) {
+                document.getElementById("content").innerHTML =
+                  persistedState.messagesHTML
+                document.getElementById("messageInput").value =
+                  persistedState.input ?? ""
+                const modeSelect = document.getElementById("modeSelect")
+                if (modeSelect) {
+                  modeSelect.value = persistedState.mode ?? "agent"
+                }
+                const modelSelect = document.getElementById("modelSelect")
+                if (modelSelect && persistedState.model) {
+                  const allowedModel = resolveAllowedModelOrFallback(
+                    persistedState.model,
+                  )
+                  modelSelect.value = allowedModel
+                  currentAiSettings.selectedModel = allowedModel
+                  if (
+                    currentAiSettings.hasUserApiKey ||
+                    isFreeQuotaModel(allowedModel)
+                  ) {
+                    lastAllowedModel = allowedModel
+                  }
+                }
+                // Show the message input container
+                const messageInputContainer = document.getElementById(
+                  "messageInputContainer",
+                )
+                messageInputContainer.style.display = "block"
+
+                // Re-attach event listeners for buttons since innerHTML destroys them
+                reattachEventListeners()
+
+                var content = document.getElementById("content")
+                // Scroll to the bottom of the content
+                content.scrollTop = content.scrollHeight
+                const messageInput = document.getElementById("messageInput")
+                // Trigger resize
+                messageInput.style.height = "auto"
+                messageInput.style.height = messageInput.scrollHeight + "px"
+                messageInput.focus()
+              } else {
+                fetchHistory()
               }
-              // Show the message input container
-              const messageInputContainer = document.getElementById(
-                "messageInputContainer",
-              )
-              messageInputContainer.style.display = "block"
-
-              // Re-attach event listeners for buttons since innerHTML destroys them
-              reattachEventListeners()
-
-              var content = document.getElementById("content")
-              // Scroll to the bottom of the content
-              content.scrollTop = content.scrollHeight
-              const messageInput = document.getElementById("messageInput")
-              // Trigger resize
-              messageInput.style.height = "auto"
-              messageInput.style.height = messageInput.scrollHeight + "px"
-              messageInput.focus()
             } else {
-              fetchHistory()
+              console.log(
+                "[webview] Skipping state restoration - session already initialized"
+              )
             }
             return
             // Handle the list of files as needed
@@ -5730,23 +5738,7 @@ ${result.summary || "Executed successfully."}`,
         try {
           displayMessages(messages.messages)
 
-          // Re-populate fileContentMap from message history
           window.fileContentMap.clear()
-          messages.messages.forEach((msg) => {
-            if (msg.role === "assistant") {
-              const fileContentRegex =
-                /\[file name="([^"]+)"\]([\s\S]*?)\[\/file\]/g
-              let contentMatch
-              while (
-                (contentMatch = fileContentRegex.exec(msg.content)) !== null
-              ) {
-                const fPath = contentMatch[1]
-                const fContent = contentMatch[2]
-                window.fileContentMap.set(fPath, fContent)
-                console.log(`[webview] Restored content for ${fPath}`)
-              }
-            }
-          })
 
           // Show the message input container
           const messageInputContainer = document.getElementById(
@@ -6553,4 +6545,3 @@ ${result.summary || "Executed successfully."}`,
   </body>
 
 </html>
-

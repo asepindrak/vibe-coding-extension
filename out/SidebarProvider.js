@@ -41,6 +41,7 @@ const os = __importStar(require("os"));
 const crypto = __importStar(require("crypto"));
 const cp = __importStar(require("child_process"));
 const DiffManager_1 = require("./DiffManager");
+const utils_1 = require("./utils");
 class SidebarProvider {
     _extensionUri;
     context;
@@ -375,14 +376,14 @@ class SidebarProvider {
                     }
                     if (document) {
                         const originalText = document.getText();
-                        let newText = message.code;
+                        let newText = (0, utils_1.cleanSearchReplaceText)(message.code, true);
                         if (!message.filePath && selection && !selection.isEmpty) {
                             // Case: User select text in editor, click apply (Chat Mode)
                             const startOffset = document.offsetAt(selection.start);
                             const endOffset = document.offsetAt(selection.end);
                             newText =
                                 originalText.substring(0, startOffset) +
-                                    message.code +
+                                    newText +
                                     originalText.substring(endOffset);
                         }
                         // Use DiffManager
@@ -462,6 +463,12 @@ class SidebarProvider {
                         command: "historyLoad",
                         history: [],
                     });
+                    return;
+                case "clearCodingHistory":
+                    this.listFilesCache.clear();
+                    this.readFileCache.clear();
+                    this.workspaceVersion++;
+                    vscode.commands.executeCommand("vibe-coding.clearCodingHistory");
                     return;
                 case "saveToken":
                     // Simpan token di globalState

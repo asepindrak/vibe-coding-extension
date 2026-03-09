@@ -5,6 +5,7 @@ import * as os from "os";
 import * as crypto from "crypto";
 import * as cp from "child_process";
 import { DiffManager } from "./DiffManager";
+import { cleanSearchReplaceText } from "./utils";
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   public _view?: vscode.WebviewView;
@@ -132,7 +133,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         const oldest = this.readFileCache.keys().next().value;
         if (oldest) this.readFileCache.delete(oldest);
       }
-    } catch (_e) {}
+    } catch (_e) { }
   }
 
   private getCachedListFiles(pattern: string): string[] | null {
@@ -395,7 +396,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
             if (document) {
               const originalText = document.getText();
-              let newText = message.code;
+              let newText = cleanSearchReplaceText(message.code, true);
 
               if (!message.filePath && selection && !selection.isEmpty) {
                 // Case: User select text in editor, click apply (Chat Mode)
@@ -403,7 +404,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                 const endOffset = document.offsetAt(selection.end);
                 newText =
                   originalText.substring(0, startOffset) +
-                  message.code +
+                  newText +
                   originalText.substring(endOffset);
               }
 
@@ -505,6 +506,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
               history: [],
             });
             return;
+          case "clearCodingHistory":
+            this.listFilesCache.clear();
+            this.readFileCache.clear();
+            this.workspaceVersion++;
+            vscode.commands.executeCommand("vibe-coding.clearCodingHistory");
+            return;
           case "saveToken":
             // Simpan token di globalState
             this.context.globalState.update("token", message.token);
@@ -576,10 +583,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             const mode = String(message.mode || "chat").toLowerCase();
             const selectedModel = this.normalizeModel(
               message.model ||
-                this.context.globalState.get<string>(
-                  SidebarProvider.MODEL_SETTING_KEY,
-                  SidebarProvider.DEFAULT_MODEL,
-                ),
+              this.context.globalState.get<string>(
+                SidebarProvider.MODEL_SETTING_KEY,
+                SidebarProvider.DEFAULT_MODEL,
+              ),
             );
             const userApiKey =
               (await this.context.secrets.get(

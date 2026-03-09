@@ -8,6 +8,18 @@ import * as os from "os";
 import * as crypto from "crypto";
 import logger from "vico-logger";
 import { DiffManager } from "./DiffManager";
+import {
+  buildDiffFingerprint,
+  cleanSearchReplaceText,
+  applySearchReplaceWithFallback,
+  markAndCheckRecentDiff,
+  debounce,
+  stripPrefix,
+  collapseAdjacentDuplicateJsxInvocations,
+  normalizeInlineSuggestion,
+  deriveStyleHints,
+  removeCommentTags,
+} from "./utils";
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -31,27 +43,6 @@ function updateHistory(file: string, line: number, text: string) {
   }
 }
 
-function debounce(func: (...args: any[]) => void, wait: number) {
-  let timeout: NodeJS.Timeout | null;
-  return function executedFunction(...args: any[]) {
-    const later = () => {
-      timeout = null; // Clear timeout
-      func(...args); // Execute the function
-    };
-    if (timeout) {
-      clearTimeout(timeout); // Clear the previous timeout
-    }
-    timeout = setTimeout(later, wait); // Set new timeout
-  };
-}
-
-function stripPrefix(suggestion: string, linePrefix: string) {
-  if (suggestion.startsWith(linePrefix)) {
-    return suggestion.slice(linePrefix.length);
-  }
-  return suggestion;
-}
-
 let requestId = 0;
 let currentAbortController: AbortController | null = null;
 let lastRequestLine: number | null = null;
@@ -59,56 +50,11 @@ let lastRequestPrefix: string | null = null;
 
 let lastTypedAt = Date.now();
 let lastWasNewLine = false;
-const recentAppliedDiffFingerprints: Map<string, number> = new Map();
-
-function buildDiffFingerprint(
-  filePath: string,
-  searchText: string,
-  replaceText: string,
-): string {
-  return crypto
-    .createHash("md5")
-    .update(
-      `${filePath}\n---SEARCH---\n${searchText}\n---REPLACE---\n${replaceText}`,
-    )
-    .digest("hex");
-}
-
-function markAndCheckRecentDiff(fingerprint: string): boolean {
-  const now = Date.now();
-  const last = recentAppliedDiffFingerprints.get(fingerprint);
-  // Treat same diff as duplicate for 10 minutes to avoid looped reinserts.
-  const isDuplicate = typeof last === "number" && now - last < 10 * 60 * 1000;
-  recentAppliedDiffFingerprints.set(fingerprint, now);
-  // Cleanup old entries
-  for (const [k, t] of recentAppliedDiffFingerprints.entries()) {
-    if (now - t > 30 * 60 * 1000) {
-      recentAppliedDiffFingerprints.delete(k);
-    }
-  }
-  return isDuplicate;
-}
-
-function collapseAdjacentDuplicateJsxInvocations(content: string): string {
-  const lines = content.split(/\r?\n/);
-  const out: string[] = [];
-  const jsxSelfClosing = /^\s*<([A-Z][A-Za-z0-9_]*)\b[^>]*\/>\s*$/;
-  for (const line of lines) {
-    const prev = out.length > 0 ? out[out.length - 1] : "";
-    const sameTrimmed = prev.trim() === line.trim();
-    if (sameTrimmed && jsxSelfClosing.test(line) && jsxSelfClosing.test(prev)) {
-      continue;
-    }
-    out.push(line);
-  }
-  return out.join("\n");
-}
 
 async function fetchSuggestions(
   context: vscode.ExtensionContext,
   editor: vscode.TextEditor,
 ) {
-  if (!isInlineEnabled()) return;
 
   currentAbortController?.abort();
   const controller = new AbortController();
@@ -173,7 +119,11 @@ async function fetchSuggestions(
   }
   const showLoadingTimeout = setTimeout(() => loadingStatusBarItem.show(), 400);
 
-  const styleHints = deriveStyleHints(editor.document, lang);
+  const styleHints = deriveStyleHints(
+    editor.document.getText(),
+    editor.document.lineCount,
+    lang,
+  );
   const extraHeuristics =
     lang === "python"
       ? "Avoid inserting closing parentheses, colons, or next-line indentation."
@@ -292,45 +242,6 @@ function isInlineEnabled() {
     .get<boolean>("inline.enabled", true);
 }
 
-function normalizeInlineSuggestion(text: string) {
-  return text.replace(/\n/g, "").replace(/\r/g, "").slice(0, 120);
-}
-
-function deriveStyleHints(document: vscode.TextDocument, lang: string): string {
-  const text = document.getText();
-  if (lang === "javascript" || lang === "typescript") {
-    const semicolonLineMatches = text.match(/;\s*$/gm) || [];
-    const usesSemicolons =
-      semicolonLineMatches.length > document.lineCount * 0.1;
-    const singleQuotes = (text.match(/'[^'\\\n]*(?:\\.[^'\\\n]*)*'/g) || [])
-      .length;
-    const doubleQuotes = (text.match(/"[^"\\\n]*(?:\\.[^"\\\n]*)*"/g) || [])
-      .length;
-    const prefersSingle = singleQuotes >= doubleQuotes;
-    const tabMatches = text.match(/^\t+/gm) || [];
-    const spaceMatches = text.match(/^ +/gm) || [];
-    const tabs = tabMatches.length;
-    const spaces = spaceMatches.length;
-    let indent = "";
-    if (tabs > spaces) indent = "use tabs";
-    else {
-      const spaceIndents = spaceMatches
-        .map((m) => m.length)
-        .filter((n) => n >= 2);
-      let two = 0;
-      let four = 0;
-      for (const n of spaceIndents) {
-        if (n % 4 === 0) four++;
-        else if (n % 2 === 0) two++;
-      }
-      indent = four >= two ? "use 4-space indent" : "use 2-space indent";
-    }
-    return `${usesSemicolons ? "use semicolons" : "no semicolons"}; ${prefersSingle ? "prefer single quotes" : "prefer double quotes"
-      }; ${indent}`;
-  }
-  return "";
-}
-
 async function presentSuggestions(suggestion: string, linePrefix?: string) {
   console.log("Presenting suggestion:", suggestion);
 
@@ -364,147 +275,6 @@ async function handleDiff(
   }
 }
 
-function detectEol(text: string): "\r\n" | "\n" {
-  return text.includes("\r\n") ? "\r\n" : "\n";
-}
-
-function toLf(text: string): string {
-  return text.replace(/\r\n/g, "\n");
-}
-
-function fromLf(text: string, eol: "\r\n" | "\n"): string {
-  return eol === "\r\n" ? text.replace(/\n/g, "\r\n") : text;
-}
-
-function replaceFirstOccurrence(
-  text: string,
-  search: string,
-  replace: string,
-): string {
-  const idx = text.indexOf(search);
-  if (idx === -1) return text;
-  return text.slice(0, idx) + replace + text.slice(idx + search.length);
-}
-
-function trimEdgeBlankLines(lines: string[]): string[] {
-  let start = 0;
-  let end = lines.length;
-  while (start < end && lines[start].trim() === "") start++;
-  while (end > start && lines[end - 1].trim() === "") end--;
-  return lines.slice(start, end);
-}
-
-function replaceByTrimmedLineMatch(
-  currentLf: string,
-  searchLf: string,
-  replaceLf: string,
-): { matched: boolean; next: string } {
-  const currentLines = currentLf.split("\n");
-  const searchLinesRaw = searchLf.split("\n");
-  const searchLines = trimEdgeBlankLines(searchLinesRaw);
-  if (searchLines.length === 0) {
-    return { matched: false, next: currentLf };
-  }
-
-  for (let i = 0; i <= currentLines.length - searchLines.length; i++) {
-    let ok = true;
-    for (let j = 0; j < searchLines.length; j++) {
-      if (currentLines[i + j].trimEnd() !== searchLines[j].trimEnd()) {
-        ok = false;
-        break;
-      }
-    }
-    if (!ok) continue;
-
-    const nextLines = [
-      ...currentLines.slice(0, i),
-      ...replaceLf.split("\n"),
-      ...currentLines.slice(i + searchLines.length),
-    ];
-    return { matched: true, next: nextLines.join("\n") };
-  }
-  return { matched: false, next: currentLf };
-}
-
-function applySearchReplaceWithFallback(
-  currentContent: string,
-  searchText: string,
-  replaceText: string,
-): { matched: boolean; next: string; strategy: string } {
-  if (searchText && currentContent.includes(searchText)) {
-    return {
-      matched: true,
-      next: replaceFirstOccurrence(currentContent, searchText, replaceText),
-      strategy: "exact",
-    };
-  }
-
-  const fuzzy = applyFuzzySearchReplace(
-    currentContent,
-    searchText,
-    replaceText,
-  );
-  if (fuzzy.matched) {
-    return {
-      matched: true,
-      next: fuzzy.next,
-      strategy: "fuzzy",
-    };
-  }
-
-  const eol = detectEol(currentContent);
-  const currentLf = toLf(currentContent);
-  const searchLf = toLf(searchText);
-  const replaceLf = toLf(replaceText);
-
-  if (searchLf && currentLf.includes(searchLf)) {
-    const nextLf = replaceFirstOccurrence(currentLf, searchLf, replaceLf);
-    return {
-      matched: true,
-      next: fromLf(nextLf, eol),
-      strategy: "normalized-eol",
-    };
-  }
-
-  const loose = replaceByTrimmedLineMatch(currentLf, searchLf, replaceLf);
-  if (loose.matched) {
-    return {
-      matched: true,
-      next: fromLf(loose.next, eol),
-      strategy: "trimmed-line",
-    };
-  }
-
-  return { matched: false, next: currentContent, strategy: "none" };
-}
-
-function escapeRegex(text: string) {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function applyFuzzySearchReplace(
-  currentContent: string,
-  searchText: string,
-  replaceText: string,
-): { matched: boolean; next: string } {
-  if (!searchText) return { matched: false, next: currentContent };
-  const tokens = searchText
-    .split(/\s+/)
-    .map((t) => t.trim())
-    .filter(Boolean);
-  if (tokens.length === 0) return { matched: false, next: currentContent };
-  const pattern = tokens.map(escapeRegex).join("\\s+");
-  const regex = new RegExp(pattern, "m");
-  const match = currentContent.match(regex);
-  if (!match || typeof match.index !== "number") {
-    return { matched: false, next: currentContent };
-  }
-  const next =
-    currentContent.slice(0, match.index) +
-    replaceText +
-    currentContent.slice(match.index + match[0].length);
-  return { matched: true, next };
-}
 
 /**
  * Fallback parsing untuk writeFile format yang tidak sempurna
@@ -735,7 +505,7 @@ async function writeFileVico(
     while ((fileMatch = fileRegex.exec(contentToProcess)) !== null) {
       sawWritableBlocks = true;
       const relativePath = fileMatch[1].trim();
-      let fileContent = fileMatch[2].trim();
+      let fileContent = cleanSearchReplaceText(fileMatch[2].trim(), true);
       const normalizedRelative = relativePath.replace(/\\/g, "/");
       const isVicoMetaTarget =
         normalizedRelative.startsWith(".vico/") ||
@@ -924,8 +694,18 @@ async function writeFileVico(
         // Extract SEARCH/REPLACE blocks
         // Delimiters must be on their own lines (using 'm' flag and '^')
         // Using [\r\n]* to allow flexible newline handling between delimiters and content
+        // 1. Support for <<<<<<< SEARCH / ======= / >>>>>>> REPLACE
         const searchReplaceRegex =
           /(?:<{3,}|<[ <]{3,})\s*SEARCH\s*[\r\n]*([\s\S]*?)[\r\n]*(?:={3,}|=[ =]{3,})[\r\n]*([\s\S]*?)[\r\n]*(?:>{3,}|>[ >]{3,})(?:\s*REPLACE)?/gi;
+
+        // 2. Support for <replace>old</replace> <with>new</with> or <search>old</search> <replace>new</replace>
+        const xmlBlockRegex =
+          /<(?:replace|search)>([\s\S]*?)<\/(?:replace|search)>\s*[\r\n]*<(?:with|replace)>([\s\S]*?)<\/(?:with|replace)>/gi;
+
+        // 3. Support for [SEARCH] / [REPLACE] or [SEARCH] / [WITH]
+        const squareBracketRegex =
+          /\[SEARCH\]\s*[\r\n]*([\s\S]*?)[\r\n]*\[(?:REPLACE|WITH|replace|with)\]\s*[\r\n]*([\s\S]*?)[\r\n]*(?:\[\/REPLACE\]|\[\/WITH\]|\[\/replace\]|\[\/with\])?/gi;
+
         let srMatch;
         let matchedBlocks = 0;
         let totalBlocks = 0;
@@ -936,37 +716,36 @@ async function writeFileVico(
         logger.info(`[writeFile] Starting SEARCH/REPLACE parsing for ${relativePath}`);
         logger.debug(`[writeFile] Original content length: ${currentContent.length}`);
 
-        // Reset lastIndex because we use 'gm' flag and might reuse the regex object or just to be safe
-        searchReplaceRegex.lastIndex = 0;
-        while ((srMatch = searchReplaceRegex.exec(diffContent)) !== null) {
+        // Helper to process a block
+        const processBlock = (searchText: string, replaceText: string) => {
           totalBlocks++;
-          const searchText = srMatch[1];
-          const replaceText = srMatch[2];
-          lastReplaceText = replaceText;
+          const cleanedSearch = cleanSearchReplaceText(searchText, false);
+          const cleanedReplace = cleanSearchReplaceText(replaceText, true);
+          lastReplaceText = cleanedReplace;
 
-          logger.debug(`[writeFile] Processing block ${totalBlocks}: search length=${searchText.length}, replace length=${replaceText.length}`);
+          logger.debug(`[writeFile] Processing block ${totalBlocks}: search length=${cleanedSearch.length}, replace length=${cleanedReplace.length}`);
 
           const diffFingerprint = buildDiffFingerprint(
             relativePath,
-            searchText,
-            replaceText,
+            cleanedSearch,
+            cleanedReplace,
           );
           const isDuplicateDiff = markAndCheckRecentDiff(diffFingerprint);
           if (
             isDuplicateDiff &&
-            replaceText.trim().length > 0 &&
-            nextContent.includes(replaceText.trim())
+            cleanedReplace.trim().length > 0 &&
+            nextContent.includes(cleanedReplace.trim())
           ) {
             matchedBlocks++;
             logger.warn(
               `Skipped duplicate diff block for ${relativePath} (fingerprint repeated).`,
             );
-            continue;
+            return;
           }
           const applyResult = applySearchReplaceWithFallback(
             nextContent,
-            searchText,
-            replaceText,
+            cleanedSearch,
+            cleanedReplace,
           );
           if (applyResult.matched) {
             nextContent = applyResult.next;
@@ -977,9 +756,25 @@ async function writeFileVico(
           } else {
             failedBlocks++;
             logger.warn(
-              `Search text not found in ${relativePath}:\n${searchText}`,
+              `Search text not found in ${relativePath}:\n${cleanedSearch}`,
             );
           }
+        };
+
+        // Parse both formats
+        searchReplaceRegex.lastIndex = 0;
+        while ((srMatch = searchReplaceRegex.exec(diffContent)) !== null) {
+          processBlock(srMatch[1], srMatch[2]);
+        }
+
+        xmlBlockRegex.lastIndex = 0;
+        while ((srMatch = xmlBlockRegex.exec(diffContent)) !== null) {
+          processBlock(srMatch[1], srMatch[2]);
+        }
+
+        squareBracketRegex.lastIndex = 0;
+        while ((srMatch = squareBracketRegex.exec(diffContent)) !== null) {
+          processBlock(srMatch[1], srMatch[2]);
         }
 
         logger.info(`[writeFile] SEARCH/REPLACE parsing completed for ${relativePath}: total=${totalBlocks}, matched=${matchedBlocks}, failed=${failedBlocks}`);
@@ -993,9 +788,14 @@ async function writeFileVico(
             `Could not safely apply multi-step diff to ${relativePath} (partial match). Re-run with full file overwrite to avoid corrupted code.`,
           );
           const fallbackContent = diffContent
-            .replace(
-              searchReplaceRegex,
-              (_match, _search, replaceText) => replaceText,
+            .replace(searchReplaceRegex, (_match, _search, replaceText) =>
+              cleanSearchReplaceText(replaceText, true),
+            )
+            .replace(xmlBlockRegex, (_match, _search, replaceText) =>
+              cleanSearchReplaceText(replaceText, true),
+            )
+            .replace(squareBracketRegex, (_match, _search, replaceText) =>
+              cleanSearchReplaceText(replaceText, true),
             )
             .trim();
           if (fallbackContent.length > 0) {
@@ -1070,7 +870,7 @@ async function writeFileVico(
                 "app/page.tsx" &&
                 lastReplaceText.trim().length > 0));
           if (canFallbackToFullRewrite) {
-            let rewritten = lastReplaceText;
+            let rewritten = cleanSearchReplaceText(lastReplaceText, true);
             if (/\.(tsx|jsx)$/i.test(relativePath)) {
               rewritten = collapseAdjacentDuplicateJsxInvocations(rewritten);
             }
@@ -1122,7 +922,7 @@ async function writeFileVico(
       while ((fileMatch = xmlRegex.exec(contentToProcess)) !== null) {
         sawWritableBlocks = true;
         const relativePath = fileMatch[1].trim();
-        const fileContent = fileMatch[2].trim();
+        const fileContent = cleanSearchReplaceText(fileMatch[2].trim(), true);
         const normalizedRelative = relativePath.replace(/\\/g, "/");
         const isVicoMetaTarget =
           normalizedRelative.startsWith(".vico/") ||
@@ -1414,7 +1214,14 @@ export function activate(context: vscode.ExtensionContext) {
   // This line of code will only be executed once when your extension is activated
   console.log('Congratulations, your extension "vibe-coding" is now active!');
 
-  // Register a command to update the webview with the current file and line information
+  context.subscriptions.push(
+    vscode.commands.registerCommand("vibe-coding.clearCodingHistory", () => {
+      recentCodingHistory = [];
+      lastClipboardText = "";
+      logger.info("[extension] Coding history cleared");
+    }),
+  );
+
   context.subscriptions.push(
     vscode.commands.registerCommand("vibe-coding.updateWebview", () => {
       const editor = vscode.window.activeTextEditor;
@@ -1885,15 +1692,6 @@ function onUserInput(line: string) {
   // Simpan line ke riwayat
   console.log(line);
 }
-function removeCommentTags(code: string) {
-  return code
-    .replace(/\/\/(.*)$/gm, "$1") // Menghapus // dan menyimpan teks setelahnya
-    .replace(/\/\*[\s\S]*?\*\//g, "") // Menghapus komentar multi-baris
-    .replace(/#(.*)$/gm, "$1") // Menghapus # dan menyimpan teks setelahnya
-    .replace(/<!--(.*?)-->/g, "$1") // Menghapus komentar HTML
-    .replace(/\n\s*\n/g, "\n") // Menghapus baris kosong yang tersisa
-    .trim(); // Menghapus spasi di awal dan akhir
-}
 
 async function triggerCodeCompletion(
   context: vscode.ExtensionContext,
@@ -1907,7 +1705,11 @@ async function triggerCodeCompletion(
   if (editor) {
     const lang = editor.document.languageId;
     const file = path.basename(editor.document.fileName);
-    const styleHints = deriveStyleHints(editor.document, lang);
+    const styleHints = deriveStyleHints(
+      editor.document.getText(),
+      editor.document.lineCount,
+      lang,
+    );
     const extraHeuristics =
       lang === "python"
         ? "Avoid inserting closing parentheses, colons, or next-line indentation."
