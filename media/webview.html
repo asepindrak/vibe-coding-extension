@@ -208,16 +208,6 @@
             ">
             <!-- Options will be populated based on provider -->
           </select>
-          <input id="ollamaModelInput" type="text" placeholder="Model name (e.g. llama3)"
-            class="ml-2 hidden bg-gray-800 text-white text-sm border border-gray-600 rounded p-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            style="
-              height: 32px;
-              padding: 4px 8px;
-              background-color: #0d1117;
-              color: #c9d1d9;
-              border: 1px solid #30363d;
-              width: 120px;
-            " />
           <button id="apiKeyButton" type="button" class="btn-elegant" style="
               height: 28px;
               padding: 0 8px;
@@ -629,7 +619,6 @@
       async function updateModelSelect() {
         const providerSelect = document.getElementById("providerSelect")
         const modelSelect = document.getElementById("modelSelect")
-        const ollamaInput = document.getElementById("ollamaModelInput")
         if (!modelSelect || !providerSelect) return
 
         const provider = providerSelect.value
@@ -639,7 +628,6 @@
         modelSelect.innerHTML = ""
 
         if (provider === "openai") {
-          ollamaInput.classList.add("hidden")
           modelSelect.classList.remove("hidden")
           openaiModels.forEach((m) => {
             const opt = document.createElement("option")
@@ -648,7 +636,9 @@
             modelSelect.appendChild(opt)
           })
           // Set to current model if it's an OpenAI model, otherwise fallback
-          if (openaiModels.some((m) => m.value === currentAiSettings.selectedModel)) {
+          if (
+            openaiModels.some((m) => m.value === currentAiSettings.selectedModel)
+          ) {
             modelSelect.value = currentAiSettings.selectedModel
           } else {
             modelSelect.value = "gpt-5.1-codex-mini"
@@ -664,38 +654,31 @@
               modelSelect.appendChild(opt)
             })
 
-            // Add an option to enter manually
-            const manualOpt = document.createElement("option")
-            manualOpt.value = "manual"
-            manualOpt.textContent = "⌨️ Enter Manually..."
-            modelSelect.appendChild(manualOpt)
-
             // Set to current model if it's an Ollama model
-            if (currentAiSettings.selectedModel && currentAiSettings.selectedModel.startsWith("ollama:")) {
-              if (ollamaModels.some((m) => m.value === currentAiSettings.selectedModel)) {
+            if (
+              currentAiSettings.selectedModel &&
+              currentAiSettings.selectedModel.startsWith("ollama:")
+            ) {
+              if (
+                ollamaModels.some((m) => m.value === currentAiSettings.selectedModel)
+              ) {
                 modelSelect.value = currentAiSettings.selectedModel
-                ollamaInput.classList.add("hidden")
-                modelSelect.classList.remove("hidden")
               } else {
-                modelSelect.value = "manual"
-                ollamaInput.classList.remove("hidden")
-                modelSelect.classList.remove("hidden")
-                ollamaInput.value = currentAiSettings.selectedModel.replace("ollama:", "")
+                modelSelect.value = ollamaModels[0].value
+                currentAiSettings.selectedModel = modelSelect.value
               }
             } else {
               modelSelect.value = ollamaModels[0].value
               currentAiSettings.selectedModel = modelSelect.value
-              ollamaInput.classList.add("hidden")
-              modelSelect.classList.remove("hidden")
             }
+            modelSelect.classList.remove("hidden")
           } else {
-            // No Ollama models found, show input directly
-            modelSelect.classList.add("hidden")
-            ollamaInput.classList.remove("hidden")
-            ollamaInput.value = currentAiSettings.selectedModel && currentAiSettings.selectedModel.startsWith("ollama:")
-              ? currentAiSettings.selectedModel.replace("ollama:", "")
-              : ""
-            currentAiSettings.selectedModel = `ollama:${ollamaInput.value}`
+            // No Ollama models found, show a message or fallback
+            const opt = document.createElement("option")
+            opt.value = ""
+            opt.textContent = "No Ollama models found"
+            modelSelect.appendChild(opt)
+            modelSelect.classList.remove("hidden")
           }
         }
       }
@@ -1444,11 +1427,7 @@
             await updateModelSelect()
             // Save settings when provider changes
             const modelSelect = document.getElementById("modelSelect")
-            const ollamaInput = document.getElementById("ollamaModelInput")
             let modelValue = modelSelect.value
-            if (providerSelect.value === "ollama" && modelValue === "manual") {
-              modelValue = `ollama:${ollamaInput.value}`
-            }
             vscode.postMessage({
               type: "saveAiSettings",
               model: modelValue,
@@ -1461,15 +1440,6 @@
         if (modelSelect) {
           modelSelect.addEventListener("change", () => {
             const providerSelect = document.getElementById("providerSelect")
-            const ollamaInput = document.getElementById("ollamaModelInput")
-
-            if (modelSelect.value === "manual") {
-              ollamaInput.classList.remove("hidden")
-              ollamaInput.focus()
-              return
-            } else {
-              ollamaInput.classList.add("hidden")
-            }
 
             const requestedModel = ensureSupportedModel(
               modelSelect.value || "gpt-5.1-codex-mini",
@@ -1493,20 +1463,6 @@
               model: currentAiSettings.selectedModel,
               provider: providerSelect.value,
               userApiKey: "",
-              keepExistingApiKey: true,
-            })
-          })
-        }
-        const ollamaModelInput = document.getElementById("ollamaModelInput")
-        if (ollamaModelInput) {
-          ollamaModelInput.addEventListener("change", () => {
-            const providerSelect = document.getElementById("providerSelect")
-            const modelValue = `ollama:${ollamaModelInput.value}`
-            currentAiSettings.selectedModel = modelValue
-            vscode.postMessage({
-              type: "saveAiSettings",
-              model: modelValue,
-              provider: providerSelect.value,
               keepExistingApiKey: true,
             })
           })
