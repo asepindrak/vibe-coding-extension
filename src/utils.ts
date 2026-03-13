@@ -4,7 +4,7 @@ import logger from "vico-logger";
 const recentAppliedDiffFingerprints: Map<string, number> = new Map();
 
 /**
- * Membangun fingerprint unik untuk sebuah blok diff SEARCH/REPLACE.
+ * Builds a unique fingerprint for a SEARCH/REPLACE diff block.
  */
 export function buildDiffFingerprint(
   filePath: string,
@@ -20,7 +20,7 @@ export function buildDiffFingerprint(
 }
 
 /**
- * Menandai dan memeriksa apakah sebuah diff baru saja diterapkan untuk menghindari perulangan.
+ * Marks and checks if a diff has recently been applied to avoid loops.
  */
 export function markAndCheckRecentDiff(fingerprint: string): boolean {
   const now = Date.now();
@@ -38,16 +38,16 @@ export function markAndCheckRecentDiff(fingerprint: string): boolean {
 }
 
 /**
- * Membersihkan marker diff (+, -, @@) dan teks "new:" dari konten.
- * Berguna saat AI menyertakan format diff di dalam blok SEARCH/REPLACE.
+ * Cleans diff markers (+, -, @@) and "new:" text from content.
+ * Useful when AI includes diff format inside SEARCH/REPLACE blocks.
  */
 export function cleanSearchReplaceText(text: string, isReplace: boolean): string {
   if (!text) return text;
 
   let cleaned = stripMarkdownFences(text);
 
-  // Hapus teks "new:" atau "new " di awal (AI sering melakukan ini di luar blok atau di awal blok)
-  // Kita hanya hapus jika benar-benar di awal string/baris pertama
+  // Remove "new:" or "new " text at the beginning (AI often does this outside or at the start of blocks)
+  // We only remove it if it's truly at the beginning of the string/first line
   const newPrefixMatch = cleaned.match(/^\s*new:?\s*(\s+|[\r\n]+)/i);
   if (newPrefixMatch) {
     cleaned = cleaned.substring(newPrefixMatch[0].length);
@@ -57,7 +57,7 @@ export function cleanSearchReplaceText(text: string, isReplace: boolean): string
   const resultLines: string[] = [];
   let hasDiffMarkers = false;
 
-  // Deteksi apakah ada marker diff (+ atau -) di awal baris yang bukan bagian dari operator ++ atau --
+  // Detect if there are diff markers (+ or -) at the start of a line that are not part of ++ or -- operators
   for (const line of lines) {
     const trimmed = line.trim();
     if (
@@ -85,8 +85,8 @@ export function cleanSearchReplaceText(text: string, isReplace: boolean): string
 
     if (isReplace) {
       // Di blok REPLACE:
-      // - Simpan baris yang diawali '+' (tanpa '+')
-      // - Lewati baris yang diawali '-'
+      // - Keep lines starting with '+' (without '+')
+      // - Skip lines starting with '-'
       // - Simpan baris normal
       if (line.startsWith("+") && !line.startsWith("++")) {
         resultLines.push(line.substring(1));
@@ -97,8 +97,8 @@ export function cleanSearchReplaceText(text: string, isReplace: boolean): string
       }
     } else {
       // Di blok SEARCH:
-      // - Simpan baris yang diawali '-' (tanpa '-')
-      // - Lewati baris yang diawali '+'
+      // - Keep lines starting with '-' (without '-')
+      // - Skip lines starting with '+'
       // - Simpan baris normal
       if (line.startsWith("-") && !line.startsWith("--")) {
         resultLines.push(line.substring(1));
@@ -325,12 +325,12 @@ export function deriveStyleHints(
 
 export function removeCommentTags(code: string) {
   return code
-    .replace(/\/\/(.*)$/gm, "$1") // Menghapus // dan menyimpan teks setelahnya
-    .replace(/\/\*[\s\S]*?\*\//g, "") // Menghapus komentar multi-baris
-    .replace(/#(.*)$/gm, "$1") // Menghapus # dan menyimpan teks setelahnya
-    .replace(/<!--(.*?)-->/g, "$1") // Menghapus komentar HTML
-    .replace(/\n\s*\n/g, "\n") // Menghapus baris kosong yang tersisa
-    .trim(); // Menghapus spasi di awal dan akhir
+    .replace(/\/\/(.*)$/gm, "$1") // Removes // and keeps the following text
+    .replace(/\/\*[\s\S]*?\*\//g, "") // Removes multi-line comments
+    .replace(/#(.*)$/gm, "$1") // Removes # and keeps the following text
+    .replace(/<!--(.*?)-->/g, "$1") // Removes HTML comments
+    .replace(/\n\s*\n/g, "\n") // Removes remaining empty lines
+    .trim(); // Trims whitespace at the start and end
 }
 
 export function stripMarkdownFences(text: string): string {

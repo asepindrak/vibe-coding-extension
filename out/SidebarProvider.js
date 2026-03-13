@@ -536,7 +536,8 @@ class SidebarProvider {
                 case "ollamaAgent": {
                     const { mode, data, uniqueId } = message;
                     const ollamaModel = data.model.replace("ollama:", "");
-                    const ollamaUrl = "http://localhost:11434/v1/chat/completions";
+                    const customUrl = this.context.globalState.get("vico.customApiUrl");
+                    const ollamaUrl = (customUrl && customUrl.trim()) || "http://localhost:11434/v1/chat/completions";
                     const controller = new AbortController();
                     if (uniqueId) {
                         this.ollamaAbortControllers.set(uniqueId, controller);
@@ -940,7 +941,8 @@ NEW_CODE_TO_INSERT
                 case "ollamaChat": {
                     const { data, uniqueId } = message;
                     const ollamaModel = data.model.replace("ollama:", "");
-                    const ollamaUrl = "http://localhost:11434/v1/chat/completions";
+                    const customUrl = this.context.globalState.get("vico.customApiUrl");
+                    const ollamaUrl = (customUrl && customUrl.trim()) || "http://localhost:11434/v1/chat/completions";
                     const controller = new AbortController();
                     if (uniqueId) {
                         this.ollamaAbortControllers.set(uniqueId, controller);
@@ -1127,6 +1129,8 @@ NEW_CODE_TO_INSERT
                     webviewView.webview.postMessage({
                         command: "aiSettingsSaved",
                         selectedModel,
+                        selectedProvider,
+                        customApiUrl,
                         hasUserApiKey: savedApiKey.trim().length > 0,
                         freePromptLimit: SidebarProvider.FREE_PROMPT_LIMIT,
                         machinePromptUsed: usage,
@@ -1162,12 +1166,14 @@ NEW_CODE_TO_INSERT
                         }
                     }
                     const remaining = Math.max(0, SidebarProvider.FREE_PROMPT_LIMIT - usage);
+                    const customApiUrl = this.context.globalState.get("vico.customApiUrl") || "";
                     webviewView.webview.postMessage({
                         command: "promptQuotaResult",
                         requestId,
                         allowed,
                         reason,
                         selectedModel,
+                        customApiUrl,
                         freePromptLimit: SidebarProvider.FREE_PROMPT_LIMIT,
                         machinePromptUsed: usage,
                         machinePromptRemaining: remaining,
@@ -2244,11 +2250,11 @@ NEW_CODE_TO_INSERT
                 const priorityFiles = folderBuckets[folder].filter((f) => f.priority);
                 const normalFiles = folderBuckets[folder].filter((f) => !f.priority && !f.config);
                 const configFiles = folderBuckets[folder].filter((f) => f.config);
-                // urutkan berdasarkan nama file (tidak random)
+                // sort by file name (not random)
                 priorityFiles.sort((a, b) => a.path.localeCompare(b.path));
                 normalFiles.sort((a, b) => a.path.localeCompare(b.path));
                 configFiles.sort((a, b) => a.path.localeCompare(b.path));
-                // ambil max 3 file prioritas dulu
+                // get max 3 priority files first
                 priorityFiles
                     .slice(0, this.maxFilesPerFolder)
                     .forEach((f) => selectedFiles.push(f));
@@ -2259,7 +2265,7 @@ NEW_CODE_TO_INSERT
                         .slice(0, remainingSlots)
                         .forEach((f) => selectedFiles.push(f));
                 }
-                // Jika slot masih kosong, baru masukkan config
+                // If slots are still empty, then include config
                 const finalSlots = this.maxFilesPerFolder -
                     selectedFiles.filter((f) => path.dirname(f.path) === folder).length;
                 if (finalSlots > 0) {
@@ -2268,7 +2274,7 @@ NEW_CODE_TO_INSERT
                         .forEach((f) => selectedFiles.push(f));
                 }
             }
-            // Group output berdasarkan folder
+            // Group output based on folder
             const grouped = {};
             for (const f of selectedFiles) {
                 const relativePath = vscode.workspace.asRelativePath(f.path);
@@ -2295,7 +2301,7 @@ NEW_CODE_TO_INSERT
                     grouped[folderKey] = [];
                 grouped[folderKey].push(f);
             }
-            // Gabungkan hasil dengan batas ukuran
+            // Combine results within size limits
             let allCode = structureSection; // Start with the structure!
             let totalSize = allCode.length;
             console.log("=== FILES SELECTED TO SEND ===");
@@ -2350,7 +2356,7 @@ NEW_CODE_TO_INSERT
             return "";
         }
     }
-    // --- Hapus komentar, tapi biarkan kode utuh ---
+    // --- Strip comments, but keep code intact ---
     stripComments(source) {
         return source
             .replace(/\/\*[\s\S]*?\*\//g, "")
@@ -2359,7 +2365,7 @@ NEW_CODE_TO_INSERT
             .replace(/^\s*$/gm, "")
             .trim();
     }
-    // --- Skeleton code untuk semua bahasa ---
+    // --- Skeleton code for all languages ---
     compressCodeSkeleton(source) {
         return (source
             // Remove comments (C-style, Python, Shell)
@@ -2392,7 +2398,7 @@ NEW_CODE_TO_INSERT
             .replace(/^\s*$/gm, "")
             .trim());
     }
-    // --- Deteksi file teks ---
+    // --- Detect text files ---
     isTextFile(filePath) {
         const exts = [
             ".js",
@@ -2432,7 +2438,7 @@ NEW_CODE_TO_INSERT
         const ext = path.extname(filePath).toLowerCase();
         return exts.includes(ext);
     }
-    // --- Deteksi file prioritas ---
+    // --- Detect priority files ---
     isPriorityFile(filePath) {
         const isNextJsPriority = /(app\/|pages\/|src\/app\/|src\/pages\/)/i.test(filePath) &&
             (filePath.endsWith("page.tsx") || filePath.endsWith("layout.tsx") || filePath.endsWith("index.tsx") || filePath.endsWith("route.ts"));
@@ -2440,7 +2446,7 @@ NEW_CODE_TO_INSERT
             return true;
         return /(model|schema|entity|types?|interfaces?|dto|config|api|routes?|validation|controller|service|store|hook|utils|lib|context|provider|component)/i.test(filePath);
     }
-    // --- Deteksi file config ---
+    // --- Detect config files ---
     isConfigFile(filePath) {
         const configPatterns = [
             "eslint.config",

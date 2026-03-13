@@ -551,6 +551,7 @@
       var currentAiSettings = {
         selectedProvider: "openai",
         selectedModel: "gpt-5.1-codex-mini",
+        customApiUrl: "",
         hasUserApiKey: false,
         freePromptLimit: 20,
         machinePromptUsed: 0,
@@ -1058,6 +1059,7 @@
                 event.data.selectedModel || currentAiSettings.selectedModel,
               )
               currentAiSettings.hasUserApiKey = !!event.data.hasUserApiKey
+              currentAiSettings.customApiUrl = event.data.customApiUrl || currentAiSettings.customApiUrl
               currentAiSettings.freePromptLimit =
                 event.data.freePromptLimit ?? currentAiSettings.freePromptLimit
               currentAiSettings.machinePromptUsed =
@@ -2183,8 +2185,8 @@
           event.preventDefault()
           handleSendMessage()
         } else {
-          this.style.height = "auto" // Reset tinggi agar bisa menghitung tinggi yang baru
-          this.style.height = Math.min(this.scrollHeight, 300) + "px" // Set tinggi maksimal 300px
+          this.style.height = "auto" // Reset height to calculate the new height
+          this.style.height = Math.min(this.scrollHeight, 300) + "px" // Set max height to 300px
         }
       }
 
@@ -2357,7 +2359,7 @@
 
       function compactHistory(history, maxItems = 10, maxChars = 2000) {
         if (!Array.isArray(history) || history.length === 0) return []
-        // Ambil N pesan terakhir
+        // Take last N messages
         const recent = history.slice(-maxItems)
         return recent.map((m) => {
           let content = String(m.content || "")
@@ -2730,7 +2732,7 @@
 
         let iteration = 0
         const MAX_ITERATIONS =
-          /(\bno framework\b|\btanpa framework\b|\bvanilla\b|\bhtml dan javascript\b)/i.test(
+          /(\bno framework\b|\bwithout framework\b|\bvanilla\b|\bhtml and javascript\b)/i.test(
             message || "",
           ) && /\b(simple|sederhana)\b/i.test(message || "")
             ? 8
@@ -2778,18 +2780,18 @@
           const src = String(text || "")
           if (!src.trim()) return false
           if (
-            /\b(explain|jelaskan|why|kenapa|what is|apa itu|review|analisa|analysis only|diskusi|brainstorm)\b/i.test(
+            /\b(explain|why|what is|review|analyze|analysis only|discussion|brainstorm)\b/i.test(
               src,
             )
           ) {
             return false
           }
-          return /(\bfix\b|\bperbaiki\b|\bbug\b|\bcreate\b|\bbuat\b|\bbuild\b|\bimplement\b|\badd\b|\btambah\b|\bupdate\b|\bubah\b|\bmodify\b|\bedit\b|\brefactor\b|\boptimi[sz]e\b|\bcoding\b|\bcode\b)/i.test(
+          return /(\bfix\b|\bbug\b|\bcreate\b|\bbuild\b|\bimplement\b|\badd\b|\bupdate\b|\bmodify\b|\bedit\b|\brefactor\b|\boptimi[sz]e\b|\bcoding\b|\bcode\b)/i.test(
             src,
           )
         }
         const isVanillaWebRequest = (text) =>
-          /(\bno framework\b|\btanpa framework\b|\bvanilla\b|\bplain html\b|\bhtml dan javascript\b|\bhtml\s*\+\s*javascript\b|\bsingle html\b)/i.test(
+          /(\bno framework\b|\bvanilla\b|\bplain html\b|\bhtml\s*\+\s*javascript\b|\bsingle html\b)/i.test(
             text || "",
           )
         const isVerificationCommandLite = (cmd) =>
@@ -3377,7 +3379,7 @@
               currentContext += `\n[Planner Parse Error]\n${planJson.slice(0, 4000)}\n`
               updateMessagesAssistant({
                 uniqueId: `assistant-${currentUniqueId}`,
-                content: `⚠️ **Planner output tidak valid, mencoba ulang otomatis (iterasi ${iteration}/${MAX_ITERATIONS}).**`,
+                content: `⚠️ **Planner output is invalid, retrying automatically (iteration ${iteration}/${MAX_ITERATIONS}).**`,
               })
               continue
             }
@@ -3401,7 +3403,7 @@
                 currentContext += `\n[Planner Error] Empty plan returned on first iteration. Please generate a concrete plan with at least one action step (file_write or terminal_command).\n`
                 updateMessagesAssistant({
                   uniqueId: `assistant-${currentUniqueId}`,
-                  content: `⚠️ **Planner mengembalikan rencana kosong, mencoba ulang otomatis (iterasi ${iteration}/${MAX_ITERATIONS}).**`,
+                  content: `⚠️ **Planner returned an empty plan, retrying automatically (iteration ${iteration}/${MAX_ITERATIONS}).**`,
                 })
                 continue
               }
@@ -3429,12 +3431,12 @@
               updateMessagesAssistant({
                 uniqueId: `assistant-${currentUniqueId}`,
                 content:
-                  "✅ **Task Completed:** Implementasi selesai. Step verifikasi manual dihapus karena tidak bisa dijalankan di sandbox.",
+                  "✅ **Task Completed:** Implementation finished. Manual verification steps removed as they cannot be run in sandbox.",
               })
               messageArray.push({
                 role: "assistant",
                 content:
-                  "✅ Task Completed: Implementasi selesai, verifikasi manual dihapus (sandbox limitation).",
+                  "✅ Task Completed: Implementation finished, manual verification removed (sandbox limitation).",
               })
               saveState()
               resetUI()
@@ -3560,7 +3562,7 @@
             }
             if (repeatedPlanCount >= 2) {
               currentContext +=
-                "\n[System Feedback] Planner mengulang rencana yang sama. Buat langkah baru yang berbeda atau kirim step type='complete' jika tugas benar-benar sudah selesai.\n"
+                "\n[System Feedback] Planner is repeating the same plan. Create a new, different step or send step type='complete' if the task is truly finished.\n"
             }
             if (repeatedPlanCount >= 3) {
               const hotFiles = Array.from(
@@ -3582,7 +3584,7 @@
               updateMessagesAssistant({
                 uniqueId: `assistant-${currentUniqueId}`,
                 content:
-                  "⚠️ Loop guard aktif: planner mengulang langkah yang sama. Memaksa rencana recovery yang berbeda.",
+                  "⚠️ Loop guard active: planner is repeating the same steps. Forcing a different recovery plan.",
               })
               continue
             }
@@ -3736,12 +3738,12 @@ ${result.summary || "Executed successfully."}`,
               ) {
                 updateMessagesAssistant({
                   uniqueId: `assistant-${currentUniqueId}`,
-                  content: `${result.summary || ""}\n\n**Task Completed:** Implementasi sudah tersimpan. Recovery loop dihentikan untuk simple vanilla task.`,
+                  content: `${result.summary || ""}\n\n**Task Completed:** Implementation already saved. Recovery loop stopped for simple vanilla task.`,
                 })
                 messageArray.push({
                   role: "assistant",
                   content:
-                    "Task Completed: Implementasi tersimpan, loop recovery dihentikan untuk simple vanilla task.",
+                    "Task Completed: Implementation saved, recovery loop stopped for simple vanilla task.",
                 })
                 saveState()
                 resetUI()
@@ -3764,22 +3766,22 @@ ${result.summary || "Executed successfully."}`,
               ) {
                 updateMessagesAssistant({
                   uniqueId: `assistant-${currentUniqueId}`,
-                  content: `${result.summary || ""}\n\n**Task Completed:** Perubahan utama sudah persisten. Replanning dihentikan agar tidak looping.`,
+                  content: `${result.summary || ""}\n\n**Task Completed:** Main changes are already persistent. Replanning stopped to avoid looping.`,
                 })
                 messageArray.push({
                   role: "assistant",
                   content:
-                    "Task Completed: Perubahan utama persisten, replanning loop dihentikan.",
+                    "Task Completed: Main changes persistent, replanning loop stopped.",
                 })
                 saveState()
                 resetUI()
                 return
               }
               currentContext +=
-                "\n[Execution Feedback] Plan sebelumnya gagal di salah satu step. Buat plan lanjutan untuk memperbaiki error lalu lanjutkan task original.\n"
+                "\n[Execution Feedback] Previous plan failed at one of the steps. Create a follow-up plan to fix the error then continue the original task.\n"
               updateMessagesAssistant({
                 uniqueId: `assistant-${currentUniqueId}`,
-                content: `${result.summary || ""}\n\n⚠️ **Ada step yang gagal. Agent lanjutkan otomatis dengan replanning.**`,
+                content: `${result.summary || ""}\n\n⚠️ **Some steps failed. Agent continues automatically with replanning.**`,
               })
               continue
             }
@@ -3790,7 +3792,7 @@ ${result.summary || "Executed successfully."}`,
               planSteps.every((s) => s.type === "chat")
             ) {
               currentContext +=
-                "\n[Execution Feedback] Plan sebelumnya tidak menghasilkan aksi coding. Plan berikut harus berisi aksi nyata (writeFile/diff/command) untuk menyelesaikan task.\n"
+                "\n[Execution Feedback] Previous plan did not result in coding actions. Next plan must contain real actions (writeFile/diff/command) to complete the task.\n"
             }
             if (
               isSimpleVanillaTask &&
@@ -3799,12 +3801,12 @@ ${result.summary || "Executed successfully."}`,
             ) {
               updateMessagesAssistant({
                 uniqueId: `assistant-${currentUniqueId}`,
-                content: `${result.summary || ""}\n\n**Task Completed:** Simple vanilla coding selesai tanpa verifikasi terminal tambahan.`,
+                content: `${result.summary || ""}\n\n**Task Completed:** Simple vanilla coding finished without additional terminal verification.`,
               })
               messageArray.push({
                 role: "assistant",
                 content:
-                  "Task Completed: Simple vanilla coding selesai tanpa verifikasi terminal tambahan.",
+                  "Task Completed: Simple vanilla coding finished without additional terminal verification.",
               })
               saveState()
               resetUI()
@@ -3812,7 +3814,7 @@ ${result.summary || "Executed successfully."}`,
             }
             updateMessagesAssistant({
               uniqueId: `assistant-${currentUniqueId}`,
-              content: `${result.summary || ""}\n\n✅ **Plan iterasi ${iteration} selesai. Melanjutkan validasi completion...**`,
+              content: `${result.summary || ""}\n\n✅ **Iteration plan ${iteration} finished. Continuing completion validation...**`,
             })
             continue
           } catch (err) {
@@ -3828,7 +3830,7 @@ ${result.summary || "Executed successfully."}`,
             currentContext += `\n[Workflow Error Iteration ${iteration}] ${err.message}\n`
             updateMessagesAssistant({
               uniqueId: `assistant-${currentUniqueId}`,
-              content: `⚠️ Iterasi ${iteration} gagal: ${err.message}\nMencoba lanjut otomatis...`,
+              content: `⚠️ Iteration ${iteration} failed: ${err.message}\nTrying to continue automatically...`,
             })
             continue
           }
@@ -3872,7 +3874,7 @@ ${result.summary || "Executed successfully."}`,
         const verificationMode =
           (aiConfig && aiConfig.verificationMode) || "normal"
         const userRequestedVanillaNoFrameworkLocal =
-          /(\bno framework\b|\btanpa framework\b|\bvanilla\b|\bplain html\b|\bhtml dan javascript\b|\bhtml\s*\+\s*javascript\b|\bsingle html\b)/i.test(
+          /(\bno framework\b|\bvanilla\b|\bplain html\b|\bhtml\s*\+\s*javascript\b|\bsingle html\b)/i.test(
             String(originalRequest || ""),
           )
         const requestedUrlsLocal = Array.from(
@@ -6164,7 +6166,7 @@ ${result.summary || "Executed successfully."}`,
       }
       var formEmail = ""
       async function login(event) {
-        event.preventDefault() // Mencegah form dari submit default
+        event.preventDefault() // Prevent default form submission
         formEmail = event.target.email.value
 
         const messageDiv = document.getElementById("message")
@@ -6186,7 +6188,7 @@ ${result.summary || "Executed successfully."}`,
           console.log("findFiles")
           vscode.postMessage({ type: "findFiles", email: formEmail })
         } catch (error) {
-          messageDiv.textContent = "Email atau password salah."
+          messageDiv.textContent = "Incorrect email or password."
           messageDiv.className = "message error"
           isLoading = false
           loginForm.innerHTML = `
@@ -6224,18 +6226,18 @@ ${result.summary || "Executed successfully."}`,
           })
 
           if (!response.ok) {
-            console.log("login gagal")
-            messageDiv.textContent = "Email tidak valid."
+            console.log("login failed")
+            messageDiv.textContent = "Invalid email."
             messageDiv.className = "message error"
             isLoading = false
             loginForm.innerHTML = `
                                         <input type="text" name="email" placeholder="Enter username" value="${formEmail}" required />
                                         <button type="submit">➜]</button>
                                     `
-            throw new Error("Login gagal")
+            throw new Error("Login failed")
           }
 
-          console.log("login berhasil")
+          console.log("login success")
           const allCodeStorageKey = "allCodeStorage"
           const codingStorageKey = "codingStorage"
           localStorage.removeItem(allCodeStorageKey)
@@ -6246,7 +6248,7 @@ ${result.summary || "Executed successfully."}`,
           localStorage.setItem("userId", data.userId)
           vscode.postMessage({ type: "saveToken", tokenParam })
 
-          messageDiv.textContent = "Login berhasil!"
+          messageDiv.textContent = "Login success!"
           messageDiv.className = "message success"
           isLoading = false
           setTimeout(() => {
@@ -6321,10 +6323,10 @@ ${result.summary || "Executed successfully."}`,
           })
 
           if (!response.ok) {
-            console.log("update workspaces gagal")
+            console.log("update workspaces failed")
             isLoading = false
           }
-          console.log("update workspaces berhasil")
+          console.log("update workspaces success")
           const btnWorkspace = document.getElementById("button-workspace")
           if (btnWorkspace) {
             btnWorkspace.innerHTML = "Teach AI 🔄"
@@ -6344,7 +6346,7 @@ ${result.summary || "Executed successfully."}`,
             sendMessageToApi(msg, true)
           }
         } catch (error) {
-          console.log("update workspaces gagal")
+          console.log("update workspaces failed")
           const btnWorkspace = document.getElementById("button-workspace")
           if (btnWorkspace) {
             btnWorkspace.innerHTML = "Teach AI 🔄"
@@ -6637,7 +6639,7 @@ ${result.summary || "Executed successfully."}`,
         // We want to keep the current message and its immediate response (if any)
         // Usually User -> Assistant. So keep index and index + 1.
         // But if the user clicks revert on the *User* message, they expect to go back to the state *after* this interaction?
-        // "jika user klik revert di chat pertama, maka chat ke 2 dan 3 ... akan hilang".
+        // "if user clicks revert on the first chat, then the 2nd and 3rd chat ... will be gone".
         // Chat 1 = User Request + Agent Response.
         // So keep User Request (index) + Agent Response (index + 1).
 
@@ -6704,7 +6706,7 @@ ${result.summary || "Executed successfully."}`,
         return (
           /\*\*Step\s+\d+:/i.test(text) ||
           /-\s*\[[^\]]*\]\s*Step\s+\d+/i.test(text) ||
-          /\bPlan iterasi\b/i.test(text) ||
+          /\bIteration Plan\b/i.test(text) ||
           /\bExecuting Plan\b/i.test(text)
         )
       }
@@ -6748,7 +6750,7 @@ ${result.summary || "Executed successfully."}`,
         const text = String(content || "")
         return (
           /\bTask Completed\b/i.test(text) ||
-          /\bPlan iterasi\s+\d+\s+selesai\b/i.test(text) ||
+          /\bIteration plan\s+\d+\s+finished\b/i.test(text) ||
           /\bStopped:\s*Max iterations\b/i.test(text)
         )
       }

@@ -588,7 +588,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           case "ollamaAgent": {
             const { mode, data, uniqueId } = message;
             const ollamaModel = data.model.replace("ollama:", "");
-            const ollamaUrl = "http://localhost:11434/v1/chat/completions";
+            const customUrl = this.context.globalState.get<string>("vico.customApiUrl");
+            const ollamaUrl = (customUrl && customUrl.trim()) || "http://localhost:11434/v1/chat/completions";
             const controller = new AbortController();
             if (uniqueId) {
               this.ollamaAbortControllers.set(uniqueId, controller);
@@ -1026,7 +1027,8 @@ NEW_CODE_TO_INSERT
           case "ollamaChat": {
             const { data, uniqueId } = message;
             const ollamaModel = data.model.replace("ollama:", "");
-            const ollamaUrl = "http://localhost:11434/v1/chat/completions";
+            const customUrl = this.context.globalState.get<string>("vico.customApiUrl");
+            const ollamaUrl = (customUrl && customUrl.trim()) || "http://localhost:11434/v1/chat/completions";
             const controller = new AbortController();
             if (uniqueId) {
               this.ollamaAbortControllers.set(uniqueId, controller);
@@ -1256,6 +1258,8 @@ NEW_CODE_TO_INSERT
             webviewView.webview.postMessage({
               command: "aiSettingsSaved",
               selectedModel,
+              selectedProvider,
+              customApiUrl,
               hasUserApiKey: savedApiKey.trim().length > 0,
               freePromptLimit: SidebarProvider.FREE_PROMPT_LIMIT,
               machinePromptUsed: usage,
@@ -1307,12 +1311,14 @@ NEW_CODE_TO_INSERT
               0,
               SidebarProvider.FREE_PROMPT_LIMIT - usage,
             );
+            const customApiUrl = this.context.globalState.get<string>("vico.customApiUrl") || "";
             webviewView.webview.postMessage({
               command: "promptQuotaResult",
               requestId,
               allowed,
               reason,
               selectedModel,
+              customApiUrl,
               freePromptLimit: SidebarProvider.FREE_PROMPT_LIMIT,
               machinePromptUsed: usage,
               machinePromptRemaining: remaining,
@@ -2571,12 +2577,12 @@ NEW_CODE_TO_INSERT
         );
         const configFiles = folderBuckets[folder].filter((f) => f.config);
 
-        // urutkan berdasarkan nama file (tidak random)
+        // sort by file name (not random)
         priorityFiles.sort((a, b) => a.path.localeCompare(b.path));
         normalFiles.sort((a, b) => a.path.localeCompare(b.path));
         configFiles.sort((a, b) => a.path.localeCompare(b.path));
 
-        // ambil max 3 file prioritas dulu
+        // get max 3 priority files first
         priorityFiles
           .slice(0, this.maxFilesPerFolder)
           .forEach((f) => selectedFiles.push(f));
@@ -2590,7 +2596,7 @@ NEW_CODE_TO_INSERT
             .forEach((f) => selectedFiles.push(f));
         }
 
-        // Jika slot masih kosong, baru masukkan config
+        // If slots are still empty, then include config
         const finalSlots =
           this.maxFilesPerFolder -
           selectedFiles.filter((f) => path.dirname(f.path) === folder).length;
@@ -2601,7 +2607,7 @@ NEW_CODE_TO_INSERT
         }
       }
 
-      // Group output berdasarkan folder
+      // Group output based on folder
       const grouped: Record<
         string,
         { path: string; code: string; priority: boolean; config: boolean }[]
@@ -2627,7 +2633,7 @@ NEW_CODE_TO_INSERT
         grouped[folderKey].push(f);
       }
 
-      // Gabungkan hasil dengan batas ukuran
+      // Combine results within size limits
       let allCode = structureSection; // Start with the structure!
       let totalSize = allCode.length;
       console.log("=== FILES SELECTED TO SEND ===");
@@ -2688,7 +2694,7 @@ NEW_CODE_TO_INSERT
     }
   }
 
-  // --- Hapus komentar, tapi biarkan kode utuh ---
+  // --- Strip comments, but keep code intact ---
   private stripComments(source: string): string {
     return source
       .replace(/\/\*[\s\S]*?\*\//g, "")
@@ -2698,7 +2704,7 @@ NEW_CODE_TO_INSERT
       .trim();
   }
 
-  // --- Skeleton code untuk semua bahasa ---
+  // --- Skeleton code for all languages ---
   private compressCodeSkeleton(source: string): string {
     return (
       source
@@ -2768,7 +2774,7 @@ NEW_CODE_TO_INSERT
     );
   }
 
-  // --- Deteksi file teks ---
+  // --- Detect text files ---
   private isTextFile(filePath: string): boolean {
     const exts = [
       ".js",
@@ -2809,7 +2815,7 @@ NEW_CODE_TO_INSERT
     return exts.includes(ext);
   }
 
-  // --- Deteksi file prioritas ---
+  // --- Detect priority files ---
   private isPriorityFile(filePath: string): boolean {
     const isNextJsPriority = /(app\/|pages\/|src\/app\/|src\/pages\/)/i.test(filePath) &&
       (filePath.endsWith("page.tsx") || filePath.endsWith("layout.tsx") || filePath.endsWith("index.tsx") || filePath.endsWith("route.ts"));
@@ -2821,7 +2827,7 @@ NEW_CODE_TO_INSERT
     );
   }
 
-  // --- Deteksi file config ---
+  // --- Detect config files ---
   private isConfigFile(filePath: string): boolean {
     const configPatterns = [
       "eslint.config",

@@ -14,7 +14,7 @@ suite('Extension Test Suite', () => {
 	});
 
 	test('writeFile format validation', () => {
-		// Test format validation untuk writeFile blocks
+		// Test format validation for writeFile blocks
 		const validWriteFileContent = `[writeFile]
 [file name="test.js"]
 console.log("Hello World");
@@ -30,12 +30,12 @@ console.log("Hello World");
 console.log("Hello World");
 [/writeFile]`;
 
-		// Test yang valid harus mengandung [writeFile], [/writeFile], dan [file] atau [diff]
+		// Valid tests must contain [writeFile], [/writeFile], and [file] or [diff]
 		assert.ok(validWriteFileContent.includes("[writeFile]"), "Should contain [writeFile] tag");
 		assert.ok(validWriteFileContent.includes("[/writeFile]"), "Should contain [/writeFile] tag");
 		assert.ok(validWriteFileContent.includes("[file "), "Should contain [file] block");
 
-		// Test format tidak lengkap
+		// Test incomplete format
 		assert.ok(invalidWriteFileMissingClose.includes("[writeFile]"), "Should contain [writeFile] tag");
 		assert.ok(!invalidWriteFileMissingClose.includes("[/writeFile]"), "Should not contain [/writeFile] tag");
 
@@ -46,7 +46,7 @@ console.log("Hello World");
 	});
 
 	test('writeFile fallback parsing', () => {
-		// Test fallback parsing untuk format yang tidak sempurna
+		// Test fallback parsing for imperfect format
 		const openWriteFileTag = `[writeFile]
 [file name="test.js"]
 console.log("Hello World");
@@ -72,7 +72,7 @@ console.log("Hello World");
 	});
 
 	test('writeFile comprehensive parsing scenarios', () => {
-		// Test berbagai skenario parsing yang kompleks
+		// Test various complex parsing scenarios
 
 		// 1. Multiple file blocks
 		const multipleFilesContent = `[writeFile]
@@ -127,7 +127,7 @@ const user: User = { name: "John", age: 30 };
 [/file]
 [/writeFile]`;
 
-		// Test regex patterns untuk file blocks
+		// Test regex patterns for file blocks
 		const fileRegex = /\[file\s+(?:name|path)=["']?([^"'\s\]]+)["']?(?:\s+type=["'][^"']+["'])?\]([\s\S]*?)\[\s*\/file\s*\]/gi;
 		const diffRegex = /\[diff\s+(?:name|path)=["']?([^"'\s\]]+)["']?\]([\s\S]*?)\[\s*\/diff\s*\]/gi;
 
@@ -169,7 +169,7 @@ const user: User = { name: "John", age: 30 };
 	});
 
 	test('writeFile edge cases and error handling', () => {
-		// Test edge cases dan error handling
+		// Test edge cases and error handling
 
 		// 1. Empty content
 		const emptyContent = `[writeFile]
@@ -216,7 +216,7 @@ ${'console.log("test");\n'.repeat(1000)}
 		assert.ok(largeContent.includes("[writeFile]"), "Should handle large content");
 		assert.ok(largeContent.length > 10000, "Should be large content");
 
-		// Test regex dengan berbagai format attribute
+		// Test regex with various attribute formats
 		const flexibleAttributeRegex = /\[file\s+(?:name|path)=["']?([^"'\s\]]+)["']?(?:\s+type=["'][^"']+["'])?\]([\s\S]*?)\[\s*\/file\s*\]/gi;
 
 		// Should match various attribute formats

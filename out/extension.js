@@ -52,7 +52,8 @@ async function fetchAi(url, options, model, provider, userApiKey, context) {
         if (ollamaModel.startsWith("ollama:")) {
             ollamaModel = ollamaModel.replace("ollama:", "");
         }
-        const ollamaUrl = "http://localhost:11434/v1/chat/completions";
+        const customUrl = context?.globalState.get("vico.customApiUrl");
+        const ollamaUrl = (customUrl && customUrl.trim()) || "http://localhost:11434/v1/chat/completions";
         // Reconstruct messages from body
         let messages = [];
         const body = options.body ? JSON.parse(options.body) : {};
