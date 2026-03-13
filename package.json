@@ -204,6 +204,20 @@
           "minimum": 100,
           "maximum": 5000,
           "description": "Debounce time (ms) before requesting inline suggestions."
+        },
+        "vibeCoding.model.provider": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "ollama"
+          ],
+          "default": "openai",
+          "description": "Model provider for code completion and chat."
+        },
+        "vibeCoding.model.name": {
+          "type": "string",
+          "default": "gpt-5.1-codex-mini",
+          "description": "Model name to use (e.g. gpt-4o-mini for OpenAI, or llama3 for Ollama)."
         }
       }
     },

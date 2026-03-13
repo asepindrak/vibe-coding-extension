@@ -85,6 +85,51 @@
         transform: rotate(90deg);
         color: #c9d1d9;
       }
+
+      .manual-context-container {
+        margin: 8px 0;
+        padding: 10px;
+        background-color: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+      }
+
+      .manual-context-title {
+        font-size: 10px;
+        color: #8b949e;
+        margin-bottom: 8px;
+        text-transform: uppercase;
+        font-weight: bold;
+        letter-spacing: 0.5px;
+      }
+
+      .context-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .context-chip {
+        display: inline-flex;
+        align-items: center;
+        background-color: #21262d;
+        color: #c9d1d9;
+        padding: 4px 10px;
+        border-radius: 14px;
+        font-size: 12px;
+        border: 1px solid #30363d;
+        transition: background-color 0.2s;
+      }
+
+      .context-chip:hover {
+        background-color: #30363d;
+      }
+
+      .context-chip-icon {
+        margin-right: 6px;
+        font-size: 10px;
+        color: #8b949e;
+      }
     </style>
   </head>
 
@@ -140,25 +185,39 @@
             <option value="agent">🧠 Agent Mode</option>
             <option value="chat">💬 Chat Mode</option>
           </select>
-          <select id="modelSelect"
+          <select id="providerSelect"
             class="ml-2 bg-gray-800 text-white text-sm border border-gray-600 rounded p-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            title="OpenAI model" style="
+            title="Model Provider" style="
               height: 32px;
               padding: 4px 8px;
               background-color: #0d1117;
               color: #c9d1d9;
               border: 1px solid #30363d;
             ">
-            <option value="gpt-5.1-codex-mini">🧠 GPT-5.1-Codex-Mini</option>
-            <option value="gpt-5.3-codex">🧠 GPT-5.3-Codex</option>
-            <option value="gpt-5.2-codex">🧠 GPT-5.2-Codex</option>
-            <option value="gpt-5.1-codex">🧠 GPT-5.1-Codex</option>
-            <option value="gpt-5.1-codex-max">🧠 GPT-5.1-Codex-Max</option>
-            <option value="gpt-5-codex">🧠 GPT-5-Codex</option>
-            <option value="gpt-5.2-pro">🧠 GPT-5.2-Pro</option>
-            <option value="gpt-5-pro">🧠 GPT-5-Pro</option>
-            <option value="gpt-4o-mini">⚡ gpt-4o-mini</option>
+            <option value="openai">☁️ OpenAI</option>
+            <option value="ollama">🦙 Ollama</option>
           </select>
+          <select id="modelSelect"
+            class="ml-2 bg-gray-800 text-white text-sm border border-gray-600 rounded p-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            title="Model" style="
+              height: 32px;
+              padding: 4px 8px;
+              background-color: #0d1117;
+              color: #c9d1d9;
+              border: 1px solid #30363d;
+            ">
+            <!-- Options will be populated based on provider -->
+          </select>
+          <input id="ollamaModelInput" type="text" placeholder="Model name (e.g. llama3)"
+            class="ml-2 hidden bg-gray-800 text-white text-sm border border-gray-600 rounded p-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            style="
+              height: 32px;
+              padding: 4px 8px;
+              background-color: #0d1117;
+              color: #c9d1d9;
+              border: 1px solid #30363d;
+              width: 120px;
+            " />
           <button id="apiKeyButton" type="button" class="btn-elegant" style="
               height: 28px;
               padding: 0 8px;
@@ -375,9 +434,24 @@
         ">
         <div style="font-weight: 700; margin-bottom: 6px">OpenAI API Key</div>
         <div style="font-size: 12px; color: #8b949e; margin-bottom: 10px">
-          Paste API key. Leave empty then click Save to clear stored key.
+          Paste API key to update. Leave empty to keep current key.
         </div>
         <input id="apiKeyInput" type="password" placeholder="sk-..." style="
+            width: 100%;
+            height: 34px;
+            padding: 6px 10px;
+            border-radius: 8px;
+            border: 1px solid #30363d;
+            background: #0d1117;
+            color: #c9d1d9;
+            outline: none;
+            margin-bottom: 14px;
+          " />
+        <div style="font-weight: 700; margin-bottom: 6px">Custom API URL (Optional)</div>
+        <div style="font-size: 12px; color: #8b949e; margin-bottom: 10px">
+          Endpoint for custom API (OpenAI compatible). Default is OpenAI.
+        </div>
+        <input id="customApiUrlInput" type="text" placeholder="https://api.openai.com/v1/chat/completions" style="
             width: 100%;
             height: 34px;
             padding: 6px 10px;
@@ -475,6 +549,7 @@
       var attachments = []
       var pendingPromptAccess = null
       var currentAiSettings = {
+        selectedProvider: "openai",
         selectedModel: "gpt-5.1-codex-mini",
         hasUserApiKey: false,
         freePromptLimit: 20,
@@ -500,6 +575,7 @@
       window.filePathCache = new Map()
       var workspaceVersion = 0
       var cachedProjectContext = ""
+      var cachedIsEmptyWorkspace = false
       var cachedContextVersion = -1
 
       function updateQuotaBadgeFromSettings() {
@@ -522,6 +598,107 @@
         }
       }
 
+      async function fetchOllamaModels() {
+        try {
+          const response = await fetch("http://localhost:11434/api/tags")
+          if (!response.ok) return []
+          const data = await response.json()
+          if (!data || !data.models) return []
+          return data.models.map((m) => ({
+            name: `🦙 ${m.name}`,
+            value: `ollama:${m.name}`,
+          }))
+        } catch (err) {
+          return []
+        }
+      }
+
+      const openaiModels = [
+        { name: "🧠 GPT-5.1-Codex-Mini", value: "gpt-5.1-codex-mini" },
+        { name: "🧠 GPT-5.3-Codex", value: "gpt-5.3-codex" },
+        { name: "🧠 GPT-5.2-Codex", value: "gpt-5.2-codex" },
+        { name: "🧠 GPT-5.1-Codex", value: "gpt-5.1-codex" },
+        { name: "🧠 GPT-5.1-Codex-Max", value: "gpt-5.1-codex-max" },
+        { name: "🧠 GPT-5-Codex", value: "gpt-5-codex" },
+        { name: "🧠 GPT-5.2-Pro", value: "gpt-5.2-pro" },
+        { name: "🧠 GPT-5-Pro", value: "gpt-5-pro" },
+        { name: "⚡ gpt-4o-mini", value: "gpt-4o-mini" },
+      ]
+
+      async function updateModelSelect() {
+        const providerSelect = document.getElementById("providerSelect")
+        const modelSelect = document.getElementById("modelSelect")
+        const ollamaInput = document.getElementById("ollamaModelInput")
+        if (!modelSelect || !providerSelect) return
+
+        const provider = providerSelect.value
+        currentAiSettings.selectedProvider = provider
+
+        // Clear existing options
+        modelSelect.innerHTML = ""
+
+        if (provider === "openai") {
+          ollamaInput.classList.add("hidden")
+          modelSelect.classList.remove("hidden")
+          openaiModels.forEach((m) => {
+            const opt = document.createElement("option")
+            opt.value = m.value
+            opt.textContent = m.name
+            modelSelect.appendChild(opt)
+          })
+          // Set to current model if it's an OpenAI model, otherwise fallback
+          if (openaiModels.some((m) => m.value === currentAiSettings.selectedModel)) {
+            modelSelect.value = currentAiSettings.selectedModel
+          } else {
+            modelSelect.value = "gpt-5.1-codex-mini"
+            currentAiSettings.selectedModel = modelSelect.value
+          }
+        } else if (provider === "ollama") {
+          const ollamaModels = await fetchOllamaModels()
+          if (ollamaModels.length > 0) {
+            ollamaModels.forEach((m) => {
+              const opt = document.createElement("option")
+              opt.value = m.value
+              opt.textContent = m.name
+              modelSelect.appendChild(opt)
+            })
+
+            // Add an option to enter manually
+            const manualOpt = document.createElement("option")
+            manualOpt.value = "manual"
+            manualOpt.textContent = "⌨️ Enter Manually..."
+            modelSelect.appendChild(manualOpt)
+
+            // Set to current model if it's an Ollama model
+            if (currentAiSettings.selectedModel && currentAiSettings.selectedModel.startsWith("ollama:")) {
+              if (ollamaModels.some((m) => m.value === currentAiSettings.selectedModel)) {
+                modelSelect.value = currentAiSettings.selectedModel
+                ollamaInput.classList.add("hidden")
+                modelSelect.classList.remove("hidden")
+              } else {
+                modelSelect.value = "manual"
+                ollamaInput.classList.remove("hidden")
+                modelSelect.classList.remove("hidden")
+                ollamaInput.value = currentAiSettings.selectedModel.replace("ollama:", "")
+              }
+            } else {
+              modelSelect.value = ollamaModels[0].value
+              currentAiSettings.selectedModel = modelSelect.value
+              ollamaInput.classList.add("hidden")
+              modelSelect.classList.remove("hidden")
+            }
+          } else {
+            // No Ollama models found, show input directly
+            modelSelect.classList.add("hidden")
+            ollamaInput.classList.remove("hidden")
+            ollamaInput.value = currentAiSettings.selectedModel && currentAiSettings.selectedModel.startsWith("ollama:")
+              ? currentAiSettings.selectedModel.replace("ollama:", "")
+              : ""
+            currentAiSettings.selectedModel = `ollama:${ollamaInput.value}`
+          }
+        }
+      }
+
       function getModelOptionsSet() {
         const select = document.getElementById("modelSelect")
         if (select && select.options && select.options.length > 0) {
@@ -536,6 +713,9 @@
 
       function ensureSupportedModel(selected) {
         const candidate = String(selected || "").trim()
+        if (candidate.startsWith("ollama:")) {
+          return candidate
+        }
         const allowed = getModelOptionsSet()
         if (allowed.has(candidate)) {
           return candidate
@@ -547,6 +727,9 @@
       }
 
       function isFreeQuotaModel(model) {
+        if (String(model || "").startsWith("ollama:")) {
+          return true
+        }
         return ["gpt-5.1-codex-mini", "gpt-4o-mini"].includes(
           String(model || ""),
         )
@@ -565,6 +748,7 @@
       function hideWorkspacePrompt() {
         const btnWorkspace = document.getElementById("button-workspace")
         if (btnWorkspace) {
+          btnWorkspace.innerHTML = "Teach AI 🔄"
           btnWorkspace.style.display = "none"
         }
       }
@@ -700,14 +884,21 @@
       }
 
       async function refreshContextSearch(query = "") {
+        const q = String(query || "").trim()
+
+        // If we have a query and already have some entries, just filter locally for speed and case-insensitivity
+        if (q !== "" && contextPickerAllEntries.length > 0) {
+          renderContextPickerList(q)
+          return
+        }
+
         const list = document.getElementById("contextPickerList")
         if (list) {
           list.innerHTML = `<div style="padding:10px;font-size:12px;color:#8b949e;">Searching...</div>`
         }
-        const q = String(query || "").trim()
-        const searchPattern = q
-          ? `**/*${q.replace(/[\\*?[\]{}]/g, "")}*`
-          : "**/*"
+
+        // Use a broad search pattern to get all files for local case-insensitive filtering
+        const searchPattern = "**/*"
         const files = await listWorkspaceFiles(searchPattern, 10000)
         contextPickerAllEntries = buildContextEntries(files)
         renderContextPickerList(q)
@@ -751,19 +942,36 @@
         if (modal) modal.style.display = "none"
       }
 
+      function compactCode(source) {
+        if (!source) return ""
+        return (
+          source
+            // Remove comments (C-style, Python, Shell)
+            .replace(/\/\*[\s\S]*?\*\//g, "")
+            .replace(/\/\/.*$/gm, "")
+            .replace(/^\s*#.*$/gm, "")
+            // Reduce multiple newlines
+            .replace(/\n\s*\n/g, "\n")
+            // Trim each line
+            .split("\n")
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0)
+            .join("\n")
+            .trim()
+        )
+      }
+
       async function buildSelectedContextPromptBlock() {
         if (!selectedContextRefs.length) return ""
         let out = "\n\n[manual_context]\n"
         for (const ref of selectedContextRefs) {
           if (ref.type === "file") {
-            const content = await readContextFile(ref.path)
-            const clipped = String(content || "").slice(0, 6000)
-            out += `\n[file:${ref.path}]\n${clipped}\n[/file:${ref.path}]\n`
+            out += `\n[file_path:${ref.path}]\n`
           } else {
             const folderFiles = (await listWorkspaceFiles(`${ref.path}/**/*`))
-              .slice(0, 80)
+              .slice(0, 100)
               .join("\n")
-            out += `\n[folder:${ref.path}]\n${folderFiles}\n[/folder:${ref.path}]\n`
+            out += `\n[folder_path:${ref.path}]\nFiles in folder:\n${folderFiles}\n`
           }
         }
         out += "\n[/manual_context]\n"
@@ -875,8 +1083,12 @@
       function openApiKeyModal() {
         const modal = document.getElementById("apiKeyModal")
         const input = document.getElementById("apiKeyInput")
+        const customUrlInput = document.getElementById("customApiUrlInput")
         if (!modal || !input) return
         input.value = ""
+        if (customUrlInput && currentAiSettings.customApiUrl) {
+          customUrlInput.value = currentAiSettings.customApiUrl
+        }
         modal.style.display = "flex"
         setTimeout(() => input.focus(), 10)
       }
@@ -889,7 +1101,9 @@
 
       function submitApiKeyFromModal() {
         const modelSelect = document.getElementById("modelSelect")
+        const providerSelect = document.getElementById("providerSelect")
         const input = document.getElementById("apiKeyInput")
+        const customUrlInput = document.getElementById("customApiUrlInput")
         if (!input) return
         vscode.postMessage({
           type: "saveAiSettings",
@@ -897,7 +1111,10 @@
             (modelSelect && modelSelect.value) ||
             currentAiSettings.selectedModel ||
             "gpt-5.1-codex-mini",
+          provider: (providerSelect && providerSelect.value) || "openai",
           userApiKey: input.value.trim(),
+          customApiUrl: customUrlInput ? customUrlInput.value.trim() : "",
+          keepExistingApiKey: input.value.trim() === "",
         })
         closeApiKeyModal()
       }
@@ -967,7 +1184,7 @@
       }
 
       var isInitialized = false
-      function startNewChat(skipSave = false) {
+      async function startNewChat(skipSave = false) {
         try {
           if (isLoading) {
             // Force stop if user confirmed new chat while loading
@@ -995,6 +1212,7 @@
           // Reset state
           currentSessionId = Date.now().toString()
           messageArray = []
+          await updateModelSelect()
           const content = document.getElementById("content")
           if (content) content.innerHTML = ""
           const msgInput = document.getElementById("messageInput")
@@ -1022,6 +1240,7 @@
           cachedProjectContext = ""
           cachedContextVersion = -1
           selectedContextRefs = []
+          renderSelectedContextChips()
 
           // Mark as initialized to prevent tokenValid from restoring old session state
           isInitialized = true
@@ -1072,6 +1291,7 @@
         cachedProjectContext = ""
         cachedContextVersion = -1
         selectedContextRefs = []
+        renderSelectedContextChips()
         attachments = []
         renderAttachments()
 
@@ -1194,9 +1414,10 @@
         }
       })
 
-      document.addEventListener("DOMContentLoaded", function () {
+      document.addEventListener("DOMContentLoaded", async function () {
         // Always request history on load to ensure window.chatHistory is populated
         vscode.postMessage({ type: "getHistory" })
+        await updateModelSelect()
 
         const token = localStorage.getItem("token")
         const userId = localStorage.getItem("userId")
@@ -1215,13 +1436,44 @@
         if (modeSelect) {
           modeSelect.addEventListener("change", updatePlaceholder)
         }
+        const providerSelect = document.getElementById("providerSelect")
+        if (providerSelect) {
+          providerSelect.addEventListener("change", async () => {
+            await updateModelSelect()
+            // Save settings when provider changes
+            const modelSelect = document.getElementById("modelSelect")
+            const ollamaInput = document.getElementById("ollamaModelInput")
+            let modelValue = modelSelect.value
+            if (providerSelect.value === "ollama" && modelValue === "manual") {
+              modelValue = `ollama:${ollamaInput.value}`
+            }
+            vscode.postMessage({
+              type: "saveAiSettings",
+              model: modelValue,
+              provider: providerSelect.value,
+              keepExistingApiKey: true,
+            })
+          })
+        }
         setupAuxStatusAutoVisibility()
         if (modelSelect) {
           modelSelect.addEventListener("change", () => {
+            const providerSelect = document.getElementById("providerSelect")
+            const ollamaInput = document.getElementById("ollamaModelInput")
+
+            if (modelSelect.value === "manual") {
+              ollamaInput.classList.remove("hidden")
+              ollamaInput.focus()
+              return
+            } else {
+              ollamaInput.classList.add("hidden")
+            }
+
             const requestedModel = ensureSupportedModel(
               modelSelect.value || "gpt-5.1-codex-mini",
             )
             if (
+              providerSelect.value === "openai" &&
               !currentAiSettings.hasUserApiKey &&
               !isFreeQuotaModel(requestedModel)
             ) {
@@ -1237,7 +1489,22 @@
             vscode.postMessage({
               type: "saveAiSettings",
               model: currentAiSettings.selectedModel,
+              provider: providerSelect.value,
               userApiKey: "",
+              keepExistingApiKey: true,
+            })
+          })
+        }
+        const ollamaModelInput = document.getElementById("ollamaModelInput")
+        if (ollamaModelInput) {
+          ollamaModelInput.addEventListener("change", () => {
+            const providerSelect = document.getElementById("providerSelect")
+            const modelValue = `ollama:${ollamaModelInput.value}`
+            currentAiSettings.selectedModel = modelValue
+            vscode.postMessage({
+              type: "saveAiSettings",
+              model: modelValue,
+              provider: providerSelect.value,
               keepExistingApiKey: true,
             })
           })
@@ -1290,6 +1557,7 @@
         const btnWorkspace = document.getElementById("button-workspace")
         if (btnWorkspace) {
           btnWorkspace.style.display = "none"
+          btnWorkspace.addEventListener("click", () => updateWorkspaces())
         }
         const logoutButton = document.getElementById("logoutButton")
         logoutButton.addEventListener("click", logout)
@@ -1403,6 +1671,13 @@
             if (contextSearchTimer) {
               clearTimeout(contextSearchTimer)
             }
+
+            // If we have entries, filter locally immediately
+            if (contextPickerAllEntries.length > 0 && q !== "") {
+              renderContextPickerList(q)
+              return
+            }
+
             contextSearchTimer = setTimeout(() => {
               refreshContextSearch(q)
             }, 220)
@@ -1552,6 +1827,7 @@
             }
             const btnWorkspace = document.getElementById("button-workspace")
             if (btnWorkspace) {
+              btnWorkspace.innerHTML = "Teach AI 🔄"
               btnWorkspace.style.display = isWorkspaceDirty
                 ? "inline-flex"
                 : "none"
@@ -1571,7 +1847,12 @@
               ...messageEvent,
             }
             const modelSelect = document.getElementById("modelSelect")
+            const providerSelect = document.getElementById("providerSelect")
+            if (providerSelect) {
+              providerSelect.value = currentAiSettings.selectedProvider || "openai"
+            }
             if (modelSelect) {
+              await updateModelSelect()
               const allowedModel = resolveAllowedModelOrFallback(
                 currentAiSettings.selectedModel,
               )
@@ -1594,7 +1875,12 @@
               ...messageEvent,
             }
             const modelSelect = document.getElementById("modelSelect")
+            const providerSelect = document.getElementById("providerSelect")
+            if (providerSelect) {
+              providerSelect.value = currentAiSettings.selectedProvider || "openai"
+            }
             if (modelSelect) {
+              await updateModelSelect()
               const allowedModel = resolveAllowedModelOrFallback(
                 currentAiSettings.selectedModel,
               )
@@ -1611,6 +1897,61 @@
             return
           }
 
+          if (messageEvent.command === "ollamaChunk") {
+            const { uniqueId, content } = messageEvent
+            updateMessagesAssistant({
+              uniqueId: `assistant-${uniqueId}`,
+              content: content,
+            })
+            const contentDiv = document.getElementById("content")
+            contentDiv.scrollTop = contentDiv.scrollHeight
+            return
+          }
+
+          if (messageEvent.command === "ollamaFinished") {
+            const { uniqueId, content } = messageEvent
+
+            // finalize: save and tidy up UI
+            messageArray.push({ role: "assistant", content: content })
+
+            const loader = document.getElementById("loader")
+            const sendBtn = document.getElementById("button-send")
+            const stopBtn = document.getElementById("button-stop")
+            const newChatButton = document.getElementById("newChatButton")
+            const historyButton = document.getElementById("historyButton")
+
+            loader.classList.add("hidden")
+            stopBtn.classList.add("hidden")
+            sendBtn.classList.remove("hidden")
+
+            if (newChatButton) newChatButton.disabled = false
+            if (historyButton) historyButton.disabled = false
+
+            document.getElementById("generating").innerHTML = ""
+            selectedContextRefs = []
+            renderSelectedContextChips()
+            saveState()
+            setTimeout(() => {
+              isLoading = false
+              messageInput.disabled = false
+              messageInput.focus()
+            }, 1000)
+
+            // Trigger writeFile validation if needed
+            const hasWriteFile = /\[(?:writeFile|writeFileVico)\]/i.test(content)
+            if (hasWriteFile) {
+              const normalizedAssistantMessage = content.replace(
+                /\[(\/?)writeFileVico\s*\]/gi,
+                "[$1writeFile]",
+              )
+              vscode.postMessage({
+                type: "writeFile",
+                assistantMessage: normalizedAssistantMessage,
+              })
+            }
+            return
+          }
+
           if (messageEvent.command === "tokenValid") {
             localStorage.setItem("token", messageEvent.token)
             localStorage.setItem("userId", messageEvent.userId)
@@ -1620,6 +1961,7 @@
             cachedProjectContext = ""
             cachedContextVersion = -1
             selectedContextRefs = []
+            renderSelectedContextChips()
             attachments = []
             renderAttachments()
             console.log(
@@ -2004,10 +2346,32 @@
         messageInput.disabled = false
         messageInput.focus()
 
+        selectedContextRefs = []
+        renderSelectedContextChips()
+
         document.getElementById("generating").innerHTML = "Stopped."
         setTimeout(() => {
           if (!isLoading) document.getElementById("generating").innerHTML = ""
         }, 2000)
+      }
+
+      function compactHistory(history, maxItems = 10, maxChars = 2000) {
+        if (!Array.isArray(history) || history.length === 0) return []
+        // Ambil N pesan terakhir
+        const recent = history.slice(-maxItems)
+        return recent.map((m) => {
+          let content = String(m.content || "")
+          if (content.length > maxChars) {
+            content =
+              content.substring(0, maxChars / 2) +
+              "\n... (content truncated) ...\n" +
+              content.substring(content.length - maxChars / 2)
+          }
+          return {
+            role: m.role,
+            content: content,
+          }
+        })
       }
 
       async function sendMessageToApi(message, isRetry = false) {
@@ -2142,6 +2506,7 @@
             await handleAgentWorkflow(message, uniqueId, snapshot, false, {
               model: currentAiSettings.selectedModel || selectedModel,
               userApiKey: resolvedUserApiKey,
+              history: compactHistory(messageArray), // Also send for consistency
             })
           } catch (err) {
             if (err.name !== "AbortError") {
@@ -2162,11 +2527,22 @@
           attachments: normalizedAttachments,
           guardrails: currentGuardrails,
           sessionId: currentSessionId,
+          history: compactHistory(messageArray), // Send history for Ollama or if backend needs it
         }
 
         // Clear attachments
         attachments = []
         renderAttachments()
+
+        // IF OLLAMA: Bypass remote backend and use extension logic
+        if (data.model && data.model.startsWith("ollama:")) {
+          vscode.postMessage({
+            type: "ollamaChat",
+            data: data,
+            uniqueId: uniqueId,
+          })
+          return
+        }
 
         try {
           const response = await fetch("http://localhost:13100/api/message", {
@@ -2191,7 +2567,8 @@
                 if (bubble) bubble.parentElement.remove()
 
                 pendingMessage = message // Save for retry
-                pendingAttachments = currentAttachments
+                pendingAttachments = normalizedAttachments
+                // Mark currentSessionId for retry so it's not reset
                 await updateWorkspaces(true) // Call with silent=true
                 return
               }
@@ -2199,6 +2576,7 @@
               console.error(e)
             }
 
+            // If not WORKSPACE_MISSING, then it's a real error
             throw new Error("Failed to send message")
           }
 
@@ -2377,8 +2755,10 @@
           stepAttemptCounts: new Map(),
           commandAttemptCountsByVersion: new Map(),
           fileTouchCounts: new Map(),
+          recent_steps: [],
         }
         let projectHasDependencyFile = false
+        let isEmptyWorkspace = cachedIsEmptyWorkspace
         let lastForceRewriteHint = ""
         const dependencyMarkers = [
           "package.json",
@@ -2611,6 +2991,7 @@
           })
 
           // === MANDATORY PROJECT STRUCTURE SCAN ===
+          isEmptyWorkspace = false
           try {
             updateMessagesAssistant({
               uniqueId: `assistant-${currentUniqueId}`,
@@ -2635,6 +3016,13 @@
               window.addEventListener("message", handleMessage)
               vscode.postMessage({ command: "listFiles", pattern: "**/*" })
             })
+
+            isEmptyWorkspace = fileList.length === 0 ||
+              (fileList.length === 1 && fileList[0] === ".vico/history.md")
+
+            if (isEmptyWorkspace) {
+              currentContext += `\n=== CRITICAL: EMPTY WORKSPACE DETECTED ===\n- The workspace is empty (or only contains history).\n- You MUST run a scaffold command as the FIRST step.\n- Preferred command: [command] npx create-next-app . --yes --ts --eslint --tailwind --app --src-dir --import-alias "@/*" --use-npm [/command]\n- Do NOT write files before scaffolding.\n========================================\n`
+            }
 
             if (fileList.length > 0) {
               projectHasDependencyFile = fileList.some((f) =>
@@ -2700,6 +3088,7 @@
 
           currentContext += `\n=== ANTI-PATTERNS (STRICTLY FORBIDDEN) ===\n1. **NO EMPTY SCAFFOLDING**: Do NOT create empty folders or '.gitkeep' files. If you need a folder, create it by writing a REAL file inside it (e.g., 'components/Navbar.tsx', not just 'components/').\n2. **NO PLACEHOLDERS**: Do NOT write files with "// TODO: implement". Write the ACTUAL code requested.\n3. **NO HALLUCINATED COMPLETION**: Do not say "Task Completed" if you have only created folders. You must write the functional code.\n==========================================\n`
           cachedProjectContext = currentContext
+          cachedIsEmptyWorkspace = isEmptyWorkspace
           cachedContextVersion = workspaceVersion
           isWorkspaceDirty = false
         }
@@ -2752,43 +3141,205 @@
           }
 
           try {
-            // 1. Request Plan
-            const response = await fetch(
-              "http://localhost:13100/api/agent/plan",
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  userId,
-                  token,
-                  model: selectedModel,
-                  userApiKey,
-                  verification_mode: verificationMode,
-                  message,
-                  attachments,
-                  history: messageArray,
-                  context: currentContext, // Pass accumulated context
-                  guardrails: currentGuardrails,
-                  sessionId: currentSessionId,
-                }),
-                signal: agentAbortController?.signal,
-              },
-            )
+            // 1. Analyze / Discover Codebase (Local Ollama Only)
+            if (selectedModel.startsWith("ollama:") && iteration === 1 && !isEmptyWorkspace) {
+              updateMessagesAssistant({
+                uniqueId: `assistant-${currentUniqueId}`,
+                content: `🧠 Analyzing codebase with ${selectedModel} (Local)...`,
+              })
 
-            if (!response.ok) {
-              throw new Error(`Plan request failed (${response.status})`)
+              const analysisResponse = await new Promise((resolve, reject) => {
+                const requestId = Date.now() + Math.random()
+                const handleMessage = (event) => {
+                  if (event.data.command === "ollamaAgentResponse" && event.data.uniqueId === requestId) {
+                    window.removeEventListener("message", handleMessage)
+                    if (event.data.error) reject(new Error(event.data.error))
+                    else resolve(event.data.content)
+                  }
+                }
+                window.addEventListener("message", handleMessage)
+                vscode.postMessage({
+                  command: "ollamaAgent",
+                  mode: "analyze",
+                  uniqueId: requestId,
+                  data: {
+                    model: selectedModel,
+                    message,
+                    attachments: attachments,
+                    history: compactHistory(messageArray),
+                    context: currentContext,
+                  }
+                })
+              })
+
+              // If model requested file reads, handle them
+              let analysisText = analysisResponse
+              // More robust regex to catch variations in output
+              const readMatches = [...analysisResponse.matchAll(/\[readFile\]\s*\[file\s+path=["']([^"']+)["']\s*\]\s*\[\/readFile\]/g)]
+              if (readMatches.length > 0) {
+                updateMessagesAssistant({
+                  uniqueId: `assistant-${currentUniqueId}`,
+                  content: `🧠 Reading ${readMatches.length} files for better context...`,
+                })
+                let readContext = "\n[ANALYSIS_FILE_READS]\n"
+                for (const m of readMatches) {
+                  const filePath = m[1]
+                  const content = await readContextFile(filePath)
+                  if (content) {
+                    readContext += `\nFILE: ${filePath}\nCONTENT:\n${content}\n`
+                  }
+                }
+                readContext += "[/ANALYSIS_FILE_READS]\n"
+                currentContext += readContext
+              }
+
+              // Remove existing codebase analysis if present (to avoid duplication in context)
+              currentContext = currentContext.replace(/\[CODEBASE_ANALYSIS\][\s\S]*?\[\/CODEBASE_ANALYSIS\]/g, "")
+              currentContext += `\n[CODEBASE_ANALYSIS]\n${analysisText}\n[/CODEBASE_ANALYSIS]\n`
             }
-            const reader = response.body.getReader()
-            const decoder = new TextDecoder()
-            let planJson = ""
 
-            while (true) {
-              const { value, done } = await reader.read()
-              if (done) break
-              const chunk = decoder.decode(value, { stream: true })
-              planJson += chunk
+            // 2. Request Plan
+            let planJson = ""
+            if (selectedModel.startsWith("ollama:")) {
+              updateMessagesAssistant({
+                uniqueId: `assistant-${currentUniqueId}`,
+                content: `🧠 Thinking & Planning with ${selectedModel} (Local)...`,
+              })
+
+              const ollamaResponse = await new Promise((resolve, reject) => {
+                const requestId = Date.now() + Math.random()
+                const handleMessage = (event) => {
+                  if (event.data.command === "ollamaAgentResponse" && event.data.uniqueId === requestId) {
+                    window.removeEventListener("message", handleMessage)
+                    if (event.data.error) reject(new Error(event.data.error))
+                    else resolve(event.data.content)
+                  }
+                }
+                window.addEventListener("message", handleMessage)
+                vscode.postMessage({
+                  command: "ollamaAgent",
+                  mode: "plan",
+                  uniqueId: requestId,
+                  data: {
+                    model: selectedModel,
+                    message,
+                    attachments: attachments,
+                    history: compactHistory(messageArray),
+                    context: currentContext,
+                    state: { recent_steps: workflowMeta.recent_steps }
+                  }
+                })
+              })
+
+              // Normalize plan object like in agent.js
+              let planData
+              try {
+                // Find JSON in the response (robust extraction)
+                let jsonString = (ollamaResponse || "").trim()
+                const markdownMatch = jsonString.match(/```(?:json)?\s*([\s\S]*?)```/i)
+                if (markdownMatch) {
+                  jsonString = markdownMatch[1].trim()
+                }
+
+                const firstBrace = jsonString.indexOf("{")
+                const lastBrace = jsonString.lastIndexOf("}")
+
+                if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+                  // Attempt matching brace counting for precision
+                  let potentialJson = ""
+                  let braceCount = 0
+                  let foundStart = false
+                  for (let i = firstBrace; i < jsonString.length; i++) {
+                    if (jsonString[i] === "{") {
+                      braceCount++
+                      foundStart = true
+                    } else if (jsonString[i] === "}") {
+                      braceCount--
+                    }
+                    if (foundStart && braceCount === 0) {
+                      potentialJson = jsonString.substring(firstBrace, i + 1)
+                      break
+                    }
+                  }
+                  if (!potentialJson) {
+                    potentialJson = jsonString.substring(firstBrace, lastBrace + 1)
+                  }
+
+                  // Final cleanup before parse
+                  potentialJson = potentialJson
+                    .replace(/[\u200B-\u200D\uFEFF]/g, "") // Remove zero-width spaces
+                    .trim()
+
+                  try {
+                    planData = JSON.parse(potentialJson)
+                  } catch (innerError) {
+                    console.warn("JSON.parse failed on extracted string, attempting repair:", innerError)
+                    // Basic repair for trailing commas
+                    const repairedJson = potentialJson
+                      .replace(/,\s*([\]}])/g, "$1")
+                      .replace(/(\r\n|\n|\r)/gm, " ")
+                    planData = JSON.parse(repairedJson)
+                  }
+                } else {
+                  // If no braces found, maybe it's raw text? Try to wrap or throw
+                  throw new Error("No JSON object found in response")
+                }
+              } catch (e) {
+                console.error("Failed to parse Ollama plan:", e, "Raw response:", ollamaResponse)
+                throw new Error("Invalid plan format from local model")
+              }
+              planJson = JSON.stringify(planData)
+            } else {
+              const response = await fetch(
+                "http://localhost:13100/api/agent/plan",
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    userId,
+                    token,
+                    model: selectedModel,
+                    userApiKey,
+                    verification_mode: verificationMode,
+                    message,
+                    attachments,
+                    history: aiConfig.history || compactHistory(messageArray),
+                    context: currentContext, // Pass accumulated context
+                    guardrails: currentGuardrails,
+                    sessionId: currentSessionId,
+                  }),
+                  signal: agentAbortController?.signal,
+                },
+              )
+
+              if (!response.ok) {
+                const clone = response.clone()
+                try {
+                  const errJson = await clone.json()
+                  if (errJson.error === "WORKSPACE_MISSING") {
+                    console.log("Plan: Workspace missing, triggering auto-scan...")
+                    pendingMessage = message
+                    pendingAttachments = attachments
+                    // We need to stop the current loop and retry after scan
+                    await updateWorkspaces(true)
+                    return
+                  }
+                } catch (e) {
+                  console.error(e)
+                }
+                throw new Error(`Plan request failed (${response.status})`)
+              }
+              const reader = response.body.getReader()
+              const decoder = new TextDecoder()
+
+              while (true) {
+                const { value, done } = await reader.read()
+                if (done) break
+                const chunk = decoder.decode(value, { stream: true })
+                planJson += chunk
+              }
             }
 
             let planData
@@ -2831,8 +3382,29 @@
               continue
             }
 
+            // Normalize plan array
+            const rawPlan = Array.isArray(planData.plan)
+              ? planData.plan
+              : Array.isArray(planData.steps)
+                ? planData.steps
+                : Array.isArray(planData.actions)
+                  ? planData.actions
+                  : []
+            planData.plan = rawPlan
+
             // Check for completion
             if (!planData.plan || planData.plan.length === 0) {
+              if (iteration === 1) {
+                // First iteration should NOT have an empty plan.
+                // It means the model failed to follow instructions or hallucinated an empty response.
+                console.warn("Empty plan on first iteration. Retrying...")
+                currentContext += `\n[Planner Error] Empty plan returned on first iteration. Please generate a concrete plan with at least one action step (file_write or terminal_command).\n`
+                updateMessagesAssistant({
+                  uniqueId: `assistant-${currentUniqueId}`,
+                  content: `⚠️ **Planner mengembalikan rencana kosong, mencoba ulang otomatis (iterasi ${iteration}/${MAX_ITERATIONS}).**`,
+                })
+                continue
+              }
               updateMessagesAssistant({
                 uniqueId: `assistant-${currentUniqueId}`,
                 content: `✅ **Task Completed.**`,
@@ -3499,39 +4071,94 @@ ${result.summary || "Executed successfully."}`,
                 content: currentStepMarkdown + `\n  > *Thinking...*`,
               })
 
-              const thinkResponse = await fetch(
-                "http://localhost:13100/api/agent/execute",
-                {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    userId,
-                    token,
-                    model: selectedModel,
-                    userApiKey,
-                    verification_mode: verificationMode,
-                    step,
-                    context, // Pass the accumulated context
+              if (selectedModel.startsWith("ollama:")) {
+                thinkOutput = await new Promise((resolve, reject) => {
+                  const requestId = Date.now() + Math.random()
+                  let accumulated = ""
+                  const handleMessage = (event) => {
+                    if (event.data.command === "ollamaAgentStream" && event.data.uniqueId === requestId) {
+                      accumulated += event.data.content
+                      // Update UI with stream
+                      const thoughtMatch = accumulated.match(/\*\*Thought:\*\*([\s\S]*?)(?=\*\*Action:|$)/i)
+                      const currentThought = thoughtMatch ? thoughtMatch[1].trim() : "Analyzing context..."
+                      updateMessagesAssistant({
+                        uniqueId: `assistant-${uniqueId}`,
+                        content: currentStepMarkdown + `\n  > *Thought:* ${currentThought}\n`
+                      })
+                    }
+                    if (event.data.command === "ollamaAgentResponse" && event.data.uniqueId === requestId) {
+                      window.removeEventListener("message", handleMessage)
+                      if (event.data.error) reject(new Error(event.data.error))
+                      else resolve(event.data.content)
+                    }
+                  }
+                  window.addEventListener("message", handleMessage)
+                  vscode.postMessage({
+                    command: "ollamaAgent",
                     mode: "think",
-                    attachments,
-                    guardrails: currentGuardrails,
-                    sessionId: currentSessionId,
-                  }),
-                  signal: agentAbortController?.signal,
-                },
-              )
-              if (!thinkResponse.ok) {
-                throw new Error(
-                  `Think request failed (${thinkResponse.status})`,
+                    uniqueId: requestId,
+                    data: {
+                      model: selectedModel,
+                      step,
+                      context,
+                      attachments: attachments,
+                      history: compactHistory(messageArray),
+                      state: { recent_steps: workflowMeta.recent_steps }
+                    }
+                  })
+                })
+              } else {
+                const thinkResponse = await fetch(
+                  "http://localhost:13100/api/agent/execute",
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      userId,
+                      token,
+                      model: selectedModel,
+                      userApiKey,
+                      verification_mode: verificationMode,
+                      step,
+                      context, // Pass the accumulated context
+                      mode: "think",
+                      attachments,
+                      guardrails: currentGuardrails,
+                      sessionId: currentSessionId,
+                    }),
+                    signal: agentAbortController?.signal,
+                  },
                 )
-              }
 
-              const thinkReader = thinkResponse.body.getReader()
-              const thinkDecoder = new TextDecoder()
-              while (true) {
-                const { value, done } = await thinkReader.read()
-                if (done) break
-                thinkOutput += thinkDecoder.decode(value, { stream: true })
+                if (!thinkResponse.ok) {
+                  const clone = thinkResponse.clone()
+                  try {
+                    const errJson = await clone.json()
+                    if (errJson.error === "WORKSPACE_MISSING") {
+                      console.log("Think: Workspace missing, triggering auto-scan...")
+                      pendingMessage = originalRequest
+                      pendingAttachments = attachments
+                      await updateWorkspaces(true)
+                      // Stop current workflow and wait for retry
+                      isLoading = false
+                      throw new Error("WORKSPACE_MISSING")
+                    }
+                  } catch (e) {
+                    if (e.message === "WORKSPACE_MISSING") throw e
+                    console.error(e)
+                  }
+                  throw new Error(
+                    `Think request failed (${thinkResponse.status})`,
+                  )
+                }
+
+                const thinkReader = thinkResponse.body.getReader()
+                const thinkDecoder = new TextDecoder()
+                while (true) {
+                  const { value, done } = await thinkReader.read()
+                  if (done) break
+                  thinkOutput += thinkDecoder.decode(value, { stream: true })
+                }
               }
 
               const thoughtMatch = thinkOutput.match(
@@ -3560,79 +4187,91 @@ ${result.summary || "Executed successfully."}`,
             const readFileMatch = thinkOutput.match(readFileRegex)
 
             if (readFileMatch) {
-              const fileBlock = readFileMatch[1]
-              // Use non-global regex for matchAll or exec in loop
+              const fileBlock = readFileMatch[1].trim()
               const filePathsRegex = /\[file\s+path=["']([^"']+)["']\s*\]/g
               let fileMatch
+              let foundFileTags = false
 
               while ((fileMatch = filePathsRegex.exec(fileBlock)) !== null) {
+                foundFileTags = true
                 const filePath = fileMatch[1]
+                await doReadFile(filePath)
+              }
 
-                // Visual feedback
-                currentStepMarkdown += `\n  > *Reading file:* ${filePath}\n`
+              // Fallback for plain [readFile]path/to/file[/readFile]
+              if (!foundFileTags && fileBlock.length > 0) {
+                // If the block is short and doesn't contain [file tags, treat as single path
+                if (!fileBlock.includes("[file")) {
+                  await doReadFile(fileBlock)
+                }
+              }
+            }
+
+            async function doReadFile(filePath) {
+              // Visual feedback
+              currentStepMarkdown += `\n  > *Reading file:* ${filePath}\n`
+              updateMessagesAssistant({
+                uniqueId: `assistant-${uniqueId}`,
+                content: currentStepMarkdown,
+              })
+
+              // Send readFile to extension with timeout
+              try {
+                const fileContent = await new Promise((resolve, reject) => {
+                  // Define handler first so we can remove it
+                  let handleMessage
+                  let handleStop
+
+                  const timeout = setTimeout(() => {
+                    window.removeEventListener("message", handleMessage)
+                    window.removeEventListener("agent-stop", handleStop)
+                    resolve(`Error: Timeout reading file ${filePath}`)
+                  }, 15000) // 15 second timeout
+
+                  handleStop = () => {
+                    clearTimeout(timeout)
+                    window.removeEventListener("message", handleMessage)
+                    window.removeEventListener("agent-stop", handleStop)
+                    const err = new Error("Aborted by user")
+                    err.name = "AbortError"
+                    reject(err)
+                  }
+
+                  handleMessage = (event) => {
+                    if (
+                      event.data.command === "readFileResult" &&
+                      event.data.filePath === filePath
+                    ) {
+                      clearTimeout(timeout)
+                      window.removeEventListener("message", handleMessage)
+                      window.removeEventListener("agent-stop", handleStop)
+                      resolve(event.data.content || event.data.error || "")
+                    }
+                  }
+                  window.addEventListener("message", handleMessage)
+                  window.addEventListener("agent-stop", handleStop)
+                  vscode.postMessage({ type: "readFile", filePath })
+                })
+
+                const err = new Error("Aborted by user")
+                err.name = "AbortError"
+                if (!isLoading) throw err
+
+                context += `\nFile Content (${filePath}):\n${fileContent}\n`
+
+                // Visual feedback completion
+                currentStepMarkdown += `\n  > *Read complete.*\n`
                 updateMessagesAssistant({
                   uniqueId: `assistant-${uniqueId}`,
                   content: currentStepMarkdown,
                 })
-
-                // Send readFile to extension with timeout
-                try {
-                  const fileContent = await new Promise((resolve, reject) => {
-                    // Define handler first so we can remove it
-                    let handleMessage
-                    let handleStop
-
-                    const timeout = setTimeout(() => {
-                      window.removeEventListener("message", handleMessage)
-                      window.removeEventListener("agent-stop", handleStop)
-                      resolve(`Error: Timeout reading file ${filePath}`)
-                    }, 15000) // 15 second timeout
-
-                    handleStop = () => {
-                      clearTimeout(timeout)
-                      window.removeEventListener("message", handleMessage)
-                      window.removeEventListener("agent-stop", handleStop)
-                      const err = new Error("Aborted by user")
-                      err.name = "AbortError"
-                      reject(err)
-                    }
-
-                    handleMessage = (event) => {
-                      if (
-                        event.data.command === "readFileResult" &&
-                        event.data.filePath === filePath
-                      ) {
-                        clearTimeout(timeout)
-                        window.removeEventListener("message", handleMessage)
-                        window.removeEventListener("agent-stop", handleStop)
-                        resolve(event.data.content || event.data.error || "")
-                      }
-                    }
-                    window.addEventListener("message", handleMessage)
-                    window.addEventListener("agent-stop", handleStop)
-                    vscode.postMessage({ type: "readFile", filePath })
-                  })
-
-                  const err = new Error("Aborted by user")
-                  err.name = "AbortError"
-                  if (!isLoading) throw err
-
-                  context += `\nFile Content (${filePath}):\n${fileContent}\n`
-
-                  // Visual feedback completion
-                  currentStepMarkdown += `\n  > *Read complete.*\n`
-                  updateMessagesAssistant({
-                    uniqueId: `assistant-${uniqueId}`,
-                    content: currentStepMarkdown,
-                  })
-                } catch (e) {
-                  context += `\nError reading file ${filePath}: ${e}\n`
-                  currentStepMarkdown += `\n  > *Error reading file:* ${e}\n`
-                  updateMessagesAssistant({
-                    uniqueId: `assistant-${uniqueId}`,
-                    content: currentStepMarkdown,
-                  })
-                }
+              } catch (e) {
+                context += `\nError reading file ${filePath}: ${e}\n`
+                currentStepMarkdown += `\n  > *Error reading file:* ${e}\n`
+                updateMessagesAssistant({
+                  uniqueId: `assistant-${uniqueId}`,
+                  content: currentStepMarkdown,
+                })
               }
             }
 
@@ -3812,58 +4451,98 @@ ${result.summary || "Executed successfully."}`,
               })
             }
 
-            const response = await fetch(
-              "http://localhost:13100/api/agent/execute",
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  userId,
-                  token,
-                  model: selectedModel,
-                  userApiKey,
-                  verification_mode: verificationMode,
-                  step,
-                  context,
-                  mode: "execute",
-                  attachments,
-                  guardrails: currentGuardrails,
-                  sessionId: currentSessionId,
-                }),
-                signal: agentAbortController?.signal,
-              },
-            )
-            if (!response.ok) {
-              throw new Error(`Execute request failed (${response.status})`)
-            }
-
-            const reader = response.body.getReader()
-            const decoder = new TextDecoder()
             let stepOutput = ""
-
-            while (true) {
-              const { value, done } = await reader.read()
-              if (done) break
-              const chunk = decoder.decode(value, { stream: true })
-              stepOutput += chunk
-
-              // Only update UI if we have a substantial chunk or it's been a while?
-              // For now, let's assume stepOutput is raw text.
-              // We want to replace the "Executing..." block or append to it.
-              // But stepOutput grows.
-              // Let's create a temporary variable for display.
-              // We need to escape special markdown characters if we are dumping raw text?
-              // The agent output usually contains markdown.
-
-              // Strategy: Replace "Executing..." with "Executing...\n\n" + stepOutput
-              // But planMarkdown already has "Executing...".
-
-              const executingBlock = `\n  > *Executing...*\n`
-              // Update with streaming output
-              updateMessagesAssistant({
-                uniqueId: `assistant-${uniqueId}`,
-                content: planMarkdown + executingBlock + `\n${stepOutput}`,
+            if (selectedModel.startsWith("ollama:")) {
+              stepOutput = await new Promise((resolve, reject) => {
+                const requestId = Date.now() + Math.random()
+                let accumulated = ""
+                const handleMessage = (event) => {
+                  if (event.data.command === "ollamaAgentStream" && event.data.uniqueId === requestId) {
+                    accumulated += event.data.content
+                    updateMessagesAssistant({
+                      uniqueId: `assistant-${uniqueId}`,
+                      content: planMarkdown + `\n  > *Executing...*\n` + `\n${accumulated}`,
+                    })
+                  }
+                  if (event.data.command === "ollamaAgentResponse" && event.data.uniqueId === requestId) {
+                    window.removeEventListener("message", handleMessage)
+                    if (event.data.error) reject(new Error(event.data.error))
+                    else resolve(event.data.content)
+                  }
+                }
+                window.addEventListener("message", handleMessage)
+                vscode.postMessage({
+                  command: "ollamaAgent",
+                  mode: "execute",
+                  uniqueId: requestId,
+                  data: {
+                    model: selectedModel,
+                    step,
+                    context,
+                    attachments: attachments,
+                    history: compactHistory(messageArray),
+                    state: { recent_steps: workflowMeta.recent_steps }
+                  }
+                })
               })
+            } else {
+              const response = await fetch(
+                "http://localhost:13100/api/agent/execute",
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    userId,
+                    token,
+                    model: selectedModel,
+                    userApiKey,
+                    verification_mode: verificationMode,
+                    step,
+                    context,
+                    mode: "execute",
+                    attachments,
+                    guardrails: currentGuardrails,
+                    sessionId: currentSessionId,
+                  }),
+                  signal: agentAbortController?.signal,
+                },
+              )
+
+              if (!response.ok) {
+                const clone = response.clone()
+                try {
+                  const errJson = await clone.json()
+                  if (errJson.error === "WORKSPACE_MISSING") {
+                    console.log("Execute: Workspace missing, triggering auto-scan...")
+                    pendingMessage = originalRequest
+                    pendingAttachments = attachments
+                    await updateWorkspaces(true)
+                    isLoading = false
+                    throw new Error("WORKSPACE_MISSING")
+                  }
+                } catch (e) {
+                  if (e.message === "WORKSPACE_MISSING") throw e
+                  console.error(e)
+                }
+                throw new Error(`Execute request failed (${response.status})`)
+              }
+
+              const reader = response.body.getReader()
+              const decoder = new TextDecoder()
+
+              while (true) {
+                const { value, done } = await reader.read()
+                if (done) break
+                const chunk = decoder.decode(value, { stream: true })
+                stepOutput += chunk
+
+                const executingBlock = `\n  > *Executing...*\n`
+                // Update with streaming output
+                updateMessagesAssistant({
+                  uniqueId: `assistant-${uniqueId}`,
+                  content: planMarkdown + executingBlock + `\n${stepOutput}`,
+                })
+              }
             }
 
             // After execution, remove "Executing..." and append final output
@@ -3967,11 +4646,17 @@ ${result.summary || "Executed successfully."}`,
               stepOutput,
             )
             if (hasWriteFileTag) {
+              // Normalize stepOutput directly for subsequent use
+              stepOutput = stepOutput.replace(
+                /\[(\/?)writeFileVico\s*\]/gi,
+                "[$1writeFile]",
+              )
+
               const hasClosingTag = /\[\/(?:writeFile|writeFileVico)\]/i.test(
                 stepOutput,
               )
-              const hasFileBlock = stepOutput.includes("[file ")
-              const hasDiffBlock = stepOutput.includes("[diff ")
+              const hasFileBlock = /\[file\s+/i.test(stepOutput)
+              const hasDiffBlock = /\[diff\s+/i.test(stepOutput)
 
               planMarkdown += `\n  > *Writing files...*\n`
 
@@ -3989,11 +4674,7 @@ ${result.summary || "Executed successfully."}`,
             // If it contains writeFile, we want to render the panel, so don't wrap the whole thing in backticks
             // if it's likely to be a writeFile response.
             if (hasWriteFileTag) {
-              const normalizedStepOutput = stepOutput.replace(
-                /\[(\/?)writeFileVico\s*\]/gi,
-                "[$1writeFile]",
-              )
-              planMarkdown += `\n${normalizedStepOutput}\n`
+              planMarkdown += `\n${stepOutput}\n`
             } else {
               planMarkdown += `\n> *Execution Output:*\n\`\`\`\n${stepOutput.slice(0, 1000)}${stepOutput.length > 1000 ? "..." : ""}\n\`\`\`\n`
             }
@@ -4097,6 +4778,40 @@ ${result.summary || "Executed successfully."}`,
             }
 
             // Process Actions
+            const summarizeExecutionOutput = (output) => {
+              const changedFiles = []
+              const fileRegex = /\[(?:file|diff)\s+(?:name|path)=["']?([^"'\s\]]+)["']?\]/gi
+              let m
+              while ((m = fileRegex.exec(output)) !== null) {
+                changedFiles.push(m[1])
+              }
+              const commandMatch = output.match(/\[command\s*\]([\s\S]*?)\[\/command\s*\]/i)
+              const sanitizeExecutionText = (text) => {
+                return String(text || "")
+                  .replace(/\[(?:writeFile|writeFileVico)\][\s\S]*?\[\/(?:writeFile|writeFileVico)\]/g, "[writeFile block]")
+                  .replace(/\[command\][\s\S]*?\[\/command\]/g, "[command block]")
+                  .replace(/\[readFile\][\s\S]*?\[\/readFile\]/g, "[readFile block]")
+                  .replace(/\s+/g, " ")
+                  .trim()
+              }
+              return {
+                step: step.step,
+                description: step.description,
+                changed_files: Array.from(new Set(changedFiles)).slice(0, 20),
+                command: commandMatch ? commandMatch[1].trim().slice(0, 500) : "",
+                has_replan: /\[REPLAN\s*\]/i.test(output),
+                has_write: /\[(?:writeFile|writeFileVico)\s*\]/i.test(output),
+                short_output: sanitizeExecutionText(output).slice(0, 1500),
+                at: new Date().toISOString()
+              }
+            }
+
+            const summary = summarizeExecutionOutput(stepOutput)
+            workflowMeta.recent_steps.push(summary)
+            if (workflowMeta.recent_steps.length > 20) {
+              workflowMeta.recent_steps = workflowMeta.recent_steps.slice(-20)
+            }
+
             if (stepOutput.includes("[REPLAN]")) {
               const replanMatch =
                 stepOutput.match(/\[REPLAN\]([\s\S]*?)\[\/REPLAN\]/i) ||
@@ -4163,7 +4878,8 @@ ${result.summary || "Executed successfully."}`,
               break
             }
 
-            if (stepOutput.includes("[writeFile]")) {
+            const hasWriteFile = /\[(?:writeFile|writeFileVico)\]/i.test(stepOutput)
+            if (hasWriteFile) {
               const recoverTransientPath = (rawPath) => {
                 const normalized = String(rawPath || "").replace(/\\/g, "/")
                 const parts = normalized.split("/")
@@ -4268,10 +4984,8 @@ ${result.summary || "Executed successfully."}`,
               // Collect target files first so we can verify persistence after write.
               const targetFiles = new Set()
               const diffTargets = new Set()
-              const targetFileRegex =
-                /\[(?:file|diff)\s+(?:name|path)=["']([^"']+)["']/g
-              const diffTargetRegex =
-                /\[diff\s+(?:name|path)=["']([^"']+)["']/g
+              const targetFileRegex = /\[(?:file|diff)\s+(?:name|path)=["']?([^"'\s\]]+)["']?/gi
+              const diffTargetRegex = /\[diff\s+(?:name|path)=["']?([^"'\s\]]+)["']?/gi
               let targetMatch
               while (
                 (targetMatch = targetFileRegex.exec(stepOutput)) !== null
@@ -4343,7 +5057,7 @@ ${result.summary || "Executed successfully."}`,
                 })
               })
 
-              const fileRegex = /\[file\s+(?:name|path)=["']([^"']+)["']\]/g
+              const fileRegex = /\[file\s+(?:name|path)=["']?([^"'\s\]]+)["']?(?:\s+type=["'][^"']+["'])?\]/gi
               let match
               while ((match = fileRegex.exec(stepOutput)) !== null) {
                 const fName = match[1]
@@ -4358,8 +5072,7 @@ ${result.summary || "Executed successfully."}`,
               }
 
               // Extract and save file content for Open Diff button
-              const fileContentRegex =
-                /\[file name="([^"]+)"\]([\s\S]*?)\[\/file\]/g
+              const fileContentRegex = /\[file\s+(?:name|path)=["']?([^"'\s\]]+)["']?(?:\s+type=["'][^"']+["'])?\]([\s\S]*?)(?:\[\s*\/file\s*\]|(?=\[\/?(?:file|diff|writeFile|writeFileVico))|$)/gi
               let contentMatch
 
               // Handle potential overlapping matches or multiple files in one block
@@ -5553,7 +6266,10 @@ ${result.summary || "Executed successfully."}`,
           if (logo) logo.style.display = "flex"
 
           const btnWorkspace = document.getElementById("button-workspace")
-          if (btnWorkspace) btnWorkspace.style.display = "none"
+          if (btnWorkspace) {
+            btnWorkspace.innerHTML = "Teach AI 🔄"
+            btnWorkspace.style.display = "none"
+          }
 
           // Fetch and display chat history
           fetchHistory()
@@ -5573,15 +6289,18 @@ ${result.summary || "Executed successfully."}`,
         if (btnWorkspace) {
           btnWorkspace.style.display = "none"
         }
-        return
+        // return // REMOVED: return prevents the function from executing
         if (isLoading && !silent && !pendingMessage) return
         if (!silent) isLoading = true
 
-        btnWorkspace.innerHTML = `
-                                <svg class="loader-button" viewBox="0 0 24 24" width="16" height="16"> <!-- Adjust width and height -->
-                                    <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
-                                </svg>
-                            `
+        if (btnWorkspace) {
+          btnWorkspace.innerHTML = `
+                                  <svg class="loader-button" viewBox="0 0 24 24" width="16" height="16"> <!-- Adjust width and height -->
+                                      <circle class="path" cx="12" cy="12" r="10" fill="none" stroke-width="3" /> <!-- Adjust stroke width if necessary -->
+                                  </svg>
+                              `
+          btnWorkspace.style.display = "inline-block" // Show loader during scan
+        }
         vscode.postMessage({ type: "updateWorkspaces", silent })
       }
 
@@ -5608,6 +6327,7 @@ ${result.summary || "Executed successfully."}`,
           console.log("update workspaces berhasil")
           const btnWorkspace = document.getElementById("button-workspace")
           if (btnWorkspace) {
+            btnWorkspace.innerHTML = "Teach AI 🔄"
             btnWorkspace.style.display = "none"
           }
           isLoading = false
@@ -5625,6 +6345,11 @@ ${result.summary || "Executed successfully."}`,
           }
         } catch (error) {
           console.log("update workspaces gagal")
+          const btnWorkspace = document.getElementById("button-workspace")
+          if (btnWorkspace) {
+            btnWorkspace.innerHTML = "Teach AI 🔄"
+            btnWorkspace.style.display = "none"
+          }
           isLoading = false
         }
       }
@@ -5633,6 +6358,7 @@ ${result.summary || "Executed successfully."}`,
         isLoading = false
         const btnWorkspace = document.getElementById("button-workspace")
         if (btnWorkspace) {
+          btnWorkspace.innerHTML = "Teach AI 🔄"
           btnWorkspace.style.display = "none"
         }
       }
@@ -6064,7 +6790,7 @@ ${result.summary || "Executed successfully."}`,
           "[$1writeFile]",
         )
         const parts = normalizedContent.split(
-          /(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[writeFile\][\s\S]*?\[\/writeFile\]|\[file name=".*?"\][\s\S]*?\[\/file\]|\[openDiff path=".*?"\]|\[keepAllFiles files=".*?"\]|\[att-img .*?\]|\[att-file .*?\]|\[file\][\s\S]*?\[file\]|\[status\][\s\S]*?\[\/status\]|\[terminal[\s\S]*?\[\/terminal\]|\[thinking[\s\S]*?\[\/thinking\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|####.*|###.*|##.*|#.*|^- .*)/gm,
+          /(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[writeFile\][\s\S]*?\[\/writeFile\]|\[(?:file|diff)\s+(?:name|path)=["']?.*?["']?\][\s\S]*?\[\/(?:file|diff)\]|\[openDiff path=["']?.*?["']?\]|\[keepAllFiles files=["']?.*?["']?\]|\[att-img .*?\]|\[att-file .*?\]|\[file\][\s\S]*?\[file\]|\[status\][\s\S]*?\[\/status\]|\[manual_?context\][\s\S]*?\[\/manual_?context\]|\[terminal[\s\S]*?\[\/terminal\]|\[thinking[\s\S]*?\[\/thinking\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|####.*|###.*|##.*|#.*|^- .*)/gm,
         )
 
         parts
@@ -6086,7 +6812,7 @@ ${result.summary || "Executed successfully."}`,
                 const body = match[1] || ""
                 const fileMatches = [
                   ...body.matchAll(
-                    /\[(?:file|diff)\s+(?:name|path)=["']([^"']+)["']\]/g,
+                    /\[(?:file|diff)\s+(?:name|path)=["']?([^"'\s\]]+)["']?\]/g,
                   ),
                 ]
                 const fileList = Array.from(
@@ -6214,6 +6940,47 @@ ${result.summary || "Executed successfully."}`,
               //skip
             } else if (part.startsWith("[files]") && part.endsWith("[files]")) {
               //skip
+            } else if (
+              (part.startsWith("[manual_context]") && part.endsWith("[/manual_context]")) ||
+              (part.startsWith("[manualcontext]") && part.endsWith("[/manualcontext]"))
+            ) {
+              const body = part.replace(/\[\/?manual_?context\]/g, "").trim()
+              const contextWrapper = document.createElement("div")
+              contextWrapper.className = "manual-context-container"
+
+              const title = document.createElement("div")
+              title.className = "manual-context-title"
+              title.textContent = "Selected Context"
+              contextWrapper.appendChild(title)
+
+              const chipsContainer = document.createElement("div")
+              chipsContainer.className = "context-chips"
+
+              // Extract file paths and folder paths
+              // Match both [file_path:...] and [filepath:...]
+              const fileMatches = [...body.matchAll(/\[file_?path:(.*?)\]/g)]
+              const folderMatches = [...body.matchAll(/\[folder_?path:(.*?)\]/g)]
+
+              fileMatches.forEach(m => {
+                const path = m[1]
+                const chip = document.createElement("div")
+                chip.className = "context-chip"
+                chip.innerHTML = `<span class="context-chip-icon">📄</span> ${path.split(/[\\\/]/).pop()}`
+                chip.title = path
+                chipsContainer.appendChild(chip)
+              })
+
+              folderMatches.forEach(m => {
+                const path = m[1]
+                const chip = document.createElement("div")
+                chip.className = "context-chip"
+                chip.innerHTML = `<span class="context-chip-icon">📁</span> ${path.split(/[\\\/]/).pop()}`
+                chip.title = path
+                chipsContainer.appendChild(chip)
+              })
+
+              contextWrapper.appendChild(chipsContainer)
+              container.appendChild(contextWrapper)
             } else if (
               part.startsWith("[status]") &&
               part.endsWith("[/status]")

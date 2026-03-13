@@ -46,9 +46,9 @@ export function cleanSearchReplaceText(text: string, isReplace: boolean): string
 
   let cleaned = stripMarkdownFences(text);
 
-  // Hapus teks "new:" atau "new" di awal (AI sering melakukan ini di luar blok atau di awal blok)
+  // Hapus teks "new:" atau "new " di awal (AI sering melakukan ini di luar blok atau di awal blok)
   // Kita hanya hapus jika benar-benar di awal string/baris pertama
-  const newPrefixMatch = cleaned.match(/^\s*new:?\s*[\r\n]*/i);
+  const newPrefixMatch = cleaned.match(/^\s*new:?\s*(\s+|[\r\n]+)/i);
   if (newPrefixMatch) {
     cleaned = cleaned.substring(newPrefixMatch[0].length);
   }

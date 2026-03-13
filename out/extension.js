@@ -46,6 +46,116 @@ const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
 const os = __importStar(require("os"));
 const crypto = __importStar(require("crypto"));
+async function fetchAi(url, options, model, provider, userApiKey, context) {
+    if (provider === "ollama") {
+        let ollamaModel = model || "llama3";
+        if (ollamaModel.startsWith("ollama:")) {
+            ollamaModel = ollamaModel.replace("ollama:", "");
+        }
+        const ollamaUrl = "http://localhost:11434/v1/chat/completions";
+        // Reconstruct messages from body
+        let messages = [];
+        const body = options.body ? JSON.parse(options.body) : {};
+        if (url.endsWith("/suggest")) {
+            messages = [
+                {
+                    role: "system",
+                    content: "You are a code completion engine. Read the provided file name, language, and surrounding code. " +
+                        "Return ONLY the continuation for the current line with no explanations, no markdown, no code fences, " +
+                        "no newlines, and do not repeat existing text.",
+                },
+                { role: "user", content: body.message || "" },
+            ];
+        }
+        else {
+            messages = [{ role: "user", content: body.message || "" }];
+        }
+        const response = await fetch(ollamaUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                model: ollamaModel,
+                messages: messages,
+                stream: false,
+            }),
+            signal: options.signal,
+        });
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`Ollama error: ${errText}`);
+        }
+        const json = await response.json();
+        const content = json.choices?.[0]?.message?.content || "";
+        // Sanitize suggestion if it's a suggest request
+        const message = url.endsWith("/suggest")
+            ? content
+                .replace(/\r/g, "")
+                .split("\n")
+                .map((s) => s.trim())
+                .filter(Boolean)[0] || ""
+            : content;
+        return {
+            ok: true,
+            status: 200,
+            json: async () => ({ message }),
+            text: async () => JSON.stringify({ message }),
+        };
+    }
+    // If using custom API key for OpenAI (BYOK) or custom endpoint
+    const customUrl = context?.globalState.get("vico.customApiUrl");
+    if ((userApiKey && userApiKey.trim()) || (customUrl && customUrl.trim())) {
+        const body = options.body ? JSON.parse(options.body) : {};
+        let apiUrl = "https://api.openai.com/v1/chat/completions";
+        if (customUrl && customUrl.trim()) {
+            apiUrl = customUrl;
+        }
+        let messages = [];
+        if (url.endsWith("/suggest")) {
+            messages = [
+                {
+                    role: "system",
+                    content: "You are a code completion engine. Return ONLY the continuation for the current line.",
+                },
+                { role: "user", content: body.message || "" },
+            ];
+        }
+        else {
+            messages = [{ role: "user", content: body.message || "" }];
+        }
+        const headers = {
+            "Content-Type": "application/json",
+        };
+        if (userApiKey && userApiKey.trim()) {
+            headers["Authorization"] = `Bearer ${userApiKey}`;
+        }
+        const response = await fetch(apiUrl, {
+            method: "POST",
+            headers: headers,
+            body: JSON.stringify({
+                model: model || "gpt-4o",
+                messages: messages,
+                stream: false,
+            }),
+            signal: options.signal,
+        });
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`Custom API/OpenAI error: ${errText}`);
+        }
+        const json = await response.json();
+        const content = json.choices?.[0]?.message?.content || "";
+        const message = url.endsWith("/suggest")
+            ? content.replace(/\r/g, "").split("\n")[0].trim() || ""
+            : content;
+        return {
+            ok: true,
+            status: 200,
+            json: async () => ({ message }),
+            text: async () => JSON.stringify({ message }),
+        };
+    }
+    return fetch(url, options);
+}
 const vico_logger_1 = __importDefault(require("vico-logger"));
 const DiffManager_1 = require("./DiffManager");
 const utils_1 = require("./utils");
@@ -81,7 +191,7 @@ async function fetchSuggestions(context, editor) {
     currentAbortController = controller;
     const currentRequest = ++requestId;
     const cursorLine = editor.selection.active.line;
-    // 👉 Baris sumber (kalau baris kosong, ambil baris atas)
+    // 👉 Source line (if empty, take the line above)
     let sourceLine = cursorLine;
     let lineText = editor.document.lineAt(cursorLine).text;
     if (!lineText.trim() && cursorLine > 0) {
@@ -93,15 +203,22 @@ async function fetchSuggestions(context, editor) {
     const cleanedInput = (0, utils_1.removeCommentTags)(lineText.trim());
     if (cleanedInput.length < 3 && cursorLine === sourceLine)
         return;
-    // 👉 Inline muncul di posisi cursor (bisa baris kosong)
+    // 👉 Inline appears at cursor position (could be empty line)
     const isNewLine = cursorLine !== sourceLine;
     lastWasNewLine = isNewLine;
     lastRequestLine = cursorLine;
     lastRequestPrefix = isNewLine ? "" : cleanedInput;
     lastLinePrefix = lineText;
+    const model = context.globalState.get("vico.selectedModel") || "gpt-5.1-codex-mini";
+    const provider = context.globalState.get("vico.selectedProvider") || "openai";
+    const userApiKey = (await context.secrets.get("vico.userOpenAIApiKey")) || "";
+    const customApiUrl = context.globalState.get("vico.customApiUrl") || "";
     const token = context.globalState.get("token");
-    if (!token) {
-        vscode.window.showErrorMessage("Vibe Coding token is missing. Please login first.");
+    const isCustomProvider = provider === "ollama" ||
+        (userApiKey && userApiKey.trim().length > 0) ||
+        (customApiUrl && customApiUrl.trim().length > 0);
+    if (!token && !isCustomProvider) {
+        vscode.window.showErrorMessage("Vibe Coding token is missing. Please log in first.");
         return;
     }
     const lang = editor.document.languageId;
@@ -153,6 +270,7 @@ async function fetchSuggestions(context, editor) {
     const body = {
         userId: "vscode-user",
         sessionId: context.globalState.get("currentSessionId"),
+        model: model,
         message: `File: ${file}\n` +
             `Language: ${lang}\n` +
             `Follow ${lang} best practices and syntax.\n` +
@@ -172,10 +290,10 @@ async function fetchSuggestions(context, editor) {
             `Do NOT add braces, semicolons, or syntax that already exists later in the file.\n` +
             `Return ONLY the continuation text without explanations, markdown, or code fences.`,
     };
-    // 👉 simpan posisi cursor saat request dikirim
+    // 👉 save cursor position when request is sent
     const requestLine = cursorLine;
     try {
-        const response = await fetch("http://localhost:13100/api/suggest", {
+        const response = await fetchAi("http://localhost:13100/api/suggest", {
             method: "POST",
             signal: controller.signal,
             headers: {
@@ -183,18 +301,18 @@ async function fetchSuggestions(context, editor) {
                 "Content-Type": "application/json",
             },
             body: JSON.stringify(body),
-        });
+        }, model, provider, userApiKey, context);
         if (!response.ok) {
             const errorMessage = await response.text();
             throw new Error(`Error ${response.status}: ${errorMessage}`);
         }
         if (currentRequest !== requestId)
-            return; // ❌ skip response lama
+            return; // ❌ skip old response
         const suggestions = await response.json();
-        // ❌ Kalau user pindah baris, skip
+        // ❌ If user moves line, skip
         if (editor.selection.active.line !== requestLine)
             return;
-        // Filter khusus HTML agar tidak menyarankan atribut tunggal saat new line
+        // Special filter for HTML to avoid suggesting single attribute on new line
         if (lastWasNewLine &&
             (lang === "html" || file.toLowerCase().endsWith(".html"))) {
             const candidate = (suggestions?.message ?? "").trim();
@@ -251,22 +369,22 @@ async function handleDiff(fileUri, fileContent, relativePath, context) {
     }
 }
 /**
- * Fallback parsing untuk writeFile format yang tidak sempurna
- * Handle kasus:
- * - [writeFile] tanpa [/writeFile]
- * - [file] tanpa [writeFile] wrapper
- * - Markdown code blocks di dalam content
- * - Format attribute yang tidak konsisten
+ * Fallback parsing for imperfect writeFile formats
+ * Handles cases:
+ * - [writeFile] without [/writeFile]
+ * - [file] without [writeFile] wrapper
+ * - Markdown code blocks inside content
+ * - Inconsistent attribute formats
  */
 function parseWriteFileFallback(content) {
     vico_logger_1.default.info(`[writeFile] Fallback parsing started, content length: ${content.length}`);
-    // Coba berbagai strategi parsing
-    // Strategi 1: Cari [writeFile]... (tanpa penutup)
-    const writeFileOpenMatch = content.match(/\[(?:writeFile|writeFileVico)[^\]]*\]([\s\S]*?)(?:\[\/(?:writeFile|writeFileVico)\s*\]|$)/i);
+    // Try various parsing strategies
+    // Strategy 1: Look for [writeFile]... (with or without closing tag)
+    const writeFileOpenMatch = content.match(/\[(?:writeFile|writeFileVico)[^\]]*\]/i);
     if (writeFileOpenMatch) {
-        vico_logger_1.default.info(`[writeFile] Found open [writeFile] tag, extracting content`);
-        // Join all content if multiple [writeFile] blocks exist but aren't closed properly
-        const allMatches = content.matchAll(/\[(?:writeFile|writeFileVico)[^\]]*\]([\s\S]*?)(?:\[\/(?:writeFile|writeFileVico)\s*\]|$)/gi);
+        vico_logger_1.default.info(`[writeFile] Found [writeFile] tag, extracting content using robust regex`);
+        // Extract content within [writeFile] blocks, stopping at the next [writeFile] tag or end of string
+        const allMatches = content.matchAll(/\[(?:writeFile|writeFileVico)[^\]]*\]([\s\S]*?)(?:\[\/(?:writeFile|writeFileVico)\s*\]|(?=\[(?:writeFile|writeFileVico))|$)/gi);
         let accumulatedContent = "";
         for (const match of allMatches) {
             accumulatedContent += match[1] + "\n";
@@ -275,20 +393,25 @@ function parseWriteFileFallback(content) {
             return { success: true, content: accumulatedContent };
         }
     }
-    // Strategi 2: Cari langsung [file] atau [diff] blocks tanpa [writeFile] wrapper
+    // Strategy 2: Look directly for [file] or [diff] blocks without [writeFile] wrapper
     const hasFileBlocks = /\[file\s+/i.test(content);
     const hasDiffBlocks = /\[diff\s+/i.test(content);
     if (hasFileBlocks || hasDiffBlocks) {
         vico_logger_1.default.info(`[writeFile] Found [file] or [diff] blocks without [writeFile] wrapper`);
         return { success: true, content };
     }
-    // Strategi 3: Coba extract markdown code blocks yang mungkin berisi file content
-    const codeBlockMatch = content.match(/```[\s\S]*?\n([\s\S]*?)```/);
-    if (codeBlockMatch) {
-        vico_logger_1.default.info(`[writeFile] Found markdown code block, using as fallback`);
-        return { success: true, content: codeBlockMatch[1] };
+    // Strategy 3: Try to extract markdown code blocks that might contain file content
+    // More flexible: allow newline or not after triple backticks
+    const codeBlockMatches = content.matchAll(/```(?:[\w-]*\s*)?([\s\S]*?)```/g);
+    let accumulatedCodeBlocks = "";
+    for (const match of codeBlockMatches) {
+        accumulatedCodeBlocks += match[1] + "\n";
     }
-    // Strategi 4: Jika content terlihat seperti file content (memiliki extension atau path-like)
+    if (accumulatedCodeBlocks.trim()) {
+        vico_logger_1.default.info(`[writeFile] Found markdown code block(s), using as fallback`);
+        return { success: true, content: accumulatedCodeBlocks };
+    }
+    // Strategy 4: If content looks like file content (has extension or path-like)
     const looksLikeFileContent = /\w+\.\w+/.test(content) || /[\/\\]/.test(content);
     if (looksLikeFileContent && content.length > 10) {
         vico_logger_1.default.info(`[writeFile] Content looks like file content, using as fallback`);
@@ -382,7 +505,7 @@ async function writeFileVico(context, editor, sidebarProvider) {
         vico_logger_1.default.info(`[writeFile] Extracted content length: ${contentToProcess.length}`);
         if (!contentToProcess.trim()) {
             vico_logger_1.default.warn(`[writeFile] No content extracted with proper tags, trying fallback parsing`);
-            // Gunakan fallback parsing function yang sudah kita buat
+            // Use the fallback parsing function we created
             const fallbackResult = parseWriteFileFallback(writeContent);
             if (fallbackResult.success) {
                 contentToProcess = fallbackResult.content;
@@ -400,9 +523,9 @@ async function writeFileVico(context, editor, sidebarProvider) {
         vico_logger_1.default.info(`[writeFile] Starting file/diff parsing, content length: ${contentToProcess.length}`);
         // 2. Parse [file name="path"]...[/file] OR [diff name="path"]...[/diff]
         // Improved regex to handle newlines and various attributes robustly, and allow missing closing tags
-        // Stop at the next [file], [diff], or [writeFile] tag
-        const fileRegex = /\[file\s+(?:name|path)=["']?([^"'\s\]]+)["']?(?:\s+type=["'][^"']+["'])?\]([\s\S]*?)(?:\[\s*\/file\s*\]|(?=\[(?:file|diff|writeFile|writeFileVico)\s+)|$)/gi;
-        const diffRegex = /\[diff\s+(?:name|path)=["']?([^"'\s\]]+)["']?\]([\s\S]*?)(?:\[\s*\/diff\s*\]|(?=\[(?:file|diff|writeFile|writeFileVico)\s+)|$)/gi;
+        // Stop at the next [file], [diff], or [writeFile] tag (opening or closing)
+        const fileRegex = /\[file\s+(?:name|path)=["']?([^"'\s\]]+)["']?(?:\s+type=["'][^"']+["'])?\]([\s\S]*?)(?:\[\s*\/file\s*\]|(?=\[\/?(?:file|diff|writeFile|writeFileVico))|$)/gi;
+        const diffRegex = /\[diff\s+(?:name|path)=["']?([^"'\s\]]+)["']?\]([\s\S]*?)(?:\[\s*\/diff\s*\]|(?=\[\/?(?:file|diff|writeFile|writeFileVico))|$)/gi;
         let fileMatch;
         let filesCreated = 0;
         let duplicateSkipped = false;
@@ -427,7 +550,7 @@ async function writeFileVico(context, editor, sidebarProvider) {
             // Often agents wrap the content in ```typescript ... ```
             // IMPROVED: Use a more robust check that handles any language identifier and whitespace
             // and strip it even if there is trailing text outside the block
-            const markdownCodeBlockRegex = /```[\w-]*\n([\s\S]*?)```/g;
+            const markdownCodeBlockRegex = /```[\w-]*\s*\n?([\s\S]*?)```/g;
             const markdownMatch = markdownCodeBlockRegex.exec(fileContent);
             if (markdownMatch) {
                 vico_logger_1.default.info(`[writeFile] Stripping markdown code blocks from ${relativePath}`);
@@ -688,7 +811,18 @@ async function writeFileVico(context, editor, sidebarProvider) {
                     if (totalBlocks === 0 && diffContent.trim().length > 0) {
                         lastReplaceText = diffContent.trim();
                     }
-                    const canFallbackToFullRewrite = totalBlocks <= 1 &&
+                    // Safety check: if it's a [diff] block but no SEARCH/REPLACE was found, 
+                    // we should be very careful about full-rewrite fallback.
+                    // If the new content is much smaller than the original, it's likely a partial snippet.
+                    const isSnippetLikely = currentContent.length > 1000 &&
+                        lastReplaceText.length < currentContent.length * 0.5 &&
+                        !lastReplaceText.includes("import ") &&
+                        !lastReplaceText.includes("export ");
+                    // If it's explicitly a [diff] block, we should be VERY hesitant to do a full rewrite.
+                    // Usually, a full rewrite should use [file] instead.
+                    const canFallbackToFullRewrite = totalBlocks === 0 && // Only fallback if NO blocks were found at all
+                        !isSnippetLikely &&
+                        lastReplaceText.trim().length > 500 && // Must be significant amount of code
                         ((lastReplaceText.trim().length > 200 &&
                             /(export\s+default|function\s+\w+|\breturn\s*\()/i.test(lastReplaceText)) ||
                             (effectiveRelativePath.replace(/\\/g, "/").toLowerCase() ===
@@ -722,7 +856,10 @@ async function writeFileVico(context, editor, sidebarProvider) {
                     }
                     else {
                         vico_logger_1.default.warn(`[writeFile] No SEARCH/REPLACE match found for ${relativePath} and fallback not eligible.`);
-                        vscode.window.showWarningMessage(`Could not apply changes to ${relativePath}. SEARCH block not found (exact/eol/trimmed match failed).`);
+                        const reason = isSnippetLikely
+                            ? "New content looks like a partial snippet (too small compared to original)."
+                            : "SEARCH block not found and content doesn't look like a full file.";
+                        vscode.window.showErrorMessage(`Failed to apply diff to ${relativePath}: ${reason}`);
                     }
                 }
             }
@@ -853,7 +990,7 @@ function activate(context) {
     }));
     loadingStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     context.subscriptions.push(loadingStatusBarItem);
-    // Disini kita daftarin command
+    // Register commands here
     let disposable = vscode.commands.registerCommand("vibe-coding.writeFile", async () => {
         vico_logger_1.default.info("writeFile command triggered");
         await writeFileVico(context, vscode.window.activeTextEditor, sidebarProvider);
@@ -935,7 +1072,7 @@ function activate(context) {
             return [item];
         },
     }, ""));
-    // Command untuk menghapus suggestion setelah dipilih
+    // Command to clear suggestion after it's selected
     context.subscriptions.push(vscode.commands.registerCommand("vibe-coding.clearSuggestion", () => {
         lastSuggestion = null;
     }));
@@ -1286,21 +1423,21 @@ function activate(context) {
         const editor = vscode.window.activeTextEditor;
         if (editor) {
             const currentLine = editor.selection.active.line;
-            // Lakukan edit untuk menambahkan newline di posisi kursor
+            // Edit to add newline at cursor position
             editor
                 .edit((editBuilder) => {
-                // Sisipkan newline di posisi kursor
+                // Insert newline at cursor position
                 editBuilder.insert(editor.selection.active, "\n");
             })
                 .then(() => {
                 const currentLineText = editor.document.lineAt(currentLine).text;
-                // Cek apakah baris sebelumnya adalah komentar
+                // Check if previous line is a comment
                 if (/^\s*(\/\/|\/\*|\*|#|<!--)/.test(currentLineText)) {
                     console.log("code completion generate..");
-                    // Jika baris sebelumnya adalah komentar, jalankan logika triggerCodeCompletion
-                    const allCode = editor.document.getText(); // Dapatkan seluruh kode dari editor
-                    let coding = currentLineText + "\n"; // Tambahkan baris sebelumnya ke coding
-                    // Panggil fungsi untuk membersihkan comment dan trigger completion
+                    // If previous line is a comment, run triggerCodeCompletion logic
+                    const allCode = editor.document.getText(); // Get all code from editor
+                    let coding = currentLineText + "\n"; // Add previous line to coding
+                    // Call function to clean comment and trigger completion
                     const cleanCode = (0, utils_1.removeCommentTags)(coding);
                     triggerCodeCompletion(context, cleanCode, allCode);
                 }
@@ -1309,13 +1446,24 @@ function activate(context) {
     }));
 }
 function onUserInput(line) {
-    // Simpan line ke riwayat
+    // Save line to history
     console.log(line);
 }
 async function triggerCodeCompletion(context, comment, allCode) {
     const allCodeData = "```" + allCode + "```";
-    // Logika untuk generate suggestion berdasarkan lineContent
+    // Logic to generate suggestion based on lineContent
     const token = context.globalState.get("token");
+    const model = context.globalState.get("vico.selectedModel") || "gpt-5.1-codex-mini";
+    const provider = context.globalState.get("vico.selectedProvider") || "openai";
+    const userApiKey = (await context.secrets.get("vico.userOpenAIApiKey")) || "";
+    const customApiUrl = context.globalState.get("vico.customApiUrl") || "";
+    const isCustomProvider = provider === "ollama" ||
+        (userApiKey && userApiKey.trim().length > 0) ||
+        (customApiUrl && customApiUrl.trim().length > 0);
+    if (!token && !isCustomProvider) {
+        vscode.window.showErrorMessage("Vibe Coding token is missing. Please log in first.");
+        return;
+    }
     const editor = vscode.window.activeTextEditor;
     if (editor) {
         const lang = editor.document.languageId;
@@ -1329,6 +1477,7 @@ async function triggerCodeCompletion(context, comment, allCode) {
         const body = {
             userId: "vscode-user",
             token: token,
+            model: model,
             message: `File: ${file}\n` +
                 `Language: ${lang}\n` +
                 (styleHints ? `Coding style hints: ${styleHints}\n` : "") +
@@ -1337,48 +1486,48 @@ async function triggerCodeCompletion(context, comment, allCode) {
                 `The user is currently typing this line: "${comment}".\n` +
                 `Return a SINGLE LINE continuation only. Do NOT add new lines or multiple statements. Do NOT repeat existing text from the line. Do NOT add braces, semicolons, or syntax that already exists later in the file. Return ONLY the continuation text without explanations.`,
         };
-        // Buat StatusBarItem untuk loading
+        // Create StatusBarItem for loading
         loadingStatusBarItem.text = "🔄 Vibe Coding loading...";
         loadingStatusBarItem.show();
         try {
-            const response = await fetch("http://localhost:13100/api/suggest", {
+            const response = await fetchAi("http://localhost:13100/api/suggest", {
                 method: "POST",
                 headers: {
                     Authorization: `Bearer ${token}`,
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify(body),
-            });
-            // Cek apakah response berhasil
+            }, model, provider, userApiKey, context);
+            // Check if response is successful
             if (!response.ok) {
                 const errorMessage = await response.text();
                 throw new Error(`Error ${response.status}: ${errorMessage}`);
             }
-            // Jika berhasil, ambil data
+            // If successful, get data
             const coding = await response.json();
-            // Menambahkan hasil sementara ke editor
+            // Add temporary result to editor
             const editor = vscode.window.activeTextEditor;
             if (editor) {
                 const currentLine = editor.selection.active.line;
-                // Tampilkan pesan instruksi
+                // Display instruction message
                 const instructionMessage = "Accept code from Vibe Coding...";
                 vscode.window
                     .showInformationMessage(instructionMessage, { modal: true }, "Accept Code", "Decline")
                     .then((selection) => {
                     if (selection === "Accept Code") {
-                        // Jika pengguna memilih 'Terima Kode'
+                        // If user selects 'Accept Code'
                         editor.edit((editBuilder) => {
-                            // Hapus pesan instruksi jika ada
+                            // Remove instruction message if exists
                             const instructionStartPosition = new vscode.Position(currentLine, 0);
                             const instructionEndPosition = new vscode.Position(currentLine + 1, 0);
                             editBuilder.delete(new vscode.Range(instructionStartPosition, instructionEndPosition));
-                            // Sisipkan hasil code completion
+                            // Insert code completion result
                             editBuilder.insert(new vscode.Position(currentLine, 0), `${coding.message}\n`);
                         });
                     }
                     else if (selection === "Decline") {
-                        // Jika pengguna memilih 'Tolak Kode', lakukan sesuatu jika perlu
-                        console.log("Kode ditolak.");
+                        // If user selects 'Decline', do something if needed
+                        console.log("Code declined.");
                     }
                 });
             }
@@ -1387,12 +1536,12 @@ async function triggerCodeCompletion(context, comment, allCode) {
             console.error(error);
         }
         finally {
-            // Sembunyikan StatusBarItem loading setelah selesai
+            // Hide loading StatusBarItem when finished
             loadingStatusBarItem.hide();
         }
     }
 }
-//implementasi disini
+// implementation here
 // This method is called when your extension is deactivated
 function deactivate() { }
 //# sourceMappingURL=extension.js.map
