@@ -424,7 +424,7 @@ label[for="modeSelect"] {
 
 textarea#messageInput {
     background-color: #0d1117;
-    border: 1px solid #30363d;
+    border: none;
     color: #c9d1d9;
     border-radius: 8px;
     padding: 7px;
@@ -441,8 +441,8 @@ textarea#messageInput {
 }
 
 textarea#messageInput:focus {
-    border-color: #58a6ff;
-    box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
+    border: none;
+    box-shadow: none;
     outline: none;
 }
 
@@ -780,7 +780,7 @@ li {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 16px;
+    padding: 10px 16px;
     border-bottom: 1px solid #30363d;
     cursor: pointer;
     transition: background-color 0.2s;
@@ -793,28 +793,28 @@ li {
 
 .history-info {
     display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
     overflow: hidden;
     margin-right: 12px;
     flex: 1;
+    gap: 2px;
 }
 
 .history-title {
     font-weight: 500;
     color: #c9d1d9;
-    font-size: 14px;
+    font-size: 13px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    flex: 1;
-    margin-right: 8px;
+    width: 100%;
 }
 
 .history-date {
-    font-size: 12px;
-    color: #8b949e;
+    font-size: 11px;
+    color: #6e7681;
     white-space: nowrap;
     flex-shrink: 0;
 }

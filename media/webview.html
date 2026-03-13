@@ -10,6 +10,536 @@
     <!-- Link to the Prism CSS for syntax highlighting -->
     <link rel="stylesheet" href="%STYLES_PATH%" />
     <style>
+      /* Layout Utilities */
+      .flex {
+        display: flex;
+      }
+
+      .flex-col {
+        flex-direction: column;
+      }
+
+      .items-center {
+        align-items: center;
+      }
+
+      .justify-between {
+        justify-content: space-between;
+      }
+
+      .justify-center {
+        justify-content: center;
+      }
+
+      .flex-center {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .flex-wrap {
+        flex-wrap: wrap;
+      }
+
+      .flex-grow {
+        flex-grow: 1;
+      }
+
+      .flex-shrink-0 {
+        flex-shrink: 0;
+      }
+
+      .min-w-0 {
+        min-width: 0;
+      }
+
+      .relative {
+        position: relative;
+      }
+
+      .absolute {
+        position: absolute;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      .w-full {
+        width: 100%;
+      }
+
+      .h-full {
+        height: 100%;
+      }
+
+      .h-4 {
+        height: 16px;
+      }
+
+      .w-4 {
+        width: 16px;
+      }
+
+      .h-5 {
+        height: 20px;
+      }
+
+      .w-5 {
+        width: 20px;
+      }
+
+      .pointer-events-none {
+        pointer-events: none;
+      }
+
+      /* Spacing & Sizing */
+      .gap-1 {
+        gap: 4px;
+      }
+
+      .gap-2 {
+        gap: 8px;
+      }
+
+      .mb-1 {
+        margin-bottom: 4px;
+      }
+
+      .mb-2 {
+        margin-bottom: 8px;
+      }
+
+      .mt-2 {
+        margin-top: 8px;
+      }
+
+      .ml-1 {
+        margin-left: 4px;
+      }
+
+      .ml-2 {
+        margin-left: 8px;
+      }
+
+      .mr-1 {
+        margin-right: 4px;
+      }
+
+      .mr-2 {
+        margin-right: 8px;
+      }
+
+      .p-1 {
+        padding: 4px;
+      }
+
+      .p-2 {
+        padding: 8px;
+      }
+
+      .p-4 {
+        padding: 16px;
+      }
+
+      .px-2 {
+        padding-left: 8px;
+        padding-right: 8px;
+      }
+
+      .py-1 {
+        padding-top: 4px;
+        padding-bottom: 4px;
+      }
+
+      .py-1\.5 {
+        padding-top: 6px;
+        padding-bottom: 6px;
+      }
+
+      /* Typography */
+      .text-xs {
+        font-size: 12px;
+      }
+
+      .text-xxs {
+        font-size: 10px;
+      }
+
+      .text-sm {
+        font-size: 14px;
+      }
+
+      .font-bold {
+        font-weight: bold;
+      }
+
+      .uppercase {
+        text-transform: uppercase;
+      }
+
+      .tracking-wider {
+        letter-spacing: 0.05em;
+      }
+
+      .whitespace-nowrap {
+        white-space: nowrap;
+      }
+
+      .whitespace-pre-wrap {
+        white-space: pre-wrap;
+      }
+
+      .text-center {
+        text-align: center;
+      }
+
+      /* Colors */
+      .text-gray-300 {
+        color: #c9d1d9;
+      }
+
+      .text-gray-400 {
+        color: #8b949e;
+      }
+
+      .text-gray-500 {
+        color: #6e7681;
+      }
+
+      .text-white {
+        color: #ffffff;
+      }
+
+      .hover-text-white:hover {
+        color: #ffffff;
+      }
+
+      /* UI Components */
+      .control-height {
+        height: 32px;
+      }
+
+      .icon-button-size {
+        width: 32px;
+        height: 32px;
+        padding: 0 !important;
+      }
+
+      .rounded-md {
+        border-radius: 6px;
+      }
+
+      .rounded-lg {
+        border-radius: 8px;
+      }
+
+      .border {
+        border: 1px solid #30363d;
+      }
+
+      .border-b {
+        border-bottom: 1px solid #30363d;
+      }
+
+      .shadow-xl {
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+      }
+
+      .z-max {
+        z-index: 1000;
+      }
+
+      .cursor-pointer {
+        cursor: pointer;
+      }
+
+      .focus-outline-none:focus {
+        outline: none;
+      }
+
+      .transition-colors {
+        transition-property: background-color, border-color, color, fill, stroke;
+      }
+
+      .duration-200 {
+        transition-duration: 200ms;
+      }
+
+      .inset-0 {
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+      }
+
+      /* Component-Specific Classes */
+      .input-controls-row {
+        display: flex;
+        align-items: center;
+        margin-bottom: 8px;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .model-selection-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        flex-grow: 1;
+        min-width: 0;
+      }
+
+      .settings-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        position: relative;
+        flex-shrink: 0;
+      }
+
+      .settings-dropdown {
+        position: absolute;
+        right: 0;
+        bottom: 100%;
+        margin-bottom: 8px;
+        z-index: 1000;
+        background-color: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        padding: 6px;
+        min-width: 180px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .settings-item {
+        background: transparent;
+        border: none;
+        color: #c9d1d9;
+        cursor: pointer;
+        transition: background 0.2s;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        text-align: left;
+        padding: 6px 8px;
+      }
+
+      .settings-item:hover {
+        background-color: #30363d;
+      }
+
+      .quota-row {
+        padding: 4px 8px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid #30363d;
+        margin-bottom: 4px;
+      }
+
+      .plan-status-container {
+        margin-bottom: 8px;
+        padding: 8px;
+        background-color: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        font-size: 12px;
+        color: #c9d1d9;
+        max-height: 128px;
+        overflow-y: auto;
+      }
+
+      .select-container {
+        display: flex;
+        align-items: center;
+        background-color: #0d1117;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        overflow: hidden;
+        height: 32px;
+      }
+
+      .select-container-narrow {
+        min-width: 90px;
+      }
+
+      .model-select-input {
+        background-color: #0d1117;
+        color: #c9d1d9;
+        font-size: 12px;
+        padding: 0 28px 0 8px;
+        outline: none;
+        height: 100%;
+        border: none;
+        cursor: pointer;
+        width: 100%;
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%238b949e'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 8px center;
+        background-size: 14px;
+      }
+
+      .model-select-input option,
+      .model-select-input optgroup {
+        background-color: #0d1117;
+        color: #c9d1d9;
+      }
+
+      .btn-header {
+        height: 32px;
+        padding: 0 8px;
+        margin-left: 5px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .btn-composer-action {
+        width: 40px;
+        height: 40px;
+      }
+
+      .btn-send-main {
+        width: 44px;
+        height: 44px;
+        border-radius: 10px;
+      }
+
+      /* Modal & Popup */
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.55);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+      }
+
+      .modal-content {
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 10px;
+        padding: 14px;
+        color: #c9d1d9;
+      }
+
+      .popup-container {
+        position: fixed;
+        background-color: #1a1d23;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        display: none;
+        z-index: 9999;
+        flex-direction: column;
+      }
+
+      .popup-header {
+        padding: 8px 12px;
+        border-bottom: 1px solid #30363d;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background-color: #21262d;
+        border-radius: 8px 8px 0 0;
+      }
+
+      .input-standard {
+        width: 100%;
+        height: 34px;
+        padding: 6px 10px;
+        border-radius: 8px;
+        border: 1px solid #30363d;
+        background: #0d1117;
+        color: #c9d1d9;
+        outline: none;
+      }
+
+      .input-standard:focus {
+        border-color: #58a6ff;
+      }
+
+      .bg-gray-800 {
+        background-color: #1f2937;
+      }
+
+      .bg-red-500 {
+        background-color: #ef4444;
+      }
+
+      .border-gray-600 {
+        border-color: #4b5563;
+      }
+
+      .group:hover .group-hover-opacity-100 {
+        opacity: 1;
+      }
+
+      .opacity-0 {
+        opacity: 0;
+      }
+
+      .object-cover {
+        object-fit: cover;
+      }
+
+      .rounded-full {
+        border-radius: 9999px;
+      }
+
+      .h-8 {
+        height: 32px;
+      }
+
+      .w-8 {
+        width: 32px;
+      }
+
+      .inline-block {
+        display: inline-block;
+      }
+
+      .bg-transparent {
+        background-color: transparent;
+      }
+
+      .border-none {
+        border: none !important;
+      }
+
+      .bg-black {
+        background-color: #000000;
+      }
+
+      .border-1 {
+        border-width: 1px;
+      }
+
+      .flex-1 {
+        flex: 1 1 0%;
+      }
+
+      .border-blue-500 {
+        border-color: #3b82f6;
+      }
+
+      .border-2 {
+        border-width: 2px;
+      }
+
+      /* Step History & Others */
       .step-history-details {
         margin-top: 8px;
         border: 1px solid #30363d;
@@ -139,30 +669,16 @@
         <img src="%LOGO_NAV_PATH%" alt="Logo" />
       </div>
       <div id="header-controls" class="header-controls">
-        <button id="button-workspace" class="btn-elegant" style="height: 32px; font-size: 12px; display: none">
-          Teach AI 🔄
-        </button>
-        <button id="newChatButton" class="btn-elegant" style="height: 32px; padding: 0 10px; margin-left: 5px"
-          title="New Chat">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 pointer-events-none" fill="none" viewBox="0 0 24 24"
-            stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-          </svg>
-        </button>
-        <button id="historyButton" class="btn-elegant" style="height: 32px; padding: 0 10px; margin-left: 5px"
-          title="History">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 pointer-events-none" fill="none" viewBox="0 0 24 24"
-            stroke="currentColor">
+        <button id="historyButton" class="btn-elegant btn-header" title="History">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </button>
-        <button id="logoutButton" class="btn-elegant" style="height: 32px; padding: 0 10px; margin-left: 5px"
-          title="Logout">
+        <button id="newChatButton" class="btn-elegant btn-header" title="New Chat">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 pointer-events-none" fill="none" viewBox="0 0 24 24"
             stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
           </svg>
         </button>
       </div>
@@ -171,129 +687,105 @@
     <div id="message" class="message"></div>
     <!-- Removed fixed positioning, now part of flex flow -->
     <div id="messageInputContainer" class="message-input-container">
-      <div class="flex items-center mb-2 justify-between">
-        <div class="flex items-center">
-          <select id="modeSelect"
-            class="bg-gray-800 text-white text-sm border border-gray-600 rounded p-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            style="
-              height: 32px;
-              padding: 4px 8px;
-              background-color: #0d1117;
-              color: #c9d1d9;
-              border: 1px solid #30363d;
-            ">
-            <option value="agent">🧠 Agent Mode</option>
-            <option value="chat">💬 Chat Mode</option>
-          </select>
-          <select id="providerSelect"
-            class="ml-2 bg-gray-800 text-white text-sm border border-gray-600 rounded p-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            title="Model Provider" style="
-              height: 32px;
-              padding: 4px 8px;
-              background-color: #0d1117;
-              color: #c9d1d9;
-              border: 1px solid #30363d;
-            ">
-            <option value="openai">☁️ OpenAI</option>
-            <option value="ollama">🦙 Ollama</option>
-          </select>
-          <select id="modelSelect"
-            class="ml-2 bg-gray-800 text-white text-sm border border-gray-600 rounded p-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            title="Model" style="
-              height: 32px;
-              padding: 4px 8px;
-              background-color: #0d1117;
-              color: #c9d1d9;
-              border: 1px solid #30363d;
-            ">
-            <!-- Options will be populated based on provider -->
-          </select>
-          <button id="apiKeyButton" type="button" class="btn-elegant" style="
-              height: 28px;
-              padding: 0 8px;
-              margin-left: 6px;
-              font-size: 11px;
-              cursor: pointer;
-              pointer-events: auto;
-              position: relative;
-              z-index: 2;
-            " title="Set OpenAI API key">
-            API Key
+      <div class="input-controls-row">
+        <div class="model-selection-group">
+          <div class="select-container select-container-narrow">
+            <select id="modeSelect" class="model-select-input">
+              <option value="agent">🧠 Agent</option>
+              <option value="chat">💬 Chat</option>
+            </select>
+          </div>
+          <div class="select-container flex-grow min-w-0">
+            <select id="unifiedModelSelect" class="model-select-input" title="Select Model">
+              <!-- Will be populated with optgroups -->
+            </select>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <button id="planButton" class="btn-elegant icon-button-size flex-center" title="Show Plan Status"
+            style="display: none;">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
           </button>
-          <span id="quotaBadge" style="
-              margin-left: 6px;
-              font-size: 11px;
-              color: #8b949e;
-              border: 1px solid #30363d;
-              border-radius: 6px;
-              padding: 3px 6px;
-            ">
-            Free 20
-          </span>
-          <button id="planButton" style="
-              margin-left: 8px;
-              background-color: #21262d;
-              color: #c9d1d9;
-              font-size: 0.875rem;
-              border: 1px solid #30363d;
-              border-radius: 6px;
-              padding: 4px 8px;
-              cursor: pointer;
-              display: none;
-            " onmouseover="this.style.backgroundColor = '#30363d'" onmouseout="this.style.backgroundColor = '#21262d'"
-            title="Show Plan Status">
-            📋 Plan
+          <button id="settingsButton" class="btn-elegant icon-button-size flex-center" title="Settings">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
           </button>
+
+          <div id="settingsMenu" class="hidden settings-dropdown">
+            <div id="quotaRow" class="quota-row">
+              <span class="text-xxs text-gray-400 uppercase font-bold tracking-wider">Quota</span>
+              <span id="quotaBadge" class="text-xxs whitespace-nowrap">Free 20</span>
+            </div>
+            <button id="apiKeyButton" type="button" class="settings-item" title="Set OpenAI API key">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+              </svg>
+              <span id="apiKeyBtnText">API Key</span>
+            </button>
+            <!-- Moved buttons -->
+            <button id="button-workspace" class="settings-item" title="Teach AI" style="display: none">
+              <span style="font-size: 14px">🔄</span>
+              <span>Teach AI</span>
+            </button>
+            <button id="logoutButton" class="settings-item" title="Logout">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              <span>Logout</span>
+            </button>
+          </div>
         </div>
       </div>
       <div id="attachment-preview" class="flex flex-wrap gap-2 mb-2 hidden"></div>
 
       <!-- ADDED: Plan Status Container above input -->
-      <div id="planStatusContainer"
-        class="hidden mb-2 p-2 bg-gray-900 border border-gray-700 rounded text-xs text-gray-300 max-h-32 overflow-y-auto">
+      <div id="planStatusContainer" class="plan-status-container hidden">
         <div class="flex justify-between items-center mb-1">
-          <span class="font-bold text-blue-400">Current Plan</span>
-          <button id="closePlanStatus" style="
-              background: none;
-              border: none;
-              cursor: pointer;
-              color: white;
-            ">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="white"
-              style="width: 16px; height: 16px">
-              <path style="stroke: white !important; fill: none" stroke="white" fill="none" stroke-linecap="round"
-                stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          <span class="font-bold" style="color: #58a6ff;">Current Plan</span>
+          <button id="closePlanStatus" class="bg-transparent border-none cursor-pointer text-gray-300 p-1 flex-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
         <div id="planStatusContent" class="whitespace-pre-wrap"></div>
       </div>
 
-      <div id="composerRow" class="flex items-center">
-        <input type="file" id="file-input" multiple class="hidden" style="display: none" />
-        <button id="attach-button" class="btn-elegant mr-2 p-2 rounded-lg flex items-center justify-center"
-          style="width: 40px; height: 40px" title="Attach files">
+      <div id="composerRow" class="flex items-center gap-2">
+        <input type="file" id="file-input" multiple class="hidden" />
+        <button id="attach-button" class="btn-elegant btn-composer-action p-2 rounded-lg flex-center"
+          title="Attach files">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
           </svg>
         </button>
         <textarea id="messageInput" placeholder="Describe a task for the Agent…"
-          class="flex-grow p-2 border-0 focus:outline-none bg-black text-white" style="
-            border: none;
-            outline: none;
-            box-shadow: none;
+          class="flex-grow p-2 border-none focus-outline-none bg-transparent text-white" style="
             resize: none;
             overflow-y: auto;
           " rows="1">
         </textarea>
         <button id="context-button" type="button"
-          class="btn-elegant mr-2 p-2 rounded-lg flex items-center justify-center"
-          style="width: 40px; height: 40px; font-weight: 700" title="Add context (#)">
+          class="btn-elegant btn-composer-action p-2 rounded-lg flex-center font-bold" title="Add context (#)">
           #
         </button>
-        <button id="sendMessageButton"
-          class="ml-2 flex items-center justify-center bg-blue-500 hover:bg-blue-600 text-white rounded">
+        <button id="sendMessageButton" class="ml-1 flex-center btn-primary btn-send-main">
           <div id="button-send" class="button-send">
             <svg class="h-4 w-4 ml-1" fill="currentColor" viewBox="0 0 24 24">
               <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
@@ -316,86 +808,33 @@
       </div>
     </div>
     <!-- Plan Status Popup -->
-    <div id="planPopup" style="
-        position: fixed;
-        background-color: #1a1d23;
-        border: 1px solid #30363d;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-        padding: 0;
-        max-width: 320px;
-        max-height: 256px;
-        display: none;
-        z-index: 9999;
-        flex-direction: column;
-      ">
-      <div style="
-          padding: 8px 12px;
-          border-bottom: 1px solid #30363d;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          background-color: #21262d;
-          border-radius: 8px 8px 0 0;
-        ">
-        <span style="font-weight: 600; color: #c9d1d9; font-size: 0.875rem">Current Plan</span>
-        <button id="closePlanPopup" class="text-gray-400 hover:text-white transition-colors duration-200" style="
-            background: none;
-            border: none;
-            cursor: pointer;
-            padding: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 4px;
-            color: white;
-          " onmouseover="this.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'"
-          onmouseout="this.style.backgroundColor = 'transparent'">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="white" stroke="white"
-            style="width: 20px; height: 20px">
-            <path style="stroke: white !important; fill: white" stroke="white" fill="white" fill-rule="evenodd"
+    <div id="planPopup" class="popup-container" style="max-width: 320px; max-height: 256px;">
+      <div class="popup-header">
+        <span class="font-bold text-gray-300 text-sm">Current Plan</span>
+        <button id="closePlanPopup"
+          class="text-white hover-text-white transition-colors duration-200 bg-transparent border-none cursor-pointer p-1 flex-center rounded-md">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd"
               d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
               clip-rule="evenodd" />
           </svg>
         </button>
       </div>
-      <div id="planContent" style="
-          font-size: 0.875rem;
-          color: #c9d1d9;
-          padding: 8px;
-          overflow-y: auto;
-        "></div>
+      <div id="planContent" class="text-sm text-gray-300 p-2 overflow-y-auto"></div>
     </div>
 
     <!-- History Popup -->
-    <div id="historyPopup" style="
-        position: fixed;
-        top: 48px;
-        right: 10px;
-        background-color: #1a1d23;
-        border: 1px solid #30363d;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-        padding: 0;
-        width: 300px;
-        max-height: 400px;
-        overflow-y: auto;
-        display: none;
-        z-index: 9999;
-      ">
-      <div class="p-4 border-b border-gray-700 font-bold text-gray-300 flex justify-between items-center"
-        style="padding: 12px 16px">
+    <div id="historyPopup" class="popup-container"
+      style="top: 48px; right: 10px; width: 300px; max-height: 400px; overflow-y: auto;">
+      <div class="p-4 border-b font-bold text-gray-300 flex justify-between items-center">
         <span>Chat History</span>
-        <button id="closeHistory" class="text-white hover:text-white" style="
-            background: transparent;
-            border: none;
-            cursor: pointer;
-            font-size: 1.25rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          ">
-          &times;
+        <button id="closeHistory"
+          class="text-white hover-text-white transition-colors duration-200 bg-transparent border-none cursor-pointer p-1 flex-center rounded-md">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd"
+              d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+              clip-rule="evenodd" />
+          </svg>
         </button>
       </div>
       <div id="historyList" class="flex flex-col">
@@ -405,58 +844,24 @@
         </div>
       </div>
     </div>
-    <div id="apiKeyModal" style="
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.55);
-        display: none;
-        align-items: center;
-        justify-content: center;
-        z-index: 10000;
-      ">
-      <div style="
-          width: min(460px, calc(100vw - 24px));
-          background: #161b22;
-          border: 1px solid #30363d;
-          border-radius: 10px;
-          padding: 14px;
-          color: #c9d1d9;
-        ">
-        <div style="font-weight: 700; margin-bottom: 6px">OpenAI API Key</div>
-        <div style="font-size: 12px; color: #8b949e; margin-bottom: 10px">
+
+    <!-- API Key Modal -->
+    <div id="apiKeyModal" class="modal-overlay">
+      <div class="modal-content" style="width: min(460px, calc(100vw - 24px));">
+        <div class="font-bold mb-1">OpenAI API Key</div>
+        <div class="text-xs text-gray-400 mb-2">
           Paste API key to update. Leave empty to keep current key.
         </div>
-        <input id="apiKeyInput" type="password" placeholder="sk-..." style="
-            width: 100%;
-            height: 34px;
-            padding: 6px 10px;
-            border-radius: 8px;
-            border: 1px solid #30363d;
-            background: #0d1117;
-            color: #c9d1d9;
-            outline: none;
-            margin-bottom: 14px;
-          " />
-        <div style="font-weight: 700; margin-bottom: 6px">Custom API URL (Optional)</div>
-        <div style="font-size: 12px; color: #8b949e; margin-bottom: 10px">
+        <input id="apiKeyInput" type="password" placeholder="sk-..." class="input-standard mb-2" />
+
+        <div class="font-bold mb-1 mt-2">Custom API URL (Optional)</div>
+        <div class="text-xs text-gray-400 mb-2">
           Endpoint for custom API (OpenAI compatible). Default is OpenAI.
         </div>
-        <input id="customApiUrlInput" type="text" placeholder="https://api.openai.com/v1/chat/completions" style="
-            width: 100%;
-            height: 34px;
-            padding: 6px 10px;
-            border-radius: 8px;
-            border: 1px solid #30363d;
-            background: #0d1117;
-            color: #c9d1d9;
-            outline: none;
-          " />
-        <div style="
-            margin-top: 10px;
-            display: flex;
-            justify-content: flex-end;
-            gap: 8px;
-          ">
+        <input id="customApiUrlInput" type="text" placeholder="https://api.openai.com/v1/chat/completions"
+          class="input-standard" />
+
+        <div class="mt-2 flex justify-end gap-2">
           <button id="apiKeyCancelBtn" type="button" class="btn-elegant" style="height: 30px; padding: 0 10px">
             Cancel
           </button>
@@ -466,53 +871,16 @@
         </div>
       </div>
     </div>
-    <div id="contextPickerModal" style="
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.55);
-        display: none;
-        align-items: center;
-        justify-content: center;
-        z-index: 10000;
-      ">
-      <div style="
-          width: min(620px, calc(100vw - 24px));
-          max-height: min(80vh, 680px);
-          background: #161b22;
-          border: 1px solid #30363d;
-          border-radius: 10px;
-          padding: 12px;
-          color: #c9d1d9;
-          display: flex;
-          flex-direction: column;
-        ">
-        <div style="font-weight: 700; margin-bottom: 8px">Add Context (#)</div>
-        <input id="contextPickerSearch" type="text" placeholder="Search file/folder..." style="
-            width: 100%;
-            height: 34px;
-            padding: 6px 10px;
-            border-radius: 8px;
-            border: 1px solid #30363d;
-            background: #0d1117;
-            color: #c9d1d9;
-            outline: none;
-          " />
-        <div id="contextPickerList" style="
-            margin-top: 10px;
-            border: 1px solid #30363d;
-            border-radius: 8px;
-            background: #0d1117;
-            overflow: auto;
-            min-height: 200px;
-            max-height: 420px;
-            padding: 6px;
-          "></div>
-        <div style="
-            margin-top: 10px;
-            display: flex;
-            justify-content: flex-end;
-            gap: 8px;
-          ">
+
+    <!-- Context Picker Modal -->
+    <div id="contextPickerModal" class="modal-overlay">
+      <div class="modal-content"
+        style="width: min(620px, calc(100vw - 24px)); max-height: min(80vh, 680px); display: flex; flex-direction: column;">
+        <div class="font-bold mb-2">Add Context (#)</div>
+        <input id="contextPickerSearch" type="text" placeholder="Search file/folder..." class="input-standard" />
+        <div id="contextPickerList" class="mt-2 border rounded-md p-1 overflow-y-auto"
+          style="min-height: 200px; max-height: 420px; background: #0d1117;"></div>
+        <div class="mt-2 flex justify-end gap-2">
           <button id="contextPickerCancelBtn" type="button" class="btn-elegant" style="height: 30px; padding: 0 10px">
             Close
           </button>
@@ -571,21 +939,24 @@
 
       function updateQuotaBadgeFromSettings() {
         const badge = document.getElementById("quotaBadge")
-        const apiKeyBtn = document.getElementById("apiKeyButton")
+        const quotaRow = document.getElementById("quotaRow")
+        const apiKeyBtnText = document.getElementById("apiKeyBtnText")
         if (!badge) return
         const remain = Number(currentAiSettings.machinePromptRemaining || 0)
         const limit = Number(currentAiSettings.freePromptLimit || 20)
+
         if (currentAiSettings.hasUserApiKey) {
-          badge.textContent = "BYOK Active"
-          badge.style.color = "#7ee787"
+          if (quotaRow) quotaRow.style.display = "none"
+          if (apiKeyBtnText) apiKeyBtnText.textContent = "API Key (BYOK Active)"
+          apiKeyBtnText.parentElement.style.color = "#7ee787"
         } else {
+          if (quotaRow) quotaRow.style.display = "flex"
           badge.textContent = `Free ${remain}/${limit}`
           badge.style.color = remain > 0 ? "#8b949e" : "#ff7b72"
-        }
-        if (apiKeyBtn) {
-          apiKeyBtn.textContent = currentAiSettings.hasUserApiKey
-            ? "API Key Saved"
-            : "Set API Key"
+          if (apiKeyBtnText) {
+            apiKeyBtnText.textContent = "Set API Key"
+            apiKeyBtnText.parentElement.style.color = ""
+          }
         }
       }
 
@@ -616,75 +987,69 @@
         { name: "⚡ gpt-4o-mini", value: "gpt-4o-mini" },
       ]
 
+      let isUpdatingModelSelect = false
       async function updateModelSelect() {
-        const providerSelect = document.getElementById("providerSelect")
-        const modelSelect = document.getElementById("modelSelect")
-        if (!modelSelect || !providerSelect) return
+        const unifiedSelect = document.getElementById("unifiedModelSelect")
+        if (!unifiedSelect || isUpdatingModelSelect) return
+        isUpdatingModelSelect = true
 
-        const provider = providerSelect.value
-        currentAiSettings.selectedProvider = provider
+        try {
+          // Save current selection to restore if possible
+          const currentVal = unifiedSelect.value || currentAiSettings.selectedModel
 
-        // Clear existing options
-        modelSelect.innerHTML = ""
+          // Fetch ollama models first so we have all data ready
+          const ollamaModels = await fetchOllamaModels()
 
-        if (provider === "openai") {
-          modelSelect.classList.remove("hidden")
+          // Clear existing
+          unifiedSelect.innerHTML = ""
+
+          // Create OpenAI Group
+          const openAiGroup = document.createElement("optgroup")
+          openAiGroup.label = "Cloud (OpenAI)"
           openaiModels.forEach((m) => {
             const opt = document.createElement("option")
             opt.value = m.value
             opt.textContent = m.name
-            modelSelect.appendChild(opt)
+            openAiGroup.appendChild(opt)
           })
-          // Set to current model if it's an OpenAI model, otherwise fallback
-          if (
-            openaiModels.some((m) => m.value === currentAiSettings.selectedModel)
-          ) {
-            modelSelect.value = currentAiSettings.selectedModel
-          } else {
-            modelSelect.value = "gpt-5.1-codex-mini"
-            currentAiSettings.selectedModel = modelSelect.value
-          }
-        } else if (provider === "ollama") {
-          const ollamaModels = await fetchOllamaModels()
+          unifiedSelect.appendChild(openAiGroup)
+
+          // Create Ollama Group
+          const ollamaGroup = document.createElement("optgroup")
+          ollamaGroup.label = "Local (Ollama)"
           if (ollamaModels.length > 0) {
             ollamaModels.forEach((m) => {
               const opt = document.createElement("option")
               opt.value = m.value
               opt.textContent = m.name
-              modelSelect.appendChild(opt)
+              ollamaGroup.appendChild(opt)
             })
-
-            // Set to current model if it's an Ollama model
-            if (
-              currentAiSettings.selectedModel &&
-              currentAiSettings.selectedModel.startsWith("ollama:")
-            ) {
-              if (
-                ollamaModels.some((m) => m.value === currentAiSettings.selectedModel)
-              ) {
-                modelSelect.value = currentAiSettings.selectedModel
-              } else {
-                modelSelect.value = ollamaModels[0].value
-                currentAiSettings.selectedModel = modelSelect.value
-              }
-            } else {
-              modelSelect.value = ollamaModels[0].value
-              currentAiSettings.selectedModel = modelSelect.value
-            }
-            modelSelect.classList.remove("hidden")
           } else {
-            // No Ollama models found, show a message or fallback
             const opt = document.createElement("option")
             opt.value = ""
+            opt.disabled = true
             opt.textContent = "No Ollama models found"
-            modelSelect.appendChild(opt)
-            modelSelect.classList.remove("hidden")
+            ollamaGroup.appendChild(opt)
           }
+          unifiedSelect.appendChild(ollamaGroup)
+
+          // Restore value
+          if (Array.from(unifiedSelect.options).some((o) => o.value === currentVal)) {
+            unifiedSelect.value = currentVal
+          } else {
+            unifiedSelect.value = "gpt-5.1-codex-mini"
+          }
+
+          // Sync back to settings
+          currentAiSettings.selectedModel = unifiedSelect.value
+          currentAiSettings.selectedProvider = unifiedSelect.value.startsWith("ollama:") ? "ollama" : "openai"
+        } finally {
+          isUpdatingModelSelect = false
         }
       }
 
       function getModelOptionsSet() {
-        const select = document.getElementById("modelSelect")
+        const select = document.getElementById("unifiedModelSelect")
         if (select && select.options && select.options.length > 0) {
           return new Set(
             Array.from(select.options)
@@ -975,9 +1340,9 @@
           return
         }
         root.innerHTML = `
-                    <div id="fileOpen" class="flex file-open p-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <span id="filePath">${filePath}</span>
-                        <span class="fs-6" id="selectedLine">: ${selectedLine || "-"} Selected</span>
+                    <div id="fileOpen" class="flex items-center gap-2 p-1 border rounded-lg focus-outline-none">
+                        <span id="filePath" class="text-xs text-gray-300">${filePath}</span>
+                        <span class="text-xxs text-gray-400" id="selectedLine">: ${selectedLine || "-"} Selected</span>
                     </div>`
         updateAuxStatusRowVisibility()
       }
@@ -1085,18 +1450,17 @@
       }
 
       function submitApiKeyFromModal() {
-        const modelSelect = document.getElementById("modelSelect")
-        const providerSelect = document.getElementById("providerSelect")
+        const unifiedSelect = document.getElementById("unifiedModelSelect")
         const input = document.getElementById("apiKeyInput")
         const customUrlInput = document.getElementById("customApiUrlInput")
         if (!input) return
         vscode.postMessage({
           type: "saveAiSettings",
           model:
-            (modelSelect && modelSelect.value) ||
+            (unifiedSelect && unifiedSelect.value) ||
             currentAiSettings.selectedModel ||
             "gpt-5.1-codex-mini",
-          provider: (providerSelect && providerSelect.value) || "openai",
+          provider: (unifiedSelect && unifiedSelect.value && unifiedSelect.value.startsWith("ollama:")) ? "ollama" : "openai",
           userApiKey: input.value.trim(),
           customApiUrl: customUrlInput ? customUrlInput.value.trim() : "",
           keepExistingApiKey: input.value.trim() === "",
@@ -1113,7 +1477,7 @@
           messages: messageArray,
           mode: document.getElementById("modeSelect")?.value ?? "agent",
           model: ensureSupportedModel(
-            document.getElementById("modelSelect")?.value ??
+            document.getElementById("unifiedModelSelect")?.value ??
             currentAiSettings.selectedModel ??
             "gpt-5.1-codex-mini",
           ),
@@ -1407,7 +1771,7 @@
         const token = localStorage.getItem("token")
         const userId = localStorage.getItem("userId")
         const modeSelect = document.getElementById("modeSelect")
-        const modelSelect = document.getElementById("modelSelect")
+        const unifiedSelect = document.getElementById("unifiedModelSelect")
         const apiKeyButton = document.getElementById("apiKeyButton")
         const messageInput = document.getElementById("messageInput")
         function updatePlaceholder() {
@@ -1421,47 +1785,33 @@
         if (modeSelect) {
           modeSelect.addEventListener("change", updatePlaceholder)
         }
-        const providerSelect = document.getElementById("providerSelect")
-        if (providerSelect) {
-          providerSelect.addEventListener("change", async () => {
-            await updateModelSelect()
-            // Save settings when provider changes
-            const modelSelect = document.getElementById("modelSelect")
-            let modelValue = modelSelect.value
-            vscode.postMessage({
-              type: "saveAiSettings",
-              model: modelValue,
-              provider: providerSelect.value,
-              keepExistingApiKey: true,
-            })
-          })
-        }
         setupAuxStatusAutoVisibility()
-        if (modelSelect) {
-          modelSelect.addEventListener("change", () => {
-            const providerSelect = document.getElementById("providerSelect")
-
+        if (unifiedSelect) {
+          unifiedSelect.addEventListener("change", () => {
             const requestedModel = ensureSupportedModel(
-              modelSelect.value || "gpt-5.1-codex-mini",
+              unifiedSelect.value || "gpt-5.1-codex-mini",
             )
+            const provider = requestedModel.startsWith("ollama:") ? "ollama" : "openai"
+
             if (
-              providerSelect.value === "openai" &&
+              provider === "openai" &&
               !currentAiSettings.hasUserApiKey &&
               !isFreeQuotaModel(requestedModel)
             ) {
-              modelSelect.value = resolveAllowedModelOrFallback(
+              unifiedSelect.value = resolveAllowedModelOrFallback(
                 currentAiSettings.selectedModel,
               )
-              currentAiSettings.selectedModel = modelSelect.value
+              currentAiSettings.selectedModel = unifiedSelect.value
               openApiKeyModal()
               return
             }
             currentAiSettings.selectedModel = requestedModel
+            currentAiSettings.selectedProvider = provider
             lastAllowedModel = requestedModel
             vscode.postMessage({
               type: "saveAiSettings",
               model: currentAiSettings.selectedModel,
-              provider: providerSelect.value,
+              provider: currentAiSettings.selectedProvider,
               userApiKey: "",
               keepExistingApiKey: true,
             })
@@ -1469,7 +1819,34 @@
         }
         if (apiKeyButton) {
           apiKeyButton.style.pointerEvents = "auto"
-          apiKeyButton.addEventListener("click", () => openApiKeyModal())
+          apiKeyButton.addEventListener("click", () => {
+            openApiKeyModal()
+            document.getElementById("settingsMenu")?.classList.add("hidden")
+          })
+        }
+
+        const settingsButton = document.getElementById("settingsButton")
+        const settingsMenu = document.getElementById("settingsMenu")
+        if (settingsButton && settingsMenu) {
+          settingsButton.addEventListener("click", (e) => {
+            e.stopPropagation()
+            settingsMenu.classList.toggle("hidden")
+          })
+          document.addEventListener("click", (e) => {
+            if (!settingsMenu.contains(e.target) && e.target !== settingsButton) {
+              settingsMenu.classList.add("hidden")
+            }
+          })
+        }
+
+        const planButton = document.getElementById("planButton")
+        if (planButton) {
+          planButton.addEventListener("click", () => {
+            settingsMenu?.classList.add("hidden")
+            if (typeof togglePlanPopup === 'function') {
+              togglePlanPopup()
+            }
+          })
         }
         const apiKeyModal = document.getElementById("apiKeyModal")
         const apiKeyCancelBtn = document.getElementById("apiKeyCancelBtn")
@@ -1514,17 +1891,22 @@
         sendMessageButton.addEventListener("click", handleSendMessage)
         const btnWorkspace = document.getElementById("button-workspace")
         if (btnWorkspace) {
-          btnWorkspace.style.display = "none"
-          btnWorkspace.addEventListener("click", () => updateWorkspaces())
+          btnWorkspace.addEventListener("click", () => {
+            settingsMenu?.classList.add("hidden")
+            updateWorkspaces()
+          })
         }
         const logoutButton = document.getElementById("logoutButton")
-        logoutButton.addEventListener("click", logout)
+        if (logoutButton) {
+          logoutButton.addEventListener("click", () => {
+            settingsMenu?.classList.add("hidden")
+            logout()
+          })
+        }
 
         const newChatButton = document.getElementById("newChatButton")
         if (newChatButton) {
           newChatButton.addEventListener("click", () => {
-            // Remove confirm for now to test if it's blocking
-            // if (confirm("Start a new chat? Current chat will be saved to history.")) {
             try {
               startNewChat()
             } catch (e) {
@@ -1534,7 +1916,6 @@
                 error: "Failed to start new chat: " + e.message,
               })
             }
-            // }
           })
         }
 
@@ -1544,8 +1925,8 @@
 
         if (historyButton && historyPopup) {
           historyButton.addEventListener("click", () => {
+            settingsMenu?.classList.add("hidden")
             if (historyPopup.style.display === "none") {
-              // Request latest history
               vscode.postMessage({ type: "getHistory" })
               historyPopup.style.display = "block"
             } else {
@@ -1553,7 +1934,6 @@
             }
           })
 
-          // Close when clicking outside
           document.addEventListener("click", (e) => {
             if (
               historyPopup &&
@@ -1572,16 +1952,11 @@
           })
         }
 
-        // Plan Button Logic
-        const planButton = document.getElementById("planButton")
+        // Plan Button Logic (Handled above in DOMContentLoaded)
         const planStatusContainer = document.getElementById(
           "planStatusContainer",
         )
         const closePlanStatus = document.getElementById("closePlanStatus")
-
-        if (planButton) {
-          planButton.addEventListener("click", togglePlanPopup)
-        }
 
         const closePlanPopupBtn = document.getElementById("closePlanPopup")
         if (closePlanPopupBtn) {
@@ -2082,14 +2457,14 @@
           } else {
             const span = document.createElement("div")
             span.className =
-              "h-8 w-8 flex items-center justify-center text-xs text-center rounded overflow-hidden p-1 break-all text-white"
+              "h-8 w-8 flex-center text-xs text-center rounded overflow-hidden p-1 break-all text-white"
             span.textContent = att.name
             div.appendChild(span)
           }
 
           const removeBtn = document.createElement("button")
           removeBtn.className =
-            "absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs"
+            "absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex-center opacity-0 group-hover-opacity-100 transition-opacity text-xs"
           removeBtn.innerHTML = "&times;"
           removeBtn.onclick = () => {
             attachments.splice(index, 1)
@@ -2213,9 +2588,9 @@
         let message = messageVal
         const modeSelect = document.getElementById("modeSelect")
         const mode = modeSelect ? modeSelect.value : "agent"
-        const modelSelect = document.getElementById("modelSelect")
+        const unifiedSelect = document.getElementById("unifiedModelSelect")
         const selectedModel = ensureSupportedModel(
-          (modelSelect && modelSelect.value) ||
+          (unifiedSelect && unifiedSelect.value) ||
           currentAiSettings.selectedModel ||
           "gpt-5.1-codex-mini",
         )
@@ -5998,9 +6373,8 @@ ${result.summary || "Executed successfully."}`,
 
         if (totalTasks > 0) {
           const progressText = `${completedTasks}/${totalTasks}`
-          planButton.innerHTML = `✅ ${progressText} Tasks done`
           planButton.title = `Plan: ${progressText} completed`
-          planButton.style.display = "flex" // Make sure it's visible!
+          planButton.style.display = "flex" // Make sure it's visible in the menu!
 
           // Update the container above input
           if (planStatusContent) {
@@ -6008,7 +6382,6 @@ ${result.summary || "Executed successfully."}`,
           }
         } else if (planMarkdown && planMarkdown.trim().length > 0) {
           // Fallback: If no structured tasks found, but plan exists, show generic button
-          planButton.innerHTML = `📋 Plan`
           planButton.title = `Show Plan`
           planButton.style.display = "flex"
           if (planStatusContent) {
@@ -6070,6 +6443,12 @@ ${result.summary || "Executed successfully."}`,
 
           planContent.innerHTML = html
         }
+      }
+
+      window.onload = async () => {
+        // ... (existing window.onload content if any)
+        // Note: window.onload is often used to initialize things.
+        // Let's search for existing window.onload first.
       }
 
       function resetUI() {
@@ -7263,7 +7642,14 @@ ${result.summary || "Executed successfully."}`,
         } else {
           console.log("Diff content not found for " + path)
         }
-      };
+      }
+
+      window.onload = async () => {
+        // Populate model select on load
+        await updateModelSelect()
+        // Update quota status on load
+        updateQuotaBadgeFromSettings()
+      }
     </script>
     <script src="%PRISMJS_PATH%"></script>
     <!-- Include the Prism JS for syntax highlighting functionality -->
