@@ -268,6 +268,18 @@
         "title": "Vibe Coding: Open Diff"
       },
       {
+        "command": "vico.aiFix",
+        "title": "✨ Vico AI Fix"
+      },
+      {
+        "command": "vico.sendToChat",
+        "title": "💬 Send To Chat"
+      },
+      {
+        "command": "vico.sendCodeToChat",
+        "title": "📝 Send Code to Chat"
+      },
+      {
         "command": "vibe-coding.updateWorkspaces",
         "title": "Vibe Coding: Update Workspaces"
       },

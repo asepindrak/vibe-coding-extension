@@ -243,7 +243,9 @@
       }
 
       .shadow-xl {
-        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        box-shadow:
+          0 20px 25px -5px rgba(0, 0, 0, 0.1),
+          0 10px 10px -5px rgba(0, 0, 0, 0.04);
       }
 
       .z-max {
@@ -259,7 +261,8 @@
       }
 
       .transition-colors {
-        transition-property: background-color, border-color, color, fill, stroke;
+        transition-property:
+          background-color, border-color, color, fill, stroke;
       }
 
       .duration-200 {
@@ -311,7 +314,9 @@
         border-radius: 8px;
         padding: 6px;
         min-width: 180px;
-        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        box-shadow:
+          0 20px 25px -5px rgba(0, 0, 0, 0.1),
+          0 10px 10px -5px rgba(0, 0, 0, 0.04);
         display: flex;
         flex-direction: column;
         gap: 4px;
@@ -347,14 +352,105 @@
 
       .plan-status-container {
         margin-bottom: 8px;
-        padding: 8px;
         background-color: #161b22;
         border: 1px solid #30363d;
         border-radius: 6px;
         font-size: 12px;
         color: #c9d1d9;
-        max-height: 128px;
+        max-height: 240px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .code-reference-chip {
+        display: inline-flex;
+        align-items: center;
+        background-color: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        padding: 4px 8px;
+        gap: 6px;
+        font-size: 11px;
+        color: #c9d1d9;
+        transition: all 0.2s;
+        cursor: default;
+      }
+
+      .code-reference-chip:hover {
+        border-color: #58a6ff;
+        background-color: #1f242c;
+      }
+
+      .code-reference-chip .icon {
+        color: #7ee787;
+        font-family: monospace;
+        font-weight: bold;
+      }
+
+      .code-reference-chip .path {
+        font-weight: 500;
+        max-width: 150px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .code-reference-chip .range {
+        color: #8b949e;
+      }
+
+      .code-reference-chip .remove-btn {
+        cursor: pointer;
+        color: #8b949e;
+        margin-left: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+        padding: 2px;
+      }
+
+      .code-reference-chip .remove-btn:hover {
+        color: #f85149;
+        background-color: rgba(248, 81, 73, 0.1);
+      }
+
+      .plan-status-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 4px 8px;
+        border-bottom: 1px solid #30363d;
+        flex-shrink: 0;
+      }
+
+      .plan-status-content {
         overflow-y: auto;
+        flex: 1;
+        min-height: 0;
+        padding: 8px;
+        white-space: pre-wrap;
+      }
+
+      .popup-container {
+        position: fixed;
+        background-color: #1a1d23;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        display: none;
+        z-index: 9999;
+        flex-direction: column;
+        max-height: 300px;
+        overflow: hidden;
+      }
+
+      .popup-content {
+        overflow-y: auto;
+        flex: 1;
+        min-height: 0;
+        padding: 8px;
       }
 
       .select-container {
@@ -704,7 +800,7 @@
 
         <div class="settings-group">
           <button id="planButton" class="btn-elegant icon-button-size flex-center" title="Show Plan Status"
-            style="display: none;">
+            style="display: none">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
               stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -751,11 +847,12 @@
         </div>
       </div>
       <div id="attachment-preview" class="flex flex-wrap gap-2 mb-2 hidden"></div>
+      <div id="code-reference-container" class="flex flex-wrap gap-2 mb-2 hidden"></div>
 
       <!-- ADDED: Plan Status Container above input -->
       <div id="planStatusContainer" class="plan-status-container hidden">
-        <div class="flex justify-between items-center mb-1">
-          <span class="font-bold" style="color: #58a6ff;">Current Plan</span>
+        <div class="plan-status-header">
+          <span class="font-bold" style="color: #58a6ff">Current Plan</span>
           <button id="closePlanStatus" class="bg-transparent border-none cursor-pointer text-gray-300 p-1 flex-center">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
               stroke="currentColor">
@@ -763,7 +860,7 @@
             </svg>
           </button>
         </div>
-        <div id="planStatusContent" class="whitespace-pre-wrap"></div>
+        <div id="planStatusContent" class="plan-status-content custom-scrollbar"></div>
       </div>
 
       <div id="composerRow" class="flex items-center gap-2">
@@ -776,10 +873,8 @@
           </svg>
         </button>
         <textarea id="messageInput" placeholder="Describe a task for the Agent…"
-          class="flex-grow p-2 border-none focus-outline-none bg-transparent text-white" style="
-            resize: none;
-            overflow-y: auto;
-          " rows="1">
+          class="flex-grow p-2 border-none focus-outline-none bg-transparent text-white"
+          style="resize: none; overflow-y: auto" rows="1">
         </textarea>
         <button id="context-button" type="button"
           class="btn-elegant btn-composer-action p-2 rounded-lg flex-center font-bold" title="Add context (#)">
@@ -802,13 +897,11 @@
         </button>
       </div>
       <div id="manual-context-preview" class="mt-2 flex flex-wrap gap-1"></div>
-      <div id="aux-status-row" class="flex" style="display: none">
-        <div id="div-code-selected" class="flex mt-2"></div>
-        <div id="generating" class="mt-2 ml-2"></div>
-      </div>
+      <div id="div-code-selected" class="flex mt-2"></div>
+      <div id="generating" class="text-xs text-gray-500 mt-1"></div>
     </div>
     <!-- Plan Status Popup -->
-    <div id="planPopup" class="popup-container" style="max-width: 320px; max-height: 256px;">
+    <div id="planPopup" class="popup-container" style="width: 320px;">
       <div class="popup-header">
         <span class="font-bold text-gray-300 text-sm">Current Plan</span>
         <button id="closePlanPopup"
@@ -820,13 +913,19 @@
           </svg>
         </button>
       </div>
-      <div id="planContent" class="text-sm text-gray-300 p-2 overflow-y-auto"></div>
+      <div id="planContent" class="popup-content custom-scrollbar text-sm text-gray-300"></div>
     </div>
 
     <!-- History Popup -->
-    <div id="historyPopup" class="popup-container"
-      style="top: 48px; right: 10px; width: 300px; max-height: 400px; overflow-y: auto;">
-      <div class="p-4 border-b font-bold text-gray-300 flex justify-between items-center">
+    <div id="historyPopup" class="popup-container" style="
+        top: 48px;
+        right: 10px;
+        width: 300px;
+        max-height: 400px;
+        display: none;
+        overflow: hidden;
+      ">
+      <div class="p-4 border-b font-bold text-gray-300 flex justify-between items-center flex-shrink-0">
         <span>Chat History</span>
         <button id="closeHistory"
           class="text-white hover-text-white transition-colors duration-200 bg-transparent border-none cursor-pointer p-1 flex-center rounded-md">
@@ -837,7 +936,7 @@
           </svg>
         </button>
       </div>
-      <div id="historyList" class="flex flex-col">
+      <div id="historyList" class="flex flex-col overflow-y-auto flex-grow custom-scrollbar">
         <!-- History items will be injected here -->
         <div class="p-4 text-center text-gray-500 text-sm">
           No history found
@@ -847,7 +946,7 @@
 
     <!-- API Key Modal -->
     <div id="apiKeyModal" class="modal-overlay">
-      <div class="modal-content" style="width: min(460px, calc(100vw - 24px));">
+      <div class="modal-content" style="width: min(460px, calc(100vw - 24px))">
         <div class="font-bold mb-1">OpenAI API Key</div>
         <div class="text-xs text-gray-400 mb-2">
           Paste API key to update. Leave empty to keep current key.
@@ -874,12 +973,16 @@
 
     <!-- Context Picker Modal -->
     <div id="contextPickerModal" class="modal-overlay">
-      <div class="modal-content"
-        style="width: min(620px, calc(100vw - 24px)); max-height: min(80vh, 680px); display: flex; flex-direction: column;">
+      <div class="modal-content" style="
+          width: min(620px, calc(100vw - 24px));
+          max-height: min(80vh, 680px);
+          display: flex;
+          flex-direction: column;
+        ">
         <div class="font-bold mb-2">Add Context (#)</div>
         <input id="contextPickerSearch" type="text" placeholder="Search file/folder..." class="input-standard" />
         <div id="contextPickerList" class="mt-2 border rounded-md p-1 overflow-y-auto"
-          style="min-height: 200px; max-height: 420px; background: #0d1117;"></div>
+          style="flex: 1; min-height: 200px; background: #0d1117"></div>
         <div class="mt-2 flex justify-end gap-2">
           <button id="contextPickerCancelBtn" type="button" class="btn-elegant" style="height: 30px; padding: 0 10px">
             Close
@@ -916,15 +1019,24 @@
         machinePromptRemaining: 20,
       }
       var lastSelectedEditorText = ""
+      var currentRelativeFilePath = ""
+      var visibleFiles = []
       var contextPickerAllEntries = []
       var selectedContextRefs = []
-      var contextSearchTimer = null
-      var lastAllowedModel = "gpt-5.1-codex-mini"
-
       const vscode = acquireVsCodeApi()
       const persistedState = vscode.getState() || {}
 
-      var currentSessionId = persistedState.currentSessionId || Date.now().toString() // Default or persisted session ID
+      var selectedCodeReferences = persistedState.selectedCodeReferences || []
+      var contextSearchTimer = null
+      var lastAllowedModel = "gpt-5.1-codex-mini"
+
+      // Initial render for code reference chips if we have any
+      setTimeout(() => {
+        renderCodeReferenceChips()
+      }, 0)
+
+      var currentSessionId =
+        persistedState.currentSessionId || Date.now().toString() // Default or persisted session ID
       var currentGuardrails = { whitelist: [], lineLimits: {} } // Store guardrails from extension
 
       // Store file contents for diffing
@@ -947,7 +1059,8 @@
 
         if (currentAiSettings.hasUserApiKey) {
           if (quotaRow) quotaRow.style.display = "none"
-          if (apiKeyBtnText) apiKeyBtnText.textContent = "API Key (BYOK Active)"
+          if (apiKeyBtnText)
+            apiKeyBtnText.textContent = "API Key (BYOK Active)"
           apiKeyBtnText.parentElement.style.color = "#7ee787"
         } else {
           if (quotaRow) quotaRow.style.display = "flex"
@@ -995,7 +1108,8 @@
 
         try {
           // Save current selection to restore if possible
-          const currentVal = unifiedSelect.value || currentAiSettings.selectedModel
+          const currentVal =
+            unifiedSelect.value || currentAiSettings.selectedModel
 
           // Fetch ollama models first so we have all data ready
           const ollamaModels = await fetchOllamaModels()
@@ -1034,7 +1148,11 @@
           unifiedSelect.appendChild(ollamaGroup)
 
           // Restore value
-          if (Array.from(unifiedSelect.options).some((o) => o.value === currentVal)) {
+          if (
+            Array.from(unifiedSelect.options).some(
+              (o) => o.value === currentVal,
+            )
+          ) {
             unifiedSelect.value = currentVal
           } else {
             unifiedSelect.value = "gpt-5.1-codex-mini"
@@ -1042,7 +1160,11 @@
 
           // Sync back to settings
           currentAiSettings.selectedModel = unifiedSelect.value
-          currentAiSettings.selectedProvider = unifiedSelect.value.startsWith("ollama:") ? "ollama" : "openai"
+          currentAiSettings.selectedProvider = unifiedSelect.value.startsWith(
+            "ollama:",
+          )
+            ? "ollama"
+            : "openai"
         } finally {
           isUpdatingModelSelect = false
         }
@@ -1118,8 +1240,7 @@
         }
         if (newChatButton) newChatButton.disabled = false
         if (historyButton) historyButton.disabled = false
-        document.getElementById("generating").innerHTML = ""
-        updateAuxStatusRowVisibility()
+        updateFileBoxVisibility()
       }
 
       function renderSelectedContextChips() {
@@ -1173,9 +1294,35 @@
         const q = String(filterText || "")
           .toLowerCase()
           .trim()
-        const filtered = contextPickerAllEntries.filter((e) =>
-          !q ? true : e.path.toLowerCase().includes(q),
-        )
+        let filtered = contextPickerAllEntries.filter((e) => {
+          // If no search query, only show visible/active files
+          if (!q) {
+            return e.type === "file" && visibleFiles.includes(e.path)
+          }
+          // If searching, include the visible files even if they don't match the query
+          if (e.type === "file" && visibleFiles.includes(e.path)) {
+            return true
+          }
+          return e.path.toLowerCase().includes(q)
+        })
+
+        // Sort: active file first, then other visible files, then others
+        filtered.sort((a, b) => {
+          const isAActive =
+            a.type === "file" && a.path === currentRelativeFilePath
+          const isBActive =
+            b.type === "file" && b.path === currentRelativeFilePath
+          if (isAActive && !isBActive) return -1
+          if (!isAActive && isBActive) return 1
+
+          const isAVisible = a.type === "file" && visibleFiles.includes(a.path)
+          const isBVisible = b.type === "file" && visibleFiles.includes(b.path)
+          if (isAVisible && !isBVisible) return -1
+          if (!isAVisible && isBVisible) return 1
+
+          return 0
+        })
+
         const limited = filtered.slice(0, 300)
         if (!limited.length) {
           list.innerHTML = `<div style="padding:10px;font-size:12px;color:#8b949e;">No matching file/folder.</div>`
@@ -1276,6 +1423,60 @@
         })
       }
 
+      function upsertFileInContext(context, filePath, content) {
+        if (!context) return `\nFile Content (${filePath}):\n${content}\n`
+
+        const normalizePath = (p) => {
+          let normalized = p.replace(/\\/g, "/").toLowerCase().trim()
+          // Strip common prefixes from markers
+          normalized = normalized.replace(/^project context \((.*)\)$/, "$1")
+          normalized = normalized.replace(/^project memory \((.*)\)$/, "$1")
+          normalized = normalized.replace(/^file content \((.*)\)$/, "$1")
+          return normalized.trim()
+        }
+        const targetPath = normalizePath(filePath)
+
+        // Try various existing markers
+        // We use non-greedy matching and lookahead to stop at the next file/section
+        const markers = [
+          {
+            name: "File Content",
+            pattern: /File Content \(([^)]+)\):[\s\S]*?(?=\nFile Content \(|\n===|\nFILE:|$)/gi,
+            template: (p) => `File Content (${p}):\n${content}\n`
+          },
+          {
+            name: "=== marker",
+            pattern: /=== ([^=]+) ===\n[\s\S]*?\n={10,}/gi,
+            template: (p) => `=== ${p} ===\n${content}\n====================\n`
+          },
+          {
+            name: "FILE: marker",
+            pattern: /FILE: ([^\n]+)\nCONTENT:\n[\s\S]*?(?=\n\[\/ANALYSIS_FILE_READS\]|\nFILE:|$)/gi,
+            template: (p) => `FILE: ${p}\nCONTENT:\n${content}\n`
+          }
+        ]
+
+        let updatedContext = context
+        let matched = false
+
+        for (const marker of markers) {
+          updatedContext = updatedContext.replace(marker.pattern, (match, p) => {
+            if (normalizePath(p) === targetPath) {
+              matched = true
+              return marker.template(p.trim())
+            }
+            return match
+          })
+        }
+
+        if (!matched) {
+          // If no existing marker found, append as new block
+          updatedContext += `\nFile Content (${filePath}):\n${content}\n`
+        }
+
+        return updatedContext
+      }
+
       async function openContextPicker() {
         const modal = document.getElementById("contextPickerModal")
         const search = document.getElementById("contextPickerSearch")
@@ -1336,7 +1537,7 @@
           lastSelectedEditorText.trim().length > 0
         if (!hasRef) {
           root.innerHTML = ""
-          updateAuxStatusRowVisibility()
+          updateFileBoxVisibility()
           return
         }
         root.innerHTML = `
@@ -1344,43 +1545,74 @@
                         <span id="filePath" class="text-xs text-gray-300">${filePath}</span>
                         <span class="text-xxs text-gray-400" id="selectedLine">: ${selectedLine || "-"} Selected</span>
                     </div>`
-        updateAuxStatusRowVisibility()
+        updateFileBoxVisibility()
       }
 
-      function updateAuxStatusRowVisibility() {
-        const row = document.getElementById("aux-status-row")
+      function updateFileBoxVisibility() {
         const fileBox = document.getElementById("div-code-selected")
-        const generating = document.getElementById("generating")
-        if (!row || !fileBox || !generating) return
-
+        if (!fileBox) return
         const hasFileRef = fileBox.textContent.trim().length > 0
-        const hasGenerating = generating.textContent.trim().length > 0
-
-        if (hasGenerating) {
-          generating.classList.add("border", "border-1", "p-2")
-        } else {
-          generating.classList.remove("border", "border-1", "p-2")
-        }
-
-        row.style.display = hasFileRef || hasGenerating ? "flex" : "none"
+        fileBox.style.display = hasFileRef ? "flex" : "none"
       }
 
-      function setupAuxStatusAutoVisibility() {
+      function setupFileBoxAutoVisibility() {
         const fileBox = document.getElementById("div-code-selected")
-        const generating = document.getElementById("generating")
-        if (!fileBox || !generating) return
-        const obs = new MutationObserver(() => updateAuxStatusRowVisibility())
+        if (!fileBox) return
+        const obs = new MutationObserver(() => updateFileBoxVisibility())
         obs.observe(fileBox, {
           childList: true,
           subtree: true,
           characterData: true,
         })
-        obs.observe(generating, {
-          childList: true,
-          subtree: true,
-          characterData: true,
+        updateFileBoxVisibility()
+      }
+
+      function renderCodeReferenceChips() {
+        const container = document.getElementById("code-reference-container")
+        if (!container) return
+
+        if (selectedCodeReferences.length === 0) {
+          container.classList.add("hidden")
+          container.innerHTML = ""
+          return
+        }
+
+        container.classList.remove("hidden")
+        container.innerHTML = selectedCodeReferences
+          .map((ref, index) => {
+            const fileName = ref.path.split("/").pop()
+            const ext = fileName.split(".").pop().toUpperCase()
+            return `
+            <div class="code-reference-chip" title="${ref.path}">
+              <span class="icon">${ext === fileName ? "</>" : ext}</span>
+              <span class="path">${fileName}</span>
+              <span class="range">${ref.range}</span>
+              <div class="remove-btn" onclick="removeCodeReference(${index})">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M18 6L6 18M6 6l12 12"></path>
+                </svg>
+              </div>
+            </div>
+          `
+          })
+          .join("")
+      }
+
+      window.removeCodeReference = function (index) {
+        selectedCodeReferences.splice(index, 1)
+        renderCodeReferenceChips()
+        saveState()
+      }
+
+      function buildCodeReferencesPromptBlock() {
+        if (selectedCodeReferences.length === 0) return ""
+        let out = "\n\n[selected_code_references]\n"
+        selectedCodeReferences.forEach((ref) => {
+          out += `\n--- FILE: ${ref.path} (${ref.range}) ---\n`
+          out += `\`\`\`${ref.languageId}\n${ref.code}\n\`\`\`\n`
         })
-        updateAuxStatusRowVisibility()
+        out += "\n[/selected_code_references]\n"
+        return out
       }
 
       function requestPromptQuota(mode, model) {
@@ -1407,7 +1639,8 @@
                 event.data.selectedModel || currentAiSettings.selectedModel,
               )
               currentAiSettings.hasUserApiKey = !!event.data.hasUserApiKey
-              currentAiSettings.customApiUrl = event.data.customApiUrl || currentAiSettings.customApiUrl
+              currentAiSettings.customApiUrl =
+                event.data.customApiUrl || currentAiSettings.customApiUrl
               currentAiSettings.freePromptLimit =
                 event.data.freePromptLimit ?? currentAiSettings.freePromptLimit
               currentAiSettings.machinePromptUsed =
@@ -1460,7 +1693,12 @@
             (unifiedSelect && unifiedSelect.value) ||
             currentAiSettings.selectedModel ||
             "gpt-5.1-codex-mini",
-          provider: (unifiedSelect && unifiedSelect.value && unifiedSelect.value.startsWith("ollama:")) ? "ollama" : "openai",
+          provider:
+            unifiedSelect &&
+              unifiedSelect.value &&
+              unifiedSelect.value.startsWith("ollama:")
+              ? "ollama"
+              : "openai",
           userApiKey: input.value.trim(),
           customApiUrl: customUrlInput ? customUrlInput.value.trim() : "",
           keepExistingApiKey: input.value.trim() === "",
@@ -1482,6 +1720,7 @@
             "gpt-5.1-codex-mini",
           ),
           currentSessionId: currentSessionId,
+          selectedCodeReferences: selectedCodeReferences,
         })
 
         // Notify extension about the current session ID
@@ -1590,6 +1829,9 @@
           cachedContextVersion = -1
           selectedContextRefs = []
           renderSelectedContextChips()
+
+          selectedCodeReferences = []
+          renderCodeReferenceChips()
 
           // Mark as initialized to prevent tokenValid from restoring old session state
           isInitialized = true
@@ -1785,13 +2027,14 @@
         if (modeSelect) {
           modeSelect.addEventListener("change", updatePlaceholder)
         }
-        setupAuxStatusAutoVisibility()
         if (unifiedSelect) {
           unifiedSelect.addEventListener("change", () => {
             const requestedModel = ensureSupportedModel(
               unifiedSelect.value || "gpt-5.1-codex-mini",
             )
-            const provider = requestedModel.startsWith("ollama:") ? "ollama" : "openai"
+            const provider = requestedModel.startsWith("ollama:")
+              ? "ollama"
+              : "openai"
 
             if (
               provider === "openai" &&
@@ -1833,7 +2076,10 @@
             settingsMenu.classList.toggle("hidden")
           })
           document.addEventListener("click", (e) => {
-            if (!settingsMenu.contains(e.target) && e.target !== settingsButton) {
+            if (
+              !settingsMenu.contains(e.target) &&
+              e.target !== settingsButton
+            ) {
               settingsMenu.classList.add("hidden")
             }
           })
@@ -1843,7 +2089,7 @@
         if (planButton) {
           planButton.addEventListener("click", () => {
             settingsMenu?.classList.add("hidden")
-            if (typeof togglePlanPopup === 'function') {
+            if (typeof togglePlanPopup === "function") {
               togglePlanPopup()
             }
           })
@@ -1928,7 +2174,7 @@
             settingsMenu?.classList.add("hidden")
             if (historyPopup.style.display === "none") {
               vscode.postMessage({ type: "getHistory" })
-              historyPopup.style.display = "block"
+              historyPopup.style.display = "flex"
             } else {
               historyPopup.style.display = "none"
             }
@@ -1939,7 +2185,7 @@
               historyPopup &&
               !historyPopup.contains(e.target) &&
               !historyButton.contains(e.target) &&
-              historyPopup.style.display === "block"
+              historyPopup.style.display === "flex"
             ) {
               historyPopup.style.display = "none"
             }
@@ -2066,6 +2312,48 @@
         window.addEventListener("message", async (event) => {
           const messageEvent = event.data
 
+          if (messageEvent.command === "setChatInput") {
+            const messageInput = document.getElementById("messageInput")
+            if (messageInput) {
+              messageInput.value = messageEvent.text || ""
+              // Auto-resize textarea
+              messageInput.style.height = "auto"
+              messageInput.style.height = messageInput.scrollHeight + "px"
+              messageInput.focus()
+              saveState()
+            }
+            return
+          }
+
+          if (messageEvent.command === "appendCodeReference") {
+            const ref = messageEvent.reference
+            if (ref) {
+              selectedCodeReferences.push(ref)
+              renderCodeReferenceChips()
+              saveState()
+            }
+            return
+          }
+
+          if (messageEvent.command === "appendChatInput") {
+            const messageInput = document.getElementById("messageInput")
+            if (messageInput) {
+              const currentVal = messageInput.value.trim()
+              const appendText = messageEvent.text || ""
+              if (currentVal) {
+                messageInput.value = currentVal + "\n\n" + appendText
+              } else {
+                messageInput.value = appendText
+              }
+              // Auto-resize textarea
+              messageInput.style.height = "auto"
+              messageInput.style.height = messageInput.scrollHeight + "px"
+              messageInput.focus()
+              saveState()
+            }
+            return
+          }
+
           if (messageEvent.command === "systemLog") {
             console.log("[SystemLog]", messageEvent.message)
             return
@@ -2075,6 +2363,8 @@
             if (messageEvent.guardrails) {
               currentGuardrails = messageEvent.guardrails
             }
+            currentRelativeFilePath = messageEvent.relativeFilePath || ""
+            visibleFiles = messageEvent.visibleFiles || []
             renderActiveFileReference(
               messageEvent.filePath || "",
               messageEvent.selectedLine || "",
@@ -2182,7 +2472,8 @@
             const modelSelect = document.getElementById("modelSelect")
             const providerSelect = document.getElementById("providerSelect")
             if (providerSelect) {
-              providerSelect.value = currentAiSettings.selectedProvider || "openai"
+              providerSelect.value =
+                currentAiSettings.selectedProvider || "openai"
             }
             if (modelSelect) {
               await updateModelSelect()
@@ -2210,7 +2501,8 @@
             const modelSelect = document.getElementById("modelSelect")
             const providerSelect = document.getElementById("providerSelect")
             if (providerSelect) {
-              providerSelect.value = currentAiSettings.selectedProvider || "openai"
+              providerSelect.value =
+                currentAiSettings.selectedProvider || "openai"
             }
             if (modelSelect) {
               await updateModelSelect()
@@ -2260,7 +2552,8 @@
             if (newChatButton) newChatButton.disabled = false
             if (historyButton) historyButton.disabled = false
 
-            document.getElementById("generating").innerHTML = ""
+            const generatingEl = document.getElementById("generating")
+            if (generatingEl) generatingEl.innerHTML = ""
             selectedContextRefs = []
             renderSelectedContextChips()
             saveState()
@@ -2271,7 +2564,9 @@
             }, 1000)
 
             // Trigger writeFile validation if needed
-            const hasWriteFile = /\[(?:writeFile|writeFileVico)\]/i.test(content)
+            const hasWriteFile = /\[(?:writeFile|writeFileVico)\]/i.test(
+              content,
+            )
             if (hasWriteFile) {
               const normalizedAssistantMessage = content.replace(
                 /\[(\/?)writeFileVico\s*\]/gi,
@@ -2298,14 +2593,17 @@
             attachments = []
             renderAttachments()
             console.log(
-              "[webview] Cleared file caches and context for security - new chat context isolation"
+              "[webview] Cleared file caches and context for security - new chat context isolation",
             )
 
             // Fetch and display chat history ONLY if this is the first initialization
             // If isInitialized is true, it means we already have a session (either restored or New Chat started)
             if (!isInitialized) {
               isInitialized = true
-              if (persistedState.messages && persistedState.messages.length > 0) {
+              if (
+                persistedState.messages &&
+                persistedState.messages.length > 0
+              ) {
                 messageArray = persistedState.messages
                 displayMessages(messageArray)
 
@@ -2340,8 +2638,10 @@
                 messageInput.style.height = messageInput.scrollHeight + "px"
                 messageInput.focus()
               } else if (persistedState.messagesHTML) {
-                document.getElementById("content").innerHTML =
-                  persistedState.messagesHTML
+                const contentDiv = document.getElementById("content")
+                if (contentDiv) {
+                  contentDiv.innerHTML = persistedState.messagesHTML
+                }
                 document.getElementById("messageInput").value =
                   persistedState.input ?? ""
                 const modeSelect = document.getElementById("modeSelect")
@@ -2384,7 +2684,7 @@
               }
             } else {
               console.log(
-                "[webview] Skipping state restoration - session already initialized"
+                "[webview] Skipping state restoration - session already initialized",
               )
             }
             return
@@ -2533,7 +2833,8 @@
 
         lastSentMessage = messageVal
 
-        document.getElementById("generating").innerHTML = "Generating..."
+        const generatingEl = document.getElementById("generating")
+        if (generatingEl) generatingEl.innerHTML = "Generating..."
         const sendMessageButton = document.getElementById("button-send")
         const stopButton = document.getElementById("button-stop")
         const newChatButton = document.getElementById("newChatButton")
@@ -2633,6 +2934,16 @@
           message += manualContextBlock
         }
 
+        const codeReferencesBlock = buildCodeReferencesPromptBlock()
+        if (codeReferencesBlock) {
+          message += codeReferencesBlock
+        }
+
+        // Clear code references after building the prompt block
+        selectedCodeReferences = []
+        renderCodeReferenceChips()
+        saveState()
+
         console.log("send message to API")
         if (!message) return
         sendMessageToApi(message)
@@ -2681,11 +2992,6 @@
 
         selectedContextRefs = []
         renderSelectedContextChips()
-
-        document.getElementById("generating").innerHTML = "Stopped."
-        setTimeout(() => {
-          if (!isLoading) document.getElementById("generating").innerHTML = ""
-        }, 2000)
       }
 
       function compactHistory(history, maxItems = 10, maxChars = 2000) {
@@ -2723,7 +3029,6 @@
         }
 
         messageInput.disabled = true
-        document.getElementById("generating").innerHTML = "Generating..."
 
         const uniqueId = Date.now() + Math.random()
 
@@ -2787,7 +3092,7 @@
 
         // Workspace dirty auto-sync is disabled; do not block send flow.
         if (mode === "agent" && isWorkspaceDirty && !isRetry) {
-          isWorkspaceDirty = false
+          // Keep isWorkspaceDirty=true so handleAgentWorkflow knows to rebuild context
         }
 
         if (!isRetry || !pendingPromptAccess) {
@@ -2955,15 +3260,22 @@
           const hasFileBlock = assistantMessage.includes("[file ")
           const hasDiffBlock = assistantMessage.includes("[diff ")
 
-          console.log(`[writeFile] Validation: hasWriteFile=${hasWriteFile}, hasClosing=${hasClosingWriteFile}, hasFile=${hasFileBlock}, hasDiff=${hasDiffBlock}`)
+          console.log(
+            `[writeFile] Validation: hasWriteFile=${hasWriteFile}, hasClosing=${hasClosingWriteFile}, hasFile=${hasFileBlock}, hasDiff=${hasDiffBlock}`,
+          )
 
           // if a write-file command appears, send it immediately
           if (hasWriteFile) {
+            isWorkspaceDirty = true // Ensure next agent run rebuilds context
             if (!hasClosingWriteFile) {
-              console.warn("[writeFile] Warning: Missing closing [/writeFile] tag")
+              console.warn(
+                "[writeFile] Warning: Missing closing [/writeFile] tag",
+              )
             }
             if (!hasFileBlock && !hasDiffBlock) {
-              console.warn("[writeFile] Warning: No [file] or [diff] blocks found inside [writeFile]")
+              console.warn(
+                "[writeFile] Warning: No [file] or [diff] blocks found inside [writeFile]",
+              )
             }
             vscode.postMessage({
               type: "writeFile",
@@ -2987,7 +3299,6 @@
           if (newChatButton) newChatButton.disabled = false
           if (historyButton) historyButton.disabled = false
 
-          document.getElementById("generating").innerHTML = ""
           saveState()
           setTimeout(() => {
             isLoading = false
@@ -3016,6 +3327,72 @@
           if (historyButton) historyButton.disabled = false
         }
       }
+
+      const isVanillaWebRequest = (text) =>
+        /(\bno framework\b|\bvanilla\b|\bplain html\b|\bhtml\s*\+\s*javascript\b|\bsingle html\b)/i.test(
+          text || "",
+        )
+      const isVerificationCommandLite = (cmd) =>
+        /^(npm|pnpm|yarn|bun)\s+(run\s+)?(build|test|lint)\b/i.test(
+          String(cmd || "").trim(),
+        ) ||
+        /^(tsc|eslint|pytest|go test|cargo test|vitest|jest|playwright|cypress)\b/i.test(
+          String(cmd || "").trim(),
+        )
+      const isVerificationOnlyStep = (step) => {
+        const t = String(step?.type || "").toLowerCase()
+        const desc = String(step?.description || "")
+        const cmd = String(step?.command || "")
+        if (
+          ["file_read", "search", "find_files", "analyze", "chat"].includes(t)
+        ) {
+          return (
+            /\b(read|check|verify|validat|confirm|inspect)\b/i.test(desc) ||
+            t !== "chat"
+          )
+        }
+        if (t === "terminal_command") {
+          return isVerificationCommandLite(cmd)
+        }
+        return /\b(read|check|verify|validat|confirm|inspect)\b/i.test(desc)
+      }
+      const isManualVerificationStep = (step) => {
+        const raw = `${step?.description || ""}\n${step?.command || ""}`
+        return /(\bopen\b.*\b(browser|url|index\.html|file:\/\/)\b|\bfile:\/\/\b|\bclick play\b|\bopen index\.html\b|\bvia a static server\b|\bmodern browser\b)/i.test(
+          raw,
+        )
+      }
+      const requestNeedsScaffold = (text) =>
+        /(\bscaffold\b|\bbootstrap project\b|\binit project\b|\bcreate project\b|next\.?js|react|vue|angular|svelte|nuxt|remix|vite|nestjs|express|django|flask|laravel|rails|spring)/i.test(
+          text || "",
+        )
+      const requestExplicitFramework = (text) =>
+        /(next\.?js|react|vue|angular|svelte|nuxt|remix|vite|nestjs|express|django|flask|laravel|rails|spring)/i.test(
+          text || "",
+        )
+      const isLikelySourceFile = (f) =>
+        /\.(html?|css|scss|sass|less|js|jsx|ts|tsx|json|php|py|go|rs|java|kt|rb|cs)$/i.test(
+          String(f || ""),
+        )
+      const isIgnoredInfraPath = (f) =>
+        /^(?:\.git\/|\.vscode\/|node_modules\/|dist\/|build\/|coverage\/|\.next\/|\.cache\/|out\/|target\/|\.vico\/)/i.test(
+          String(f || ""),
+        )
+      const detectExistingProjectFromFileList = (fileList) => {
+        const files = Array.isArray(fileList) ? fileList : []
+        const nonIgnored = files.filter((f) => !isIgnoredInfraPath(f))
+        if (nonIgnored.length === 0) return false
+        return nonIgnored.some(
+          (f) =>
+            /(^|\/)(index\.html|main\.(js|ts)|app\.(js|ts|tsx)|app\/page\.(js|jsx|ts|tsx)|pages\/index\.(js|jsx|ts|tsx))$/i.test(
+              f,
+            ) || isLikelySourceFile(f),
+        )
+      }
+
+      // GLOBAL SCOPE FOR SHARED STATE (FIXES "isSimpleVanillaTask is not defined" errors)
+      let isSimpleVanillaTaskGlobal = false
+      let userRequestedVanillaNoFrameworkGlobal = false
 
       async function handleAgentWorkflow(
         message,
@@ -3067,7 +3444,7 @@
             message || "",
           ) && /\b(simple|sederhana)\b/i.test(message || "")
             ? 8
-            : 25
+            : 10
         let currentContext = ""
         let currentModifiedFiles = new Set()
         let currentUniqueId = uniqueId
@@ -3121,63 +3498,7 @@
             src,
           )
         }
-        const isVanillaWebRequest = (text) =>
-          /(\bno framework\b|\bvanilla\b|\bplain html\b|\bhtml\s*\+\s*javascript\b|\bsingle html\b)/i.test(
-            text || "",
-          )
-        const isVerificationCommandLite = (cmd) =>
-          /^(npm|pnpm|yarn|bun)\s+(run\s+)?(build|test|lint)\b/i.test(
-            String(cmd || "").trim(),
-          ) ||
-          /^(tsc|eslint|pytest|go test|cargo test|vitest|jest|playwright|cypress)\b/i.test(
-            String(cmd || "").trim(),
-          )
-        const isVerificationOnlyStep = (step) => {
-          const t = String(step?.type || "").toLowerCase()
-          const desc = String(step?.description || "")
-          const cmd = String(step?.command || "")
-          if (["file_read", "search", "find_files", "analyze"].includes(t)) {
-            return true
-          }
-          if (t === "terminal_command") {
-            return isVerificationCommandLite(cmd)
-          }
-          return /\b(read|check|verify|validat|confirm|inspect)\b/i.test(desc)
-        }
-        const isManualVerificationStep = (step) => {
-          const raw = `${step?.description || ""}\n${step?.command || ""}`
-          return /(\bopen\b.*\b(browser|url|index\.html|file:\/\/)\b|\bfile:\/\/\b|\bclick play\b|\bopen index\.html\b|\bvia a static server\b|\bmodern browser\b)/i.test(
-            raw,
-          )
-        }
-        const requestNeedsScaffold = (text) =>
-          /(\bscaffold\b|\bbootstrap project\b|\binit project\b|\bcreate project\b|next\.?js|react|vue|angular|svelte|nuxt|remix|vite|nestjs|express|django|flask|laravel|rails|spring)/i.test(
-            text || "",
-          )
-        const requestExplicitFramework = (text) =>
-          /(next\.?js|react|vue|angular|svelte|nuxt|remix|vite|nestjs|express|django|flask|laravel|rails|spring)/i.test(
-            text || "",
-          )
-        const isLikelySourceFile = (f) =>
-          /\.(html?|css|scss|sass|less|js|jsx|ts|tsx|json|php|py|go|rs|java|kt|rb|cs)$/i.test(
-            String(f || ""),
-          )
-        const isIgnoredInfraPath = (f) =>
-          /^(?:\.git\/|\.vscode\/|node_modules\/|dist\/|build\/|coverage\/|\.next\/|\.cache\/|out\/|target\/|\.vico\/)/i.test(
-            String(f || ""),
-          )
-        const detectExistingProjectFromFileList = (fileList) => {
-          const files = Array.isArray(fileList) ? fileList : []
-          const nonIgnored = files.filter((f) => !isIgnoredInfraPath(f))
-          if (nonIgnored.length === 0) return false
-          return nonIgnored.some(
-            (f) =>
-              /(^|\/)(index\.html|main\.(js|ts)|app\.(js|ts|tsx)|app\/page\.(js|jsx|ts|tsx)|pages\/index\.(js|jsx|ts|tsx))$/i.test(
-                f,
-              ) || isLikelySourceFile(f),
-          )
-        }
-        const userRequestedVanillaNoFramework = isVanillaWebRequest(
+        userRequestedVanillaNoFrameworkGlobal = isVanillaWebRequest(
           message || "",
         )
         const requestedUrls = Array.from(
@@ -3186,8 +3507,8 @@
         const requestNeedsConcreteCoding = requiresConcreteCoding(
           message || "",
         )
-        const isSimpleVanillaTask =
-          userRequestedVanillaNoFramework &&
+        isSimpleVanillaTaskGlobal =
+          userRequestedVanillaNoFrameworkGlobal &&
           /\b(simple|sederhana)\b/i.test(message || "")
         const isScaffoldStep = (step) => {
           if (!step) return false
@@ -3260,7 +3581,11 @@
               const content = await readFileAsync(vicoPath)
 
               if (content) {
-                currentContext += `\n=== PROJECT CONTEXT (${vicoPath}) ===\n${content}\n========================================\n`
+                currentContext = upsertFileInContext(
+                  currentContext,
+                  vicoPath,
+                  content,
+                )
 
                 if (file === "memory.md" || file === "history.md") {
                   if (file === "memory.md") memoryFound = true
@@ -3280,7 +3605,11 @@
                 const rootMemoryContent = await readFileAsync(rootMemoryPath)
                 if (rootMemoryContent) {
                   memoryFound = true
-                  currentContext += `\n=== PROJECT MEMORY (${rootMemoryPath}) ===\n${rootMemoryContent}\n========================================\n`
+                  currentContext = upsertFileInContext(
+                    currentContext,
+                    rootMemoryPath,
+                    rootMemoryContent,
+                  )
                   currentContext += `\n=== SYSTEM NOTE ===\nTo update ${rootMemoryPath}, ONLY generate the NEW content to be appended. Do NOT regenerate the entire file.\n===================\n`
                   console.log(
                     `[webview] Loaded project memory from ${rootMemoryPath}.`,
@@ -3350,7 +3679,8 @@
               vscode.postMessage({ command: "listFiles", pattern: "**/*" })
             })
 
-            isEmptyWorkspace = fileList.length === 0 ||
+            isEmptyWorkspace =
+              fileList.length === 0 ||
               (fileList.length === 1 && fileList[0] === ".vico/history.md")
 
             if (isEmptyWorkspace) {
@@ -3396,7 +3726,11 @@
               if (fileList.includes("package.json")) {
                 const pkgContent = await readFileAsync("package.json")
                 if (pkgContent) {
-                  currentContext += `\n=== package.json ===\n${pkgContent}\n====================\n`
+                  currentContext = upsertFileInContext(
+                    currentContext,
+                    "package.json",
+                    pkgContent,
+                  )
                 }
               }
 
@@ -3404,7 +3738,11 @@
               if (fileList.includes("tsconfig.json")) {
                 const tsConfigContent = await readFileAsync("tsconfig.json")
                 if (tsConfigContent) {
-                  currentContext += `\n=== tsconfig.json ===\n${tsConfigContent}\n=====================\n`
+                  currentContext = upsertFileInContext(
+                    currentContext,
+                    "tsconfig.json",
+                    tsConfigContent,
+                  )
                 }
               }
             }
@@ -3475,7 +3813,11 @@
 
           try {
             // 1. Analyze / Discover Codebase (Local Ollama Only)
-            if (selectedModel.startsWith("ollama:") && iteration === 1 && !isEmptyWorkspace) {
+            if (
+              selectedModel.startsWith("ollama:") &&
+              iteration === 1 &&
+              !isEmptyWorkspace
+            ) {
               updateMessagesAssistant({
                 uniqueId: `assistant-${currentUniqueId}`,
                 content: `🧠 Analyzing codebase with ${selectedModel} (Local)...`,
@@ -3484,7 +3826,10 @@
               const analysisResponse = await new Promise((resolve, reject) => {
                 const requestId = Date.now() + Math.random()
                 const handleMessage = (event) => {
-                  if (event.data.command === "ollamaAgentResponse" && event.data.uniqueId === requestId) {
+                  if (
+                    event.data.command === "ollamaAgentResponse" &&
+                    event.data.uniqueId === requestId
+                  ) {
                     window.removeEventListener("message", handleMessage)
                     if (event.data.error) reject(new Error(event.data.error))
                     else resolve(event.data.content)
@@ -3501,33 +3846,41 @@
                     attachments: attachments,
                     history: compactHistory(messageArray),
                     context: currentContext,
-                  }
+                  },
                 })
               })
 
               // If model requested file reads, handle them
               let analysisText = analysisResponse
               // More robust regex to catch variations in output
-              const readMatches = [...analysisResponse.matchAll(/\[readFile\]\s*\[file\s+path=["']([^"']+)["']\s*\]\s*\[\/readFile\]/g)]
+              const readMatches = [
+                ...analysisResponse.matchAll(
+                  /\[readFile\]\s*\[file\s+path=["']([^"']+)["']\s*\]\s*\[\/readFile\]/g,
+                ),
+              ]
               if (readMatches.length > 0) {
                 updateMessagesAssistant({
                   uniqueId: `assistant-${currentUniqueId}`,
                   content: `🧠 Reading ${readMatches.length} files for better context...`,
                 })
-                let readContext = "\n[ANALYSIS_FILE_READS]\n"
                 for (const m of readMatches) {
                   const filePath = m[1]
                   const content = await readContextFile(filePath)
                   if (content) {
-                    readContext += `\nFILE: ${filePath}\nCONTENT:\n${content}\n`
+                    currentContext = upsertFileInContext(
+                      currentContext,
+                      filePath,
+                      content,
+                    )
                   }
                 }
-                readContext += "[/ANALYSIS_FILE_READS]\n"
-                currentContext += readContext
               }
 
               // Remove existing codebase analysis if present (to avoid duplication in context)
-              currentContext = currentContext.replace(/\[CODEBASE_ANALYSIS\][\s\S]*?\[\/CODEBASE_ANALYSIS\]/g, "")
+              currentContext = currentContext.replace(
+                /\[CODEBASE_ANALYSIS\][\s\S]*?\[\/CODEBASE_ANALYSIS\]/g,
+                "",
+              )
               currentContext += `\n[CODEBASE_ANALYSIS]\n${analysisText}\n[/CODEBASE_ANALYSIS]\n`
             }
 
@@ -3542,7 +3895,10 @@
               const ollamaResponse = await new Promise((resolve, reject) => {
                 const requestId = Date.now() + Math.random()
                 const handleMessage = (event) => {
-                  if (event.data.command === "ollamaAgentResponse" && event.data.uniqueId === requestId) {
+                  if (
+                    event.data.command === "ollamaAgentResponse" &&
+                    event.data.uniqueId === requestId
+                  ) {
                     window.removeEventListener("message", handleMessage)
                     if (event.data.error) reject(new Error(event.data.error))
                     else resolve(event.data.content)
@@ -3559,8 +3915,8 @@
                     attachments: attachments,
                     history: compactHistory(messageArray),
                     context: currentContext,
-                    state: { recent_steps: workflowMeta.recent_steps }
-                  }
+                    state: { recent_steps: workflowMeta.recent_steps },
+                  },
                 })
               })
 
@@ -3569,7 +3925,9 @@
               try {
                 // Find JSON in the response (robust extraction)
                 let jsonString = (ollamaResponse || "").trim()
-                const markdownMatch = jsonString.match(/```(?:json)?\s*([\s\S]*?)```/i)
+                const markdownMatch = jsonString.match(
+                  /```(?:json)?\s*([\s\S]*?)```/i,
+                )
                 if (markdownMatch) {
                   jsonString = markdownMatch[1].trim()
                 }
@@ -3577,7 +3935,11 @@
                 const firstBrace = jsonString.indexOf("{")
                 const lastBrace = jsonString.lastIndexOf("}")
 
-                if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+                if (
+                  firstBrace !== -1 &&
+                  lastBrace !== -1 &&
+                  lastBrace > firstBrace
+                ) {
                   // Attempt matching brace counting for precision
                   let potentialJson = ""
                   let braceCount = 0
@@ -3595,7 +3957,10 @@
                     }
                   }
                   if (!potentialJson) {
-                    potentialJson = jsonString.substring(firstBrace, lastBrace + 1)
+                    potentialJson = jsonString.substring(
+                      firstBrace,
+                      lastBrace + 1,
+                    )
                   }
 
                   // Final cleanup before parse
@@ -3606,7 +3971,10 @@
                   try {
                     planData = JSON.parse(potentialJson)
                   } catch (innerError) {
-                    console.warn("JSON.parse failed on extracted string, attempting repair:", innerError)
+                    console.warn(
+                      "JSON.parse failed on extracted string, attempting repair:",
+                      innerError,
+                    )
                     // Basic repair for trailing commas
                     const repairedJson = potentialJson
                       .replace(/,\s*([\]}])/g, "$1")
@@ -3618,7 +3986,12 @@
                   throw new Error("No JSON object found in response")
                 }
               } catch (e) {
-                console.error("Failed to parse Ollama plan:", e, "Raw response:", ollamaResponse)
+                console.error(
+                  "Failed to parse Ollama plan:",
+                  e,
+                  "Raw response:",
+                  ollamaResponse,
+                )
                 throw new Error("Invalid plan format from local model")
               }
               planJson = JSON.stringify(planData)
@@ -3652,7 +4025,9 @@
                 try {
                   const errJson = await clone.json()
                   if (errJson.error === "WORKSPACE_MISSING") {
-                    console.log("Plan: Workspace missing, triggering auto-scan...")
+                    console.log(
+                      "Plan: Workspace missing, triggering auto-scan...",
+                    )
                     pendingMessage = message
                     pendingAttachments = attachments
                     // We need to stop the current loop and retry after scan
@@ -3773,7 +4148,7 @@
               resetUI()
               return
             }
-            if (isSimpleVanillaTask) {
+            if (isSimpleVanillaTaskGlobal) {
               const beforeCount = planSteps.length
               planSteps = planSteps.filter((s) => {
                 if (
@@ -3809,7 +4184,7 @@
               workflowMeta.scaffoldDone ||
               workflowMeta.existingProjectDetected
             if (!isProjectInitialized && !isScaffoldStep(planSteps[0])) {
-              if (userRequestedVanillaNoFramework) {
+              if (userRequestedVanillaNoFrameworkGlobal) {
                 currentContext +=
                   "\n[System Feedback] Empty workspace + explicit no-framework web request detected. Skip framework scaffold and implement with plain files.\n"
               } else if (isWebRequest(message)) {
@@ -3887,7 +4262,7 @@
               repeatedPlanCount = 0
               lastPlanSignature = planSignature
             }
-            if (isSimpleVanillaTask && repeatedPlanCount >= 1) {
+            if (isSimpleVanillaTaskGlobal && repeatedPlanCount >= 1) {
               currentContext +=
                 "\n[System Feedback] Simple vanilla task detected and planner started repeating. Next plan must be very short (max 2 steps): 1) write/fix direct files with literal user URL and title, 2) complete. Do not re-edit same file multiple times without new error evidence.\n"
             }
@@ -3970,6 +4345,7 @@
                 model: selectedModel,
                 userApiKey,
                 verificationMode,
+                isSimpleVanillaTask: isSimpleVanillaTaskGlobal,
               },
             )
 
@@ -4023,7 +4399,7 @@ ${result.summary || "Executed successfully."}`,
             }
             if (
               consecutiveVerificationOnlyIterations >=
-              (isSimpleVanillaTask || isSimpleAssetTask ? 1 : 2)
+              (isSimpleVanillaTaskGlobal || isSimpleAssetTask ? 1 : 2)
             ) {
               updateMessagesAssistant({
                 uniqueId: `assistant-${currentUniqueId}`,
@@ -4063,7 +4439,7 @@ ${result.summary || "Executed successfully."}`,
             if (result.autoFixTriggered) {
               consecutiveFailedIterations++
               if (
-                isSimpleVanillaTask &&
+                isSimpleVanillaTaskGlobal &&
                 currentModifiedFiles.size > 0 &&
                 consecutiveFailedIterations >= 2
               ) {
@@ -4091,7 +4467,7 @@ ${result.summary || "Executed successfully."}`,
             if (result.hadStepError) {
               consecutiveFailedIterations++
               if (
-                isSimpleVanillaTask &&
+                isSimpleVanillaTaskGlobal &&
                 currentModifiedFiles.size > 0 &&
                 consecutiveFailedIterations >= 2
               ) {
@@ -4126,7 +4502,7 @@ ${result.summary || "Executed successfully."}`,
                 "\n[Execution Feedback] Previous plan did not result in coding actions. Next plan must contain real actions (writeFile/diff/command) to complete the task.\n"
             }
             if (
-              isSimpleVanillaTask &&
+              isSimpleVanillaTaskGlobal &&
               result.modifiedFiles &&
               result.modifiedFiles.size > 0
             ) {
@@ -4204,6 +4580,8 @@ ${result.summary || "Executed successfully."}`,
         const userApiKey = aiConfig.userApiKey || ""
         const verificationMode =
           (aiConfig && aiConfig.verificationMode) || "normal"
+        const isSimpleVanillaTask =
+          (aiConfig && aiConfig.isSimpleVanillaTask) || false
         const userRequestedVanillaNoFrameworkLocal =
           /(\bno framework\b|\bvanilla\b|\bplain html\b|\bhtml\s*\+\s*javascript\b|\bsingle html\b)/i.test(
             String(originalRequest || ""),
@@ -4290,24 +4668,6 @@ ${result.summary || "Executed successfully."}`,
             `\n[thinking title="${escapeTerminalAttr(title)}"]\n\`\`\`\n${safeBody}\n\`\`\`\n[/thinking]\n`,
           )
         }
-        const isVerificationOnlyStep = (step) => {
-          const t = String(step?.type || "").toLowerCase()
-          const desc = String(step?.description || "")
-          const cmd = String(step?.command || "")
-          if (
-            ["file_read", "search", "find_files", "analyze", "chat"].includes(t)
-          ) {
-            return (
-              /\b(read|check|verify|validat|confirm|inspect)\b/i.test(desc) ||
-              t !== "chat"
-            )
-          }
-          if (t === "terminal_command") {
-            return isVerificationCommandLite(cmd)
-          }
-          return /\b(read|check|verify|validat|confirm|inspect)\b/i.test(desc)
-        }
-
         for (let i = 0; i < plan.length; i++) {
           const step = plan[i]
           const stepNum = i + 1
@@ -4409,17 +4769,29 @@ ${result.summary || "Executed successfully."}`,
                   const requestId = Date.now() + Math.random()
                   let accumulated = ""
                   const handleMessage = (event) => {
-                    if (event.data.command === "ollamaAgentStream" && event.data.uniqueId === requestId) {
+                    if (
+                      event.data.command === "ollamaAgentStream" &&
+                      event.data.uniqueId === requestId
+                    ) {
                       accumulated += event.data.content
                       // Update UI with stream
-                      const thoughtMatch = accumulated.match(/\*\*Thought:\*\*([\s\S]*?)(?=\*\*Action:|$)/i)
-                      const currentThought = thoughtMatch ? thoughtMatch[1].trim() : "Analyzing context..."
+                      const thoughtMatch = accumulated.match(
+                        /\*\*Thought:\*\*([\s\S]*?)(?=\*\*Action:|$)/i,
+                      )
+                      const currentThought = thoughtMatch
+                        ? thoughtMatch[1].trim()
+                        : "Analyzing context..."
                       updateMessagesAssistant({
                         uniqueId: `assistant-${uniqueId}`,
-                        content: currentStepMarkdown + `\n  > *Thought:* ${currentThought}\n`
+                        content:
+                          currentStepMarkdown +
+                          `\n  > *Thought:* ${currentThought}\n`,
                       })
                     }
-                    if (event.data.command === "ollamaAgentResponse" && event.data.uniqueId === requestId) {
+                    if (
+                      event.data.command === "ollamaAgentResponse" &&
+                      event.data.uniqueId === requestId
+                    ) {
                       window.removeEventListener("message", handleMessage)
                       if (event.data.error) reject(new Error(event.data.error))
                       else resolve(event.data.content)
@@ -4436,8 +4808,8 @@ ${result.summary || "Executed successfully."}`,
                       context,
                       attachments: attachments,
                       history: compactHistory(messageArray),
-                      state: { recent_steps: workflowMeta.recent_steps }
-                    }
+                      state: { recent_steps: workflowMeta.recent_steps },
+                    },
                   })
                 })
               } else {
@@ -4468,7 +4840,9 @@ ${result.summary || "Executed successfully."}`,
                   try {
                     const errJson = await clone.json()
                     if (errJson.error === "WORKSPACE_MISSING") {
-                      console.log("Think: Workspace missing, triggering auto-scan...")
+                      console.log(
+                        "Think: Workspace missing, triggering auto-scan...",
+                      )
                       pendingMessage = originalRequest
                       pendingAttachments = attachments
                       await updateWorkspaces(true)
@@ -4590,7 +4964,7 @@ ${result.summary || "Executed successfully."}`,
                 err.name = "AbortError"
                 if (!isLoading) throw err
 
-                context += `\nFile Content (${filePath}):\n${fileContent}\n`
+                context = upsertFileInContext(context, filePath, fileContent)
 
                 // Visual feedback completion
                 currentStepMarkdown += `\n  > *Read complete.*\n`
@@ -4790,14 +5164,23 @@ ${result.summary || "Executed successfully."}`,
                 const requestId = Date.now() + Math.random()
                 let accumulated = ""
                 const handleMessage = (event) => {
-                  if (event.data.command === "ollamaAgentStream" && event.data.uniqueId === requestId) {
+                  if (
+                    event.data.command === "ollamaAgentStream" &&
+                    event.data.uniqueId === requestId
+                  ) {
                     accumulated += event.data.content
                     updateMessagesAssistant({
                       uniqueId: `assistant-${uniqueId}`,
-                      content: planMarkdown + `\n  > *Executing...*\n` + `\n${accumulated}`,
+                      content:
+                        planMarkdown +
+                        `\n  > *Executing...*\n` +
+                        `\n${accumulated}`,
                     })
                   }
-                  if (event.data.command === "ollamaAgentResponse" && event.data.uniqueId === requestId) {
+                  if (
+                    event.data.command === "ollamaAgentResponse" &&
+                    event.data.uniqueId === requestId
+                  ) {
                     window.removeEventListener("message", handleMessage)
                     if (event.data.error) reject(new Error(event.data.error))
                     else resolve(event.data.content)
@@ -4814,8 +5197,8 @@ ${result.summary || "Executed successfully."}`,
                     context,
                     attachments: attachments,
                     history: compactHistory(messageArray),
-                    state: { recent_steps: workflowMeta.recent_steps }
-                  }
+                    state: { recent_steps: workflowMeta.recent_steps },
+                  },
                 })
               })
             } else {
@@ -4846,7 +5229,9 @@ ${result.summary || "Executed successfully."}`,
                 try {
                   const errJson = await clone.json()
                   if (errJson.error === "WORKSPACE_MISSING") {
-                    console.log("Execute: Workspace missing, triggering auto-scan...")
+                    console.log(
+                      "Execute: Workspace missing, triggering auto-scan...",
+                    )
                     pendingMessage = originalRequest
                     pendingAttachments = attachments
                     await updateWorkspaces(true)
@@ -4934,15 +5319,16 @@ ${result.summary || "Executed successfully."}`,
 
               if (!parsed || typeof parsed !== "object") return null
               const resolveCommand = () => {
-                if (typeof parsed.command === "string" && parsed.command.trim()) {
+                if (
+                  typeof parsed.command === "string" &&
+                  parsed.command.trim()
+                ) {
                   return parsed.command.trim()
                 }
                 if (Array.isArray(parsed.plan)) {
                   const cmdStep = parsed.plan.find(
                     (p) =>
-                      p &&
-                      typeof p.command === "string" &&
-                      p.command.trim(),
+                      p && typeof p.command === "string" && p.command.trim(),
                   )
                   if (cmdStep && cmdStep.command) {
                     return String(cmdStep.command).trim()
@@ -4966,8 +5352,7 @@ ${result.summary || "Executed successfully."}`,
             )
             if (legacyPayload) {
               stepOutput = legacyPayload
-              context +=
-                `\n[System Feedback] Execute output was legacy JSON-plan format; auto-converted to executable agent tags.\n`
+              context += `\n[System Feedback] Execute output was legacy JSON-plan format; auto-converted to executable agent tags.\n`
               planMarkdown += `\n> *?? Legacy execute output detected and auto-converted to executable tags.*\n`
               updateMessagesAssistant({
                 uniqueId: `assistant-${uniqueId}`,
@@ -4996,11 +5381,15 @@ ${result.summary || "Executed successfully."}`,
               // Add format validation warnings
               if (!hasClosingTag) {
                 planMarkdown += `\n> ⚠️ **Format Warning:** Missing closing [/writeFile] tag\n`
-                console.warn("[writeFile] Missing closing tag in agent response")
+                console.warn(
+                  "[writeFile] Missing closing tag in agent response",
+                )
               }
               if (!hasFileBlock && !hasDiffBlock) {
                 planMarkdown += `\n> ⚠️ **Format Warning:** No [file] or [diff] blocks found inside [writeFile]\n`
-                console.warn("[writeFile] No file/diff blocks in agent response")
+                console.warn(
+                  "[writeFile] No file/diff blocks in agent response",
+                )
               }
             }
 
@@ -5113,17 +5502,29 @@ ${result.summary || "Executed successfully."}`,
             // Process Actions
             const summarizeExecutionOutput = (output) => {
               const changedFiles = []
-              const fileRegex = /\[(?:file|diff)\s+(?:name|path)=["']?([^"'\s\]]+)["']?\]/gi
+              const fileRegex =
+                /\[(?:file|diff)\s+(?:name|path)=["']?([^"'\s\]]+)["']?\]/gi
               let m
               while ((m = fileRegex.exec(output)) !== null) {
                 changedFiles.push(m[1])
               }
-              const commandMatch = output.match(/\[command\s*\]([\s\S]*?)\[\/command\s*\]/i)
+              const commandMatch = output.match(
+                /\[command\s*\]([\s\S]*?)\[\/command\s*\]/i,
+              )
               const sanitizeExecutionText = (text) => {
                 return String(text || "")
-                  .replace(/\[(?:writeFile|writeFileVico)\][\s\S]*?\[\/(?:writeFile|writeFileVico)\]/g, "[writeFile block]")
-                  .replace(/\[command\][\s\S]*?\[\/command\]/g, "[command block]")
-                  .replace(/\[readFile\][\s\S]*?\[\/readFile\]/g, "[readFile block]")
+                  .replace(
+                    /\[(?:writeFile|writeFileVico)\][\s\S]*?\[\/(?:writeFile|writeFileVico)\]/g,
+                    "[writeFile block]",
+                  )
+                  .replace(
+                    /\[command\][\s\S]*?\[\/command\]/g,
+                    "[command block]",
+                  )
+                  .replace(
+                    /\[readFile\][\s\S]*?\[\/readFile\]/g,
+                    "[readFile block]",
+                  )
                   .replace(/\s+/g, " ")
                   .trim()
               }
@@ -5131,11 +5532,13 @@ ${result.summary || "Executed successfully."}`,
                 step: step.step,
                 description: step.description,
                 changed_files: Array.from(new Set(changedFiles)).slice(0, 20),
-                command: commandMatch ? commandMatch[1].trim().slice(0, 500) : "",
+                command: commandMatch
+                  ? commandMatch[1].trim().slice(0, 500)
+                  : "",
                 has_replan: /\[REPLAN\s*\]/i.test(output),
                 has_write: /\[(?:writeFile|writeFileVico)\s*\]/i.test(output),
                 short_output: sanitizeExecutionText(output).slice(0, 1500),
-                at: new Date().toISOString()
+                at: new Date().toISOString(),
               }
             }
 
@@ -5211,7 +5614,9 @@ ${result.summary || "Executed successfully."}`,
               break
             }
 
-            const hasWriteFile = /\[(?:writeFile|writeFileVico)\]/i.test(stepOutput)
+            const hasWriteFile = /\[(?:writeFile|writeFileVico)\]/i.test(
+              stepOutput,
+            )
             if (hasWriteFile) {
               const recoverTransientPath = (rawPath) => {
                 const normalized = String(rawPath || "").replace(/\\/g, "/")
@@ -5317,8 +5722,10 @@ ${result.summary || "Executed successfully."}`,
               // Collect target files first so we can verify persistence after write.
               const targetFiles = new Set()
               const diffTargets = new Set()
-              const targetFileRegex = /\[(?:file|diff)\s+(?:name|path)=["']?([^"'\s\]]+)["']?/gi
-              const diffTargetRegex = /\[diff\s+(?:name|path)=["']?([^"'\s\]]+)["']?/gi
+              const targetFileRegex =
+                /\[(?:file|diff)\s+(?:name|path)=["']?([^"'\s\]]+)["']?/gi
+              const diffTargetRegex =
+                /\[diff\s+(?:name|path)=["']?([^"'\s\]]+)["']?/gi
               let targetMatch
               while (
                 (targetMatch = targetFileRegex.exec(stepOutput)) !== null
@@ -5334,7 +5741,9 @@ ${result.summary || "Executed successfully."}`,
                 content: currentStepMarkdown,
               })
               let diffTargetMatch
-              while ((diffTargetMatch = diffTargetRegex.exec(stepOutput)) !== null) {
+              while (
+                (diffTargetMatch = diffTargetRegex.exec(stepOutput)) !== null
+              ) {
                 if (diffTargetMatch[1]) {
                   diffTargets.add(diffTargetMatch[1])
                 }
@@ -5390,7 +5799,8 @@ ${result.summary || "Executed successfully."}`,
                 })
               })
 
-              const fileRegex = /\[file\s+(?:name|path)=["']?([^"'\s\]]+)["']?(?:\s+type=["'][^"']+["'])?\]/gi
+              const fileRegex =
+                /\[file\s+(?:name|path)=["']?([^"'\s\]]+)["']?(?:\s+type=["'][^"']+["'])?\]/gi
               let match
               while ((match = fileRegex.exec(stepOutput)) !== null) {
                 const fName = match[1]
@@ -5402,10 +5812,12 @@ ${result.summary || "Executed successfully."}`,
               if (workflowMeta && modifiedFiles.size > 0) {
                 workflowMeta.changeVersion += 1
                 workflowMeta.successfulVerificationCommands.clear()
+                isWorkspaceDirty = true // Ensure next agent run rebuilds context
               }
 
               // Extract and save file content for Open Diff button
-              const fileContentRegex = /\[file\s+(?:name|path)=["']?([^"'\s\]]+)["']?(?:\s+type=["'][^"']+["'])?\]([\s\S]*?)(?:\[\s*\/file\s*\]|(?=\[\/?(?:file|diff|writeFile|writeFileVico))|$)/gi
+              const fileContentRegex =
+                /\[file\s+(?:name|path)=["']?([^"'\s\]]+)["']?(?:\s+type=["'][^"']+["'])?\]([\s\S]*?)(?:\[\s*\/file\s*\]|(?=\[\/?(?:file|diff|writeFile|writeFileVico))|$)/gi
               let contentMatch
 
               // Handle potential overlapping matches or multiple files in one block
@@ -5438,7 +5850,7 @@ ${result.summary || "Executed successfully."}`,
                 )
 
                 // CRITICAL: Update context so the planner knows the file state
-                context += `\nFile Content (${fPath}):\n${fContent}\n`
+                context = upsertFileInContext(context, fPath, fContent)
               }
 
               // Persistence check: read target files from disk and compare before/after.
@@ -5448,7 +5860,7 @@ ${result.summary || "Executed successfully."}`,
                 const afterContent = await readFileForWriteCheck(tPath, 6000)
                 if (typeof afterContent === "string") {
                   window.fileContentMap.set(tPath, afterContent)
-                  context += `\nFile Content (${tPath}):\n${afterContent}\n`
+                  context = upsertFileInContext(context, tPath, afterContent)
                   if (
                     userRequestedVanillaNoFrameworkLocal &&
                     /\.(html|js|mjs|cjs|ts|tsx|jsx)$/i.test(tPath)
@@ -5608,7 +6020,9 @@ ${result.summary || "Executed successfully."}`,
                 const retryList = Array.from(writeRetryFiles)
                 hadStepError = true
                 if (workflowMeta && workflowMeta.forceFullRewriteFiles) {
-                  retryList.forEach((f) => workflowMeta.forceFullRewriteFiles.add(f))
+                  retryList.forEach((f) =>
+                    workflowMeta.forceFullRewriteFiles.add(f),
+                  )
                 }
                 context +=
                   `\n[Write Feedback] Diff apply failed for: ${retryList.join(", ")}.\n` +
@@ -6464,7 +6878,8 @@ ${result.summary || "Executed successfully."}`,
 
         if (newChatButton) newChatButton.disabled = false
         if (historyButton) historyButton.disabled = false
-        document.getElementById("generating").innerHTML = ""
+        const generatingEl = document.getElementById("generating")
+        if (generatingEl) generatingEl.innerHTML = ""
         isLoading = false
         document.getElementById("messageInput").disabled = false
         document.getElementById("messageInput").value = ""
@@ -6716,8 +7131,10 @@ ${result.summary || "Executed successfully."}`,
         // If we restore from persistedState, we might miss it if we don't save the map.
 
         if (persistedState.messagesHTML) {
-          document.getElementById("content").innerHTML =
-            persistedState.messagesHTML
+          const contentDiv = document.getElementById("content")
+          if (contentDiv) {
+            contentDiv.innerHTML = persistedState.messagesHTML
+          }
           document.getElementById("messageInput").value =
             persistedState.input ?? ""
 
@@ -7278,8 +7695,10 @@ ${result.summary || "Executed successfully."}`,
             } else if (part.startsWith("[files]") && part.endsWith("[files]")) {
               //skip
             } else if (
-              (part.startsWith("[manual_context]") && part.endsWith("[/manual_context]")) ||
-              (part.startsWith("[manualcontext]") && part.endsWith("[/manualcontext]"))
+              (part.startsWith("[manual_context]") &&
+                part.endsWith("[/manual_context]")) ||
+              (part.startsWith("[manualcontext]") &&
+                part.endsWith("[/manualcontext]"))
             ) {
               const body = part.replace(/\[\/?manual_?context\]/g, "").trim()
               const contextWrapper = document.createElement("div")
@@ -7296,9 +7715,11 @@ ${result.summary || "Executed successfully."}`,
               // Extract file paths and folder paths
               // Match both [file_path:...] and [filepath:...]
               const fileMatches = [...body.matchAll(/\[file_?path:(.*?)\]/g)]
-              const folderMatches = [...body.matchAll(/\[folder_?path:(.*?)\]/g)]
+              const folderMatches = [
+                ...body.matchAll(/\[folder_?path:(.*?)\]/g),
+              ]
 
-              fileMatches.forEach(m => {
+              fileMatches.forEach((m) => {
                 const path = m[1]
                 const chip = document.createElement("div")
                 chip.className = "context-chip"
@@ -7307,7 +7728,7 @@ ${result.summary || "Executed successfully."}`,
                 chipsContainer.appendChild(chip)
               })
 
-              folderMatches.forEach(m => {
+              folderMatches.forEach((m) => {
                 const path = m[1]
                 const chip = document.createElement("div")
                 chip.className = "context-chip"
@@ -7607,7 +8028,8 @@ ${result.summary || "Executed successfully."}`,
 
         // Clear message array and content
         messageArray = []
-        document.getElementById("content").innerHTML = ""
+        const contentDiv = document.getElementById("content")
+        if (contentDiv) contentDiv.innerHTML = ""
 
         // Reset persisted state explicitly
         if (persistedState) {
@@ -7649,7 +8071,7 @@ ${result.summary || "Executed successfully."}`,
         await updateModelSelect()
         // Update quota status on load
         updateQuotaBadgeFromSettings()
-      }
+      };
     </script>
     <script src="%PRISMJS_PATH%"></script>
     <!-- Include the Prism JS for syntax highlighting functionality -->

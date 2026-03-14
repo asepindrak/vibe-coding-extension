@@ -42,6 +42,7 @@ exports.deactivate = deactivate;
 // Import the module and reference it with the alias vscode in your code below
 const vscode = __importStar(require("vscode"));
 const SidebarProvider_1 = require("./SidebarProvider");
+const CodeActionProvider_1 = require("./CodeActionProvider");
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
 const os = __importStar(require("os"));
@@ -413,8 +414,10 @@ function parseWriteFileFallback(content) {
         return { success: true, content: accumulatedCodeBlocks };
     }
     // Strategy 4: If content looks like file content (has extension or path-like)
+    // Be very strict here to avoid using random conversational text as file content.
     const looksLikeFileContent = /\w+\.\w+/.test(content) || /[\/\\]/.test(content);
-    if (looksLikeFileContent && content.length > 10) {
+    const hasStructuralMarkers = /(export\s+default|function\s+\w+|\breturn\s*\()|import\s+.*from/i.test(content);
+    if (looksLikeFileContent && content.length > 50 && hasStructuralMarkers) {
         vico_logger_1.default.info(`[writeFile] Content looks like file content, using as fallback`);
         return { success: true, content };
     }
@@ -821,14 +824,13 @@ async function writeFileVico(context, editor, sidebarProvider) {
                         !lastReplaceText.includes("export ");
                     // If it's explicitly a [diff] block, we should be VERY hesitant to do a full rewrite.
                     // Usually, a full rewrite should use [file] instead.
+                    const isSignificantRewrite = lastReplaceText.trim().length > 1000;
+                    const hasStructuralMarkers = /(export\s+default|function\s+\w+|\breturn\s*\()|import\s+.*from/i.test(lastReplaceText);
                     const canFallbackToFullRewrite = totalBlocks === 0 && // Only fallback if NO blocks were found at all
                         !isSnippetLikely &&
-                        lastReplaceText.trim().length > 500 && // Must be significant amount of code
-                        ((lastReplaceText.trim().length > 200 &&
-                            /(export\s+default|function\s+\w+|\breturn\s*\()/i.test(lastReplaceText)) ||
-                            (effectiveRelativePath.replace(/\\/g, "/").toLowerCase() ===
-                                "app/page.tsx" &&
-                                lastReplaceText.trim().length > 0));
+                        (isSignificantRewrite || (lastReplaceText.trim().length > 200 && hasStructuralMarkers)) &&
+                        // Additional safety: if the file is very large and the new content is much smaller, don't rewrite.
+                        (currentContent.length < 5000 || lastReplaceText.length > currentContent.length * 0.7);
                     if (canFallbackToFullRewrite) {
                         let rewritten = (0, utils_1.cleanSearchReplaceText)(lastReplaceText, true);
                         if (/\.(tsx|jsx)$/i.test(relativePath)) {
@@ -1085,6 +1087,195 @@ function activate(context) {
         lastClipboardText = "";
         vico_logger_1.default.info("[extension] Coding history cleared");
     }));
+    context.subscriptions.push(vscode.commands.registerCommand("vico.aiFix", async (document, diagnostics) => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor || editor.document !== document) {
+            return;
+        }
+        const model = context.globalState.get("vico.selectedModel") ||
+            "gpt-5.1-codex-mini";
+        const provider = context.globalState.get("vico.selectedProvider") || "openai";
+        const userApiKey = (await context.secrets.get("vico.userOpenAIApiKey")) || "";
+        const token = context.globalState.get("token");
+        // Convert single diagnostic to array for uniform processing
+        const diagnosticList = Array.isArray(diagnostics)
+            ? diagnostics
+            : [diagnostics];
+        if (diagnosticList.length === 0) {
+            return;
+        }
+        // Format multiple errors for the confirmation dialog
+        let combinedErrorMessage = "";
+        let combinedCodeContext = "";
+        diagnosticList.forEach((d, index) => {
+            const lineNum = d.range.start.line + 1;
+            const lineText = document.lineAt(d.range.start.line).text.trim();
+            combinedErrorMessage += `${index + 1}. [Line ${lineNum}] ${d.message}\n`;
+            if (index === 0 ||
+                d.range.start.line !== diagnosticList[index - 1].range.start.line) {
+                combinedCodeContext += `Line ${lineNum}: ${lineText}\n`;
+            }
+        });
+        // --- NEW: Confirmation Dialog ---
+        const confirm = await vscode.window.showInformationMessage(`Vico AI Fix\n\nErrors Found:\n${combinedErrorMessage}\nContext:\n${combinedCodeContext.trim()}`, { modal: true }, "Fix with AI");
+        if (confirm !== "Fix with AI") {
+            return;
+        }
+        // --------------------------------
+        // Use the first diagnostic's range for surrounding context positioning
+        const primaryRange = diagnosticList[0].range;
+        // Calculate the total line range covering all diagnostics
+        let startLineIdx = diagnosticList[0].range.start.line;
+        let endLineIdx = diagnosticList[0].range.end.line;
+        diagnosticList.forEach((d) => {
+            if (d.range.start.line < startLineIdx)
+                startLineIdx = d.range.start.line;
+            if (d.range.end.line > endLineIdx)
+                endLineIdx = d.range.end.line;
+        });
+        // Get the entire file content for full context
+        const fullFileContext = document.getText();
+        // Get surrounding lines for focused context
+        const startLine = Math.max(0, startLineIdx - 15);
+        const endLine = Math.min(document.lineCount - 1, endLineIdx + 15);
+        let surroundingContext = "";
+        for (let i = startLine; i <= endLine; i++) {
+            const line = document.lineAt(i);
+            const hasError = diagnosticList.some((d) => d.range.start.line <= i && d.range.end.line >= i);
+            const prefix = hasError ? ">> " : "   ";
+            surroundingContext += `${prefix}${i + 1}: ${line.text}\n`;
+        }
+        await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: "Vico: Fixing code...",
+            cancellable: false,
+        }, async (progress) => {
+            try {
+                // Format all errors for the AI prompt
+                const errorDetails = diagnosticList
+                    .map((d, i) => {
+                    const lineText = document.lineAt(d.range.start.line).text;
+                    const errorPart = document.getText(d.range) || lineText.trim();
+                    return `Error ${i + 1}:
+- Message: ${d.message}
+- Line ${d.range.start.line + 1}: ${lineText}
+- Specific Part: ${errorPart}`;
+                })
+                    .join("\n\n");
+                const body = {
+                    userId: "vscode-user",
+                    model: model,
+                    message: `Fix the following error(s) in ${document.languageId} code.
+      
+FILE CONTENT:
+${fullFileContext}
+
+ERROR DETAILS FROM VS CODE:
+${errorDetails}
+
+SURROUNDING CONTEXT (Line ${startLine + 1} to ${endLine + 1}):
+${surroundingContext}
+
+INSTRUCTION:
+1. Analyze the full file content and the specific VS Code error messages to understand the fix.
+2. Provide the CORRECTED VERSION of the affected lines (Line ${startLineIdx + 1} to ${endLineIdx + 1}).
+3. IMPORTANT: Return the FULL fixed lines so they can replace the existing ones exactly.
+4. DO NOT include any markdown code blocks, fences, or explanations.
+5. DO NOT include line numbers (e.g., "128:") in your output.
+6. Return ONLY the plain text code that should replace the erroneous part(s).
+7. Ensure the fix is consistent with the rest of the file.`,
+                };
+                const response = await fetchAi(`${SidebarProvider_1.SidebarProvider.API_BASE_URL}/api/fix`, {
+                    method: "POST",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(body),
+                }, model, provider, userApiKey, context);
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`AI Fix error: ${errText}`);
+                }
+                const data = await response.json();
+                let fixedCode = data.message || "";
+                // Sanitize: strip markdown if AI ignored instructions
+                fixedCode = (0, utils_1.stripMarkdownFences)(fixedCode);
+                // Remove line numbers if AI included them (e.g., "128: content")
+                fixedCode = fixedCode.replace(/^\s*\d+:\s*/gm, "");
+                if (fixedCode) {
+                    // Apply the fix via DiffManager to show comparison
+                    const diffManager = DiffManager_1.DiffManager.getInstance(context);
+                    // Get full original text to apply diff correctly
+                    const fullOriginalText = document.getText();
+                    // Calculate the total range covering all affected lines
+                    const startLineObj = document.lineAt(startLineIdx);
+                    const endLineObj = document.lineAt(endLineIdx);
+                    const startOffset = document.offsetAt(startLineObj.range.start);
+                    const endOffset = document.offsetAt(endLineObj.range.end);
+                    // Construct the new full text with the fix
+                    const newFullText = fullOriginalText.substring(0, startOffset) +
+                        fixedCode +
+                        fullOriginalText.substring(endOffset);
+                    await diffManager.openDiff(document.uri, newFullText);
+                }
+                else {
+                    vscode.window.showInformationMessage("AI could not provide a fix for this error.");
+                }
+            }
+            catch (error) {
+                vscode.window.showErrorMessage(`AI Fix failed: ${error.message}`);
+            }
+        });
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand("vico.sendToChat", async (document, diagnostics) => {
+        const diagnosticList = Array.isArray(diagnostics)
+            ? diagnostics
+            : [diagnostics];
+        if (diagnosticList.length === 0) {
+            return;
+        }
+        const fileName = path.basename(document.fileName);
+        const relativePath = vscode.workspace.asRelativePath(document.uri);
+        // Format error details for the chat input
+        let chatMessage = `I have the following error(s) in ${document.languageId} code at \`${relativePath}\`:\n\n`;
+        diagnosticList.forEach((d, index) => {
+            const lineNum = d.range.start.line + 1;
+            const lineText = document.lineAt(d.range.start.line).text.trim();
+            chatMessage += `${index + 1}. [Line ${lineNum}] ${d.message}\n`;
+            chatMessage += `   Code: \`${lineText}\`\n\n`;
+        });
+        chatMessage += "How can I fix this?";
+        // Open the sidebar if it's not already open
+        await vscode.commands.executeCommand("vibe-coding-sidebar.focus");
+        // Send the message to the sidebar webview
+        if (sidebarProvider && sidebarProvider._view) {
+            sidebarProvider.postMessage({
+                command: "appendChatInput",
+                text: chatMessage,
+            });
+        }
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand("vico.sendCodeToChat", async (document, range) => {
+        const relativePath = vscode.workspace.asRelativePath(document.uri);
+        const startLine = range.start.line + 1;
+        const endLine = range.end.line + 1;
+        const code = document.getText(range);
+        // Open the sidebar if it's not already open
+        await vscode.commands.executeCommand("vibe-coding-sidebar.focus");
+        // Send structured data to the sidebar webview
+        if (sidebarProvider && sidebarProvider._view) {
+            sidebarProvider.postMessage({
+                command: "appendCodeReference",
+                reference: {
+                    path: relativePath,
+                    range: `${startLine}-${endLine}`,
+                    code: code,
+                    languageId: document.languageId,
+                },
+            });
+        }
+    }));
     context.subscriptions.push(vscode.commands.registerCommand("vibe-coding.updateWebview", () => {
         const editor = vscode.window.activeTextEditor;
         const webview = sidebarProvider._view;
@@ -1094,9 +1285,23 @@ function activate(context) {
         let fileName = "";
         let selectedLine = "";
         let whitelist = [];
+        let relativeFilePath = "";
+        let visibleFiles = [];
+        // Get all open editors from all tab groups
+        vscode.window.tabGroups.all.forEach((group) => {
+            group.tabs.forEach((tab) => {
+                if (tab.input instanceof vscode.TabInputText) {
+                    visibleFiles.push(vscode.workspace.asRelativePath(tab.input.uri));
+                }
+            });
+        });
+        // Remove duplicates
+        visibleFiles = [...new Set(visibleFiles)];
         if (editor) {
-            filePath = editor.document.fileName;
-            fileName = path.basename(filePath);
+            const fullPath = editor.document.fileName;
+            filePath = fullPath;
+            fileName = path.basename(fullPath);
+            relativeFilePath = vscode.workspace.asRelativePath(fullPath);
             const selection = editor.selection;
             const startLine = selection.start.line + 1;
             const endLine = selection.end.line + 1;
@@ -1105,12 +1310,17 @@ function activate(context) {
         webview.webview.postMessage({
             command: "updateFileInfo",
             filePath: fileName,
+            relativeFilePath: relativeFilePath,
+            visibleFiles: visibleFiles,
             selectedLine: selectedLine,
             guardrails: {
                 whitelist: whitelist,
                 lineLimits: selectedLine ? { [fileName]: selectedLine } : {},
             },
         });
+    }));
+    context.subscriptions.push(vscode.languages.registerCodeActionsProvider(SUPPORTED_LANGUAGES.map((lang) => ({ scheme: "file", language: lang })), new CodeActionProvider_1.VicoCodeActionProvider(), {
+        providedCodeActionKinds: CodeActionProvider_1.VicoCodeActionProvider.providedCodeActionKinds,
     }));
     context.subscriptions.push(vscode.languages.registerInlineCompletionItemProvider({ scheme: "file" }, {
         async provideInlineCompletionItems(document, position) {

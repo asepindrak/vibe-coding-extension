@@ -41,7 +41,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   private static readonly READ_FILE_CACHE_MAX_ITEMS = 300;
   private static readonly MACHINE_PROMPT_USAGE_KEY_PREFIX =
     "vico.machinePromptUsage";
-  private static readonly API_BASE_URL = "http://localhost:13100/api";
+  public static readonly API_BASE_URL = "http://localhost:13100/api";
 
   private checkDuplicateAction(actionType: string, payload: any): boolean {
     const hash = crypto
@@ -504,7 +504,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             vscode.window.showErrorMessage("Failed to open diff view.");
           }
         } else if (message.command === "updateFileInfo") {
-          this.updateFileInfo(message.filePath, message.selectedLine);
+          this.updateFileInfo(message.filePath, message.relativeFilePath, message.selectedLine);
         } else if (message.command === "keepAllModifiedFiles") {
           vscode.commands.executeCommand(
             "vibe-coding.keepAllModifiedFiles",
@@ -1465,24 +1465,30 @@ NEW_CODE_TO_INSERT
               const rootPath = workspaceFolders[0].uri.fsPath;
               // Clean path
               let cleanPath = message.filePath.trim();
-              cleanPath = cleanPath.replace(/^\.\//, "");
-              if (cleanPath.startsWith("/") || cleanPath.startsWith("\\")) {
-                cleanPath = cleanPath.substring(1);
-              }
-              const fullPath = path.join(rootPath, cleanPath);
+              // Remove leading ./ or .\ or / or \
+              cleanPath = cleanPath.replace(/^(\.\/|\.\\|\/|\\)/, "");
+              
+              const fullPath = path.resolve(rootPath, cleanPath);
+              this.sendLog(`[ReadFile] Attempting to read: ${message.filePath} -> ${fullPath}`);
 
               if (fs.existsSync(fullPath)) {
+                const stats = fs.statSync(fullPath);
+                if (stats.isDirectory()) {
+                  throw new Error(`Path is a directory: ${message.filePath}`);
+                }
                 const cached = this.getCachedReadFile(fullPath);
                 const content = cached ?? fs.readFileSync(fullPath, "utf8");
                 if (cached == null) {
                   this.setCachedReadFile(fullPath, content);
                 }
+                this.sendLog(`[ReadFile] Success: ${message.filePath} (${content.length} bytes)`);
                 webviewView.webview.postMessage({
                   command: "readFileResult",
                   content: content,
                   filePath: message.filePath,
                 });
               } else {
+                this.sendLog(`[ReadFile] Not found at exact path: ${fullPath}. Trying fallback resolution...`);
                 // Fallback: resolve bare filename (e.g., "VideoPlayer.tsx")
                 const hasPathSeparator =
                   cleanPath.includes("/") || cleanPath.includes("\\");
@@ -2861,11 +2867,12 @@ NEW_CODE_TO_INSERT
     return configPatterns.some((p) => filePath.includes(p));
   }
 
-  private updateFileInfo(filePath: string, selectedLine: number) {
+  private updateFileInfo(filePath: string, relativeFilePath: string, selectedLine: number) {
     if (this._view) {
       this._view.webview.postMessage({
         command: "updateFileInfo",
         filePath: filePath,
+        relativeFilePath: relativeFilePath,
         selectedLine: selectedLine,
       });
     }
