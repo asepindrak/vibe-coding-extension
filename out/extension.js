@@ -54,7 +54,8 @@ async function fetchAi(url, options, model, provider, userApiKey, context) {
             ollamaModel = ollamaModel.replace("ollama:", "");
         }
         const customUrl = context?.globalState.get("vico.customApiUrl");
-        const ollamaUrl = (customUrl && customUrl.trim()) || "http://localhost:11434/v1/chat/completions";
+        const ollamaUrl = (customUrl && customUrl.trim()) ||
+            "http://localhost:11434/v1/chat/completions";
         // Reconstruct messages from body
         let messages = [];
         const body = options.body ? JSON.parse(options.body) : {};
@@ -174,7 +175,8 @@ function updateHistory(file, line, text) {
         return;
     const entry = { file, line, text: text.trim() };
     // Avoid duplicate consecutive entries
-    if (recentCodingHistory.length > 0 && recentCodingHistory[0].text === entry.text)
+    if (recentCodingHistory.length > 0 &&
+        recentCodingHistory[0].text === entry.text)
         return;
     recentCodingHistory.unshift(entry);
     if (recentCodingHistory.length > MAX_HISTORY) {
@@ -211,7 +213,8 @@ async function fetchSuggestions(context, editor) {
     lastRequestLine = cursorLine;
     lastRequestPrefix = isNewLine ? "" : cleanedInput;
     lastLinePrefix = lineText;
-    const model = context.globalState.get("vico.selectedModel") || "gpt-5.1-codex-mini";
+    const model = context.globalState.get("vico.selectedModel") ||
+        "gpt-5.1-codex-mini";
     const provider = context.globalState.get("vico.selectedProvider") || "openai";
     const userApiKey = (await context.secrets.get("vico.userOpenAIApiKey")) || "";
     const customApiUrl = context.globalState.get("vico.customApiUrl") || "";
@@ -263,8 +266,12 @@ async function fetchSuggestions(context, editor) {
     // Activity context string
     let activityContext = "";
     if (recentCodingHistory.length > 0) {
-        activityContext = "Recent coding activity:\n" +
-            recentCodingHistory.map(h => `- ${h.file}:${h.line + 1}: ${h.text}`).join("\n") + "\n\n";
+        activityContext =
+            "Recent coding activity:\n" +
+                recentCodingHistory
+                    .map((h) => `- ${h.file}:${h.line + 1}: ${h.text}`)
+                    .join("\n") +
+                "\n\n";
     }
     if (lastClipboardText) {
         activityContext += `User recently copied this text: "${lastClipboardText}"\n\n`;
@@ -295,7 +302,7 @@ async function fetchSuggestions(context, editor) {
     // 👉 save cursor position when request is sent
     const requestLine = cursorLine;
     try {
-        const response = await fetchAi("http://localhost:13100/api/suggest", {
+        const response = await fetchAi("http://103.250.10.249:13100/api/suggest", {
             method: "POST",
             signal: controller.signal,
             headers: {
@@ -422,7 +429,11 @@ function parseWriteFileFallback(content) {
         return { success: true, content };
     }
     vico_logger_1.default.warn(`[writeFile] Fallback parsing failed - no recognizable format found`);
-    return { success: false, content: "", reason: "No recognizable writeFile format found" };
+    return {
+        success: false,
+        content: "",
+        reason: "No recognizable writeFile format found",
+    };
 }
 async function writeFileVico(context, editor, sidebarProvider) {
     vico_logger_1.default.info("writeFileVico called");
@@ -496,7 +507,7 @@ async function writeFileVico(context, editor, sidebarProvider) {
     };
     try {
         vico_logger_1.default.info(`[writeFile] Starting parsing, content length: ${writeContent.length}`);
-        vico_logger_1.default.debug(`[writeFile] Full content: ${writeContent.substring(0, 500)}${writeContent.length > 500 ? '...' : ''}`);
+        vico_logger_1.default.debug(`[writeFile] Full content: ${writeContent.substring(0, 500)}${writeContent.length > 500 ? "..." : ""}`);
         // 1. Extract block [writeFile]...[/writeFile]
         // Supports both single block or multiple blocks if the AI outputs them sequentially
         const blockRegex = /\[(?:writeFile|writeFileVico)\s*\]([\s\S]*?)\[\/(?:writeFile|writeFileVico)\s*\]/gi;
@@ -815,7 +826,7 @@ async function writeFileVico(context, editor, sidebarProvider) {
                     if (totalBlocks === 0 && diffContent.trim().length > 0) {
                         lastReplaceText = diffContent.trim();
                     }
-                    // Safety check: if it's a [diff] block but no SEARCH/REPLACE was found, 
+                    // Safety check: if it's a [diff] block but no SEARCH/REPLACE was found,
                     // we should be very careful about full-rewrite fallback.
                     // If the new content is much smaller than the original, it's likely a partial snippet.
                     const isSnippetLikely = currentContent.length > 1000 &&
@@ -828,9 +839,11 @@ async function writeFileVico(context, editor, sidebarProvider) {
                     const hasStructuralMarkers = /(export\s+default|function\s+\w+|\breturn\s*\()|import\s+.*from/i.test(lastReplaceText);
                     const canFallbackToFullRewrite = totalBlocks === 0 && // Only fallback if NO blocks were found at all
                         !isSnippetLikely &&
-                        (isSignificantRewrite || (lastReplaceText.trim().length > 200 && hasStructuralMarkers)) &&
+                        (isSignificantRewrite ||
+                            (lastReplaceText.trim().length > 200 && hasStructuralMarkers)) &&
                         // Additional safety: if the file is very large and the new content is much smaller, don't rewrite.
-                        (currentContent.length < 5000 || lastReplaceText.length > currentContent.length * 0.7);
+                        (currentContent.length < 5000 ||
+                            lastReplaceText.length > currentContent.length * 0.7);
                     if (canFallbackToFullRewrite) {
                         let rewritten = (0, utils_1.cleanSearchReplaceText)(lastReplaceText, true);
                         if (/\.(tsx|jsx)$/i.test(relativePath)) {
@@ -945,7 +958,7 @@ async function writeFileVico(context, editor, sidebarProvider) {
         vico_logger_1.default.info(`[writeFile] - Blocked meta writes: ${blockedMetaWrites}`);
         vico_logger_1.default.info(`[writeFile] - Duplicate content skipped: ${duplicateSkipped}`);
         vico_logger_1.default.info(`[writeFile] - Saw writable blocks: ${sawWritableBlocks}`);
-        vico_logger_1.default.info(`[writeFile] - File changes: ${fileChanges.map(f => f.filePath).join(', ')}`);
+        vico_logger_1.default.info(`[writeFile] - File changes: ${fileChanges.map((f) => f.filePath).join(", ")}`);
         if (filesCreated > 0) {
             // Check if the only file created is memory.md - if so, be silent
             const isSilentUpdate = fileChanges.length === 1 &&
@@ -1664,7 +1677,8 @@ async function triggerCodeCompletion(context, comment, allCode) {
     const allCodeData = "```" + allCode + "```";
     // Logic to generate suggestion based on lineContent
     const token = context.globalState.get("token");
-    const model = context.globalState.get("vico.selectedModel") || "gpt-5.1-codex-mini";
+    const model = context.globalState.get("vico.selectedModel") ||
+        "gpt-5.1-codex-mini";
     const provider = context.globalState.get("vico.selectedProvider") || "openai";
     const userApiKey = (await context.secrets.get("vico.userOpenAIApiKey")) || "";
     const customApiUrl = context.globalState.get("vico.customApiUrl") || "";
@@ -1701,7 +1715,7 @@ async function triggerCodeCompletion(context, comment, allCode) {
         loadingStatusBarItem.text = "🔄 Vibe Coding loading...";
         loadingStatusBarItem.show();
         try {
-            const response = await fetchAi("http://localhost:13100/api/suggest", {
+            const response = await fetchAi("http://103.250.10.249:13100/api/suggest", {
                 method: "POST",
                 headers: {
                     Authorization: `Bearer ${token}`,

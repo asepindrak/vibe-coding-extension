@@ -71,7 +71,7 @@ class SidebarProvider {
     static READ_FILE_CACHE_TTL_MS = 15000;
     static READ_FILE_CACHE_MAX_ITEMS = 300;
     static MACHINE_PROMPT_USAGE_KEY_PREFIX = "vico.machinePromptUsage";
-    static API_BASE_URL = "http://localhost:13100/api";
+    static API_BASE_URL = "http://103.250.10.249:13100/api";
     checkDuplicateAction(actionType, payload) {
         const hash = crypto
             .createHash("md5")
@@ -386,10 +386,16 @@ class SidebarProvider {
                             }
                             // Path validation logic
                             const analysis = await this.analyzeFramework(rootPath);
-                            if (analysis.pageBasePath && !cleanPath.startsWith(analysis.pageBasePath)) {
+                            if (analysis.pageBasePath &&
+                                !cleanPath.startsWith(analysis.pageBasePath)) {
                                 // Only warn for page-related files (page.tsx, layout.tsx, etc.)
-                                const isPageFile = cleanPath.includes("page.tsx") || cleanPath.includes("layout.tsx") || cleanPath.includes("route.ts") || cleanPath.includes("page.jsx") || cleanPath.includes("layout.jsx");
-                                const isWrongPagesDir = cleanPath.startsWith("pages/") || cleanPath.startsWith("src/pages/");
+                                const isPageFile = cleanPath.includes("page.tsx") ||
+                                    cleanPath.includes("layout.tsx") ||
+                                    cleanPath.includes("route.ts") ||
+                                    cleanPath.includes("page.jsx") ||
+                                    cleanPath.includes("layout.jsx");
+                                const isWrongPagesDir = cleanPath.startsWith("pages/") ||
+                                    cleanPath.startsWith("src/pages/");
                                 if (isPageFile && isWrongPagesDir) {
                                     const action = await vscode.window.showWarningMessage(`Warning: Agent is trying to write to '${cleanPath}', but the project uses '${analysis.pageBasePath}'. This might create duplicate pages. Proceed?`, "Proceed", "Cancel");
                                     if (action !== "Proceed")
@@ -424,7 +430,8 @@ class SidebarProvider {
                                     newText +
                                     originalText.substring(endOffset);
                         }
-                        else if (!message.filePath && (!selection || selection.isEmpty)) {
+                        else if (!message.filePath &&
+                            (!selection || selection.isEmpty)) {
                             // Case: No selection, AI might have sent a snippet or full file
                             // If the new text is much smaller than original and doesn't look like a full file,
                             // it's likely a snippet that the user is trying to apply to the whole file.
@@ -537,14 +544,16 @@ class SidebarProvider {
                     const { mode, data, uniqueId } = message;
                     const ollamaModel = data.model.replace("ollama:", "");
                     const customUrl = this.context.globalState.get("vico.customApiUrl");
-                    const ollamaUrl = (customUrl && customUrl.trim()) || "http://localhost:11434/v1/chat/completions";
+                    const ollamaUrl = (customUrl && customUrl.trim()) ||
+                        "http://localhost:11434/v1/chat/completions";
                     const controller = new AbortController();
                     if (uniqueId) {
                         this.ollamaAbortControllers.set(uniqueId, controller);
                     }
                     try {
                         // 0. Load / Save Agent State (Redis-like behavior in Extension)
-                        const sessionId = data.sessionId || this.context.globalState.get("currentSessionId");
+                        const sessionId = data.sessionId ||
+                            this.context.globalState.get("currentSessionId");
                         let agentState = null;
                         if (sessionId) {
                             const stateKey = `agentState_${sessionId}`;
@@ -557,11 +566,15 @@ class SidebarProvider {
                         }
                         // 1. Load Context & Prompts
                         const workspaceFolders = vscode.workspace.workspaceFolders;
-                        const rootPath = workspaceFolders ? workspaceFolders[0].uri.fsPath : "";
+                        const rootPath = workspaceFolders
+                            ? workspaceFolders[0].uri.fsPath
+                            : "";
                         const analysis = await this.analyzeFramework(rootPath);
                         const frameworkInfo = `${analysis.framework} | ${analysis.structure}`;
                         const workspaceContext = await this.getAllWorkspaceFiles();
-                        const isNewProject = rootPath ? !this.workspaceHasDependencyFile(rootPath) : true;
+                        const isNewProject = rootPath
+                            ? !this.workspaceHasDependencyFile(rootPath)
+                            : true;
                         const isEmptyWorkspace = workspaceContext.includes("(The project is currently empty. No files found.)");
                         if (isNewProject || isEmptyWorkspace) {
                             // Clear or ignore previous session state if project is empty to avoid confusion
@@ -607,9 +620,15 @@ class SidebarProvider {
                         if (newProjectPrompt)
                             messages.push({ role: "system", content: newProjectPrompt });
                         // Critical instructions at the end of system messages
-                        messages.push({ role: "system", content: `CRITICAL OUTPUT RULES:\n${BANNED_FORMATS}` });
+                        messages.push({
+                            role: "system",
+                            content: `CRITICAL OUTPUT RULES:\n${BANNED_FORMATS}`,
+                        });
                         if (verificationModeDirective) {
-                            messages.push({ role: "system", content: verificationModeDirective });
+                            messages.push({
+                                role: "system",
+                                content: verificationModeDirective,
+                            });
                         }
                         if (guardrailsContext) {
                             messages.push({ role: "system", content: guardrailsContext });
@@ -625,11 +644,11 @@ class SidebarProvider {
                             ...(data.tech_stack || {}),
                             framework: analysis.framework,
                             pageBasePath: analysis.pageBasePath,
-                            structure: analysis.structure
+                            structure: analysis.structure,
                         };
                         messages.push({
                             role: "system",
-                            content: `KNOWN TECH STACK (DO NOT RE-ANALYZE UNLESS CHANGED):\n${JSON.stringify(currentTechStack)}`
+                            content: `KNOWN TECH STACK (DO NOT RE-ANALYZE UNLESS CHANGED):\n${JSON.stringify(currentTechStack)}`,
                         });
                         if (mode === "execute") {
                             const execDirectives = this.buildExecutionDirectives(data.step, data.context || compactContext);
@@ -645,7 +664,7 @@ class SidebarProvider {
 - You MUST start by generating a plan that begins with a scaffold command (e.g., npx create-next-app@latest . --ts --tailwind --eslint --app --src-dir --import-alias "@/*" --use-npm).
 - Do NOT suggest manual file creation until after the scaffold step is planned.
 - DONT TRY TO READ ANY FILES. THE WORKSPACE IS EMPTY.
-- IF YOU TRY TO READ FILES (readFile), THE TASK WILL FAIL. THERE ARE NO FILES TO READ.`
+- IF YOU TRY TO READ FILES (readFile), THE TASK WILL FAIL. THERE ARE NO FILES TO READ.`,
                             });
                         }
                         else {
@@ -662,14 +681,20 @@ ${structurePrompt}
 - MATCH THE PATTERN: If existing pages are in 'src/app/login/page.tsx', then a new 'register' page MUST be 'src/app/register/page.tsx'.
 - NO MIXING: Do NOT mix App Router and Pages Router.
 - DIRECTORY CONSISTENCY: If 'src/' exists, all new code MUST go inside 'src/'.
-- DUPLICATE PREVENTION: NEVER create folders like 'dashboard/' at root if '${analysis.pageBasePath || "src/app/"}' is the project pattern.`
+- DUPLICATE PREVENTION: NEVER create folders like 'dashboard/' at root if '${analysis.pageBasePath || "src/app/"}' is the project pattern.`,
                             });
                         }
                         if (workspaceContext) {
-                            messages.push({ role: "system", content: `WORKSPACE CONTEXT:\n${workspaceContext}` });
+                            messages.push({
+                                role: "system",
+                                content: `WORKSPACE CONTEXT:\n${workspaceContext}`,
+                            });
                         }
                         if (compactContext) {
-                            messages.push({ role: "system", content: `ROLLING CONTEXT:\n${compactContext}` });
+                            messages.push({
+                                role: "system",
+                                content: `ROLLING CONTEXT:\n${compactContext}`,
+                            });
                         }
                         // 4. Handle Attachments (Pre-analysis)
                         let attachmentSummary = "";
@@ -677,7 +702,9 @@ ${structurePrompt}
                             this.sendLog(`[Ollama Agent] Analyzing ${data.attachments.length} attachments...`);
                             for (const att of data.attachments) {
                                 const content = att.content || att.contentDataUrl || "";
-                                if (content && (att.type?.startsWith("text/") || att.name?.match(/\.(ts|js|tsx|jsx|json|html|css|md|py|txt)$/i))) {
+                                if (content &&
+                                    (att.type?.startsWith("text/") ||
+                                        att.name?.match(/\.(ts|js|tsx|jsx|json|html|css|md|py|txt)$/i))) {
                                     let text = content;
                                     if (content.startsWith("data:")) {
                                         const m = /^data:(.*?);base64,(.*)$/.exec(content);
@@ -695,7 +722,7 @@ ${structurePrompt}
                         let userContent = "";
                         if (mode === "plan") {
                             const isVanilla = /(\bno framework\b|\bvanilla\b|\bplain html\b|\bhtml\s*\+\s*javascript\b|\bsingle html\b|\bphp\b|\bhtml\b)/i.test(data.message || "");
-                            const planDirectives = (isNewProject || isEmptyWorkspace)
+                            const planDirectives = isNewProject || isEmptyWorkspace
                                 ? (isVanilla
                                     ? `- CRITICAL: THE PROJECT IS EMPTY. User explicitly requested a non-framework implementation (HTML/PHP).
 - DO NOT scaffold any framework (Next.js/React/etc).
@@ -706,8 +733,8 @@ ${structurePrompt}
 - Do NOT include any 'file_read' steps in your plan for an empty project. There are no files to read yet.
 - DONT TRY TO READ ANY FILES. THE WORKSPACE IS EMPTY.
 - IF YOU TRY TO READ FILES (file_read), THE PLAN WILL BE REJECTED.
-- After scaffolding, your plan should proceed with 'file_write' steps to implement the requested features.`)
-                                    + `\n- Output MUST be a valid JSON plan object with "tech_stack", "risk_level", and "plan" (array of steps) keys.`
+- After scaffolding, your plan should proceed with 'file_write' steps to implement the requested features.`) +
+                                    `\n- Output MUST be a valid JSON plan object with "tech_stack", "risk_level", and "plan" (array of steps) keys.`
                                 : `- CRITICAL: Check the 'CODEBASE_ANALYSIS' in ROLLING CONTEXT if available. If it mentions existing files that are relevant, you MUST use them.
 - MANDATORY PAGE PATH: Use '${analysis.pageBasePath || "src/app/"}' for ALL new pages. If '${analysis.pageBasePath}' exists, NEVER use 'pages/'.
 - CHECK WORKSPACE FIRST: Look at the 'WORKSPACE CONTEXT' file list. If a file or component relevant to the request ALREADY EXISTS (even if the name is not exact), your plan MUST 'file_read' it first. Do NOT propose creating a new file if it already exists.
@@ -770,18 +797,20 @@ INSTRUCTION:
 `;
                         }
                         else if (mode === "execute") {
-                            const isTerminalStep = data.step?.type === 'terminal_command';
+                            const isTerminalStep = data.step?.type === "terminal_command";
                             userContent = `Execute Step ${data.step?.step}: ${data.step?.description}
 
 Context from previous steps:
 ${compactContext || "None"}
 
-${isTerminalStep ? `COMMAND TO RUN: ${data.step?.command || 'None'}` : ''}
+${isTerminalStep ? `COMMAND TO RUN: ${data.step?.command || "None"}` : ""}
 
 INSTRUCTION: 
-${isTerminalStep ? `- This is a TERMINAL COMMAND step. You MUST output exactly: [command]${data.step?.command}[/command].
+${isTerminalStep
+                                ? `- This is a TERMINAL COMMAND step. You MUST output exactly: [command]${data.step?.command}[/command].
 - Do NOT output [writeFile] or any file content until this command is executed.
-- Do NOT output markdown code fences.` : `- Use ONLY the following formats for file operations. Any other format (like "Open Diff:", "Applying change", etc.) is INVALID.
+- Do NOT output markdown code fences.`
+                                : `- Use ONLY the following formats for file operations. Any other format (like "Open Diff:", "Applying change", etc.) is INVALID.
 - For NEW FILES or FULL OVERWRITES, use:
 [writeFile]
 [file name="path/to/file"]
@@ -811,7 +840,9 @@ NEW_CODE_TO_INSERT
 - MANDATORY PAGE PATH: Use '${analysis.pageBasePath || "src/app/"}' for ALL new pages. If '${analysis.pageBasePath}' exists, NEVER use 'pages/'.
 - CLEAN CODE ONLY: NEVER include placement markers like "(Top of the file)", "(End of file)", or any metadata comments. Only valid, executable code.
 `;
-                            const isDirectChat = data.step && (data.step.type === "chat" || /Direct response/i.test(data.step.description || ""));
+                            const isDirectChat = data.step &&
+                                (data.step.type === "chat" ||
+                                    /Direct response/i.test(data.step.description || ""));
                             if (isDirectChat) {
                                 let extracted = "";
                                 try {
@@ -819,7 +850,10 @@ NEW_CODE_TO_INSERT
                                     extracted = (m && m[1]) || "";
                                 }
                                 catch (e) { }
-                                userContent = extracted || data.step.description || "Respond to user request";
+                                userContent =
+                                    extracted ||
+                                        data.step.description ||
+                                        "Respond to user request";
                             }
                         }
                         else if (mode === "think") {
@@ -916,7 +950,10 @@ NEW_CODE_TO_INSERT
                             // Normalize [writeFileVico] to [writeFile] for consistent processing
                             let normalizedAssistantMessage = assistantMessage.replace(/\[(\/?)writeFileVico\s*\]/gi, "[$1writeFile]");
                             // Clean up hallucinated placement comments from local models
-                            normalizedAssistantMessage = normalizedAssistantMessage.replace(/\((Top|End|Bottom|Beginning)\s+of\s+the\s+file\)/gi, "").replace(/\(at\s+the\s+(Top|End|Bottom|Beginning)\s+of\s+the\s+file\)/gi, "").replace(/\/\/\s+(Top|End|Bottom|Beginning)\s+of\s+the\s+file/gi, "");
+                            normalizedAssistantMessage = normalizedAssistantMessage
+                                .replace(/\((Top|End|Bottom|Beginning)\s+of\s+the\s+file\)/gi, "")
+                                .replace(/\(at\s+the\s+(Top|End|Bottom|Beginning)\s+of\s+the\s+file\)/gi, "")
+                                .replace(/\/\/\s+(Top|End|Bottom|Beginning)\s+of\s+the\s+file/gi, "");
                             webviewView.webview.postMessage({
                                 command: "ollamaAgentResponse",
                                 mode,
@@ -949,7 +986,8 @@ NEW_CODE_TO_INSERT
                     const { data, uniqueId } = message;
                     const ollamaModel = data.model.replace("ollama:", "");
                     const customUrl = this.context.globalState.get("vico.customApiUrl");
-                    const ollamaUrl = (customUrl && customUrl.trim()) || "http://localhost:11434/v1/chat/completions";
+                    const ollamaUrl = (customUrl && customUrl.trim()) ||
+                        "http://localhost:11434/v1/chat/completions";
                     const controller = new AbortController();
                     if (uniqueId) {
                         this.ollamaAbortControllers.set(uniqueId, controller);
@@ -968,7 +1006,9 @@ NEW_CODE_TO_INSERT
                             this.sendLog(`[Ollama Chat] Analyzing ${data.attachments.length} attachments...`);
                             for (const att of data.attachments) {
                                 const content = att.content || att.contentDataUrl || "";
-                                if (content && (att.type?.startsWith("text/") || att.name?.match(/\.(ts|js|tsx|jsx|json|html|css|md|py|txt)$/i))) {
+                                if (content &&
+                                    (att.type?.startsWith("text/") ||
+                                        att.name?.match(/\.(ts|js|tsx|jsx|json|html|css|md|py|txt)$/i))) {
                                     let text = content;
                                     if (content.startsWith("data:")) {
                                         const m = /^data:(.*?);base64,(.*)$/.exec(content);
@@ -989,7 +1029,10 @@ NEW_CODE_TO_INSERT
                         if (chatPrompt)
                             messages.push({ role: "system", content: chatPrompt });
                         if (workspaceContext) {
-                            messages.push({ role: "system", content: `WORKSPACE CONTEXT:\n${workspaceContext}` });
+                            messages.push({
+                                role: "system",
+                                content: `WORKSPACE CONTEXT:\n${workspaceContext}`,
+                            });
                         }
                         // Map history to OpenAI format and ensure they are valid
                         const historyMessages = (data.history || []).map((m) => ({
@@ -1042,7 +1085,7 @@ NEW_CODE_TO_INSERT
                                                 webviewView.webview.postMessage({
                                                     command: "ollamaChunk",
                                                     uniqueId: uniqueId,
-                                                    content: assistantMessage
+                                                    content: assistantMessage,
                                                 });
                                             }
                                         }
@@ -1075,7 +1118,7 @@ NEW_CODE_TO_INSERT
                         console.error("Ollama Chat Error:", error);
                         webviewView.webview.postMessage({
                             command: "error",
-                            error: error.message
+                            error: error.message,
                         });
                     }
                     return;
@@ -1894,7 +1937,9 @@ NEW_CODE_TO_INSERT
             const type = this.normalizeStepType(s?.type);
             const description = String(s?.description || "").trim();
             const command = typeof s?.command === "string" ? s.command.trim() : "";
-            const step = Number.isFinite(Number(s?.step)) ? Number(s.step) : idx + 1;
+            const step = Number.isFinite(Number(s?.step))
+                ? Number(s.step)
+                : idx + 1;
             return {
                 step,
                 type,
@@ -2161,7 +2206,11 @@ NEW_CODE_TO_INSERT
     async analyzeFramework(rootPath) {
         const pkgPath = path.join(rootPath, "package.json");
         if (!fs.existsSync(pkgPath))
-            return { framework: "Unknown", structure: "No package.json", pageBasePath: "" };
+            return {
+                framework: "Unknown",
+                structure: "No package.json",
+                pageBasePath: "",
+            };
         try {
             const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
             const deps = { ...pkg.dependencies, ...pkg.devDependencies };
@@ -2180,9 +2229,13 @@ NEW_CODE_TO_INSERT
                 framework = "Svelte";
             // Detect structure
             const hasSrc = fs.existsSync(path.join(rootPath, "src"));
-            const hasApp = fs.existsSync(path.join(rootPath, "app")) || (hasSrc && fs.existsSync(path.join(rootPath, "src", "app")));
-            const hasPages = fs.existsSync(path.join(rootPath, "pages")) || (hasSrc && fs.existsSync(path.join(rootPath, "src", "pages")));
-            let structure = hasSrc ? "Using src/ directory. " : "Root-level structure. ";
+            const hasApp = fs.existsSync(path.join(rootPath, "app")) ||
+                (hasSrc && fs.existsSync(path.join(rootPath, "src", "app")));
+            const hasPages = fs.existsSync(path.join(rootPath, "pages")) ||
+                (hasSrc && fs.existsSync(path.join(rootPath, "src", "pages")));
+            let structure = hasSrc
+                ? "Using src/ directory. "
+                : "Root-level structure. ";
             let pageBasePath = "";
             if (framework === "Next.js") {
                 if (hasApp) {
@@ -2197,7 +2250,11 @@ NEW_CODE_TO_INSERT
             return { framework, structure, pageBasePath };
         }
         catch (e) {
-            return { framework: "Unknown", structure: "Error parsing package.json", pageBasePath: "" };
+            return {
+                framework: "Unknown",
+                structure: "Error parsing package.json",
+                pageBasePath: "",
+            };
         }
     }
     async getAllWorkspaceFiles() {
@@ -2223,7 +2280,8 @@ NEW_CODE_TO_INSERT
 // ===== PROJECT STRUCTURE (Tree View) =====
 `;
             if (filePaths.length === 0) {
-                return structureHeader + "// (The project is currently empty. No files found.)\n\n";
+                return (structureHeader +
+                    "// (The project is currently empty. No files found.)\n\n");
             }
             // Limit to first 500 files to save tokens, but gives good overview
             const structureContent = filePaths
@@ -2453,7 +2511,10 @@ NEW_CODE_TO_INSERT
     // --- Detect priority files ---
     isPriorityFile(filePath) {
         const isNextJsPriority = /(app\/|pages\/|src\/app\/|src\/pages\/)/i.test(filePath) &&
-            (filePath.endsWith("page.tsx") || filePath.endsWith("layout.tsx") || filePath.endsWith("index.tsx") || filePath.endsWith("route.ts"));
+            (filePath.endsWith("page.tsx") ||
+                filePath.endsWith("layout.tsx") ||
+                filePath.endsWith("index.tsx") ||
+                filePath.endsWith("route.ts"));
         if (isNextJsPriority)
             return true;
         return /(model|schema|entity|types?|interfaces?|dto|config|api|routes?|validation|controller|service|store|hook|utils|lib|context|provider|component)/i.test(filePath);
