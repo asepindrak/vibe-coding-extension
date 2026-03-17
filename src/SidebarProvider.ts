@@ -1343,7 +1343,9 @@ NEW_CODE_TO_INSERT
           }
           case "saveAiSettings": {
             const selectedModel = this.normalizeModel(message.model);
-            const selectedProvider = message.provider || "openai";
+            const selectedProvider = selectedModel.startsWith("ollama:")
+              ? "ollama"
+              : "openai";
             const customApiUrl = message.customApiUrl || "";
 
             await this.context.globalState.update(

@@ -2721,19 +2721,20 @@
               ...currentAiSettings,
               ...messageEvent,
             };
-            const modelSelect = document.getElementById("modelSelect");
-            const providerSelect = document.getElementById("providerSelect");
-            if (providerSelect) {
-              providerSelect.value =
-                currentAiSettings.selectedProvider || "openai";
-            }
-            if (modelSelect) {
+            const unifiedSelect =
+              document.getElementById("unifiedModelSelect");
+            if (unifiedSelect) {
               await updateModelSelect();
               const allowedModel = resolveAllowedModelOrFallback(
                 currentAiSettings.selectedModel,
               );
-              modelSelect.value = allowedModel;
+              unifiedSelect.value = allowedModel;
               currentAiSettings.selectedModel = allowedModel;
+              currentAiSettings.selectedProvider = allowedModel.startsWith(
+                "ollama:",
+              )
+                ? "ollama"
+                : "openai";
               if (
                 currentAiSettings.hasUserApiKey ||
                 isFreeQuotaModel(allowedModel)
@@ -2750,19 +2751,20 @@
               ...currentAiSettings,
               ...messageEvent,
             };
-            const modelSelect = document.getElementById("modelSelect");
-            const providerSelect = document.getElementById("providerSelect");
-            if (providerSelect) {
-              providerSelect.value =
-                currentAiSettings.selectedProvider || "openai";
-            }
-            if (modelSelect) {
+            const unifiedSelect =
+              document.getElementById("unifiedModelSelect");
+            if (unifiedSelect) {
               await updateModelSelect();
               const allowedModel = resolveAllowedModelOrFallback(
                 currentAiSettings.selectedModel,
               );
-              modelSelect.value = allowedModel;
+              unifiedSelect.value = allowedModel;
               currentAiSettings.selectedModel = allowedModel;
+              currentAiSettings.selectedProvider = allowedModel.startsWith(
+                "ollama:",
+              )
+                ? "ollama"
+                : "openai";
               if (
                 currentAiSettings.hasUserApiKey ||
                 isFreeQuotaModel(allowedModel)
@@ -2865,13 +2867,19 @@
                 if (modeSelect) {
                   modeSelect.value = persistedState.mode ?? "agent";
                 }
-                const modelSelect = document.getElementById("modelSelect");
-                if (modelSelect && persistedState.model) {
+                const unifiedSelect =
+                  document.getElementById("unifiedModelSelect");
+                if (unifiedSelect && persistedState.model) {
                   const allowedModel = resolveAllowedModelOrFallback(
                     persistedState.model,
                   );
-                  modelSelect.value = allowedModel;
+                  unifiedSelect.value = allowedModel;
                   currentAiSettings.selectedModel = allowedModel;
+                  currentAiSettings.selectedProvider = allowedModel.startsWith(
+                    "ollama:",
+                  )
+                    ? "ollama"
+                    : "openai";
                   if (
                     currentAiSettings.hasUserApiKey ||
                     isFreeQuotaModel(allowedModel)
@@ -2900,13 +2908,19 @@
                 if (modeSelect) {
                   modeSelect.value = persistedState.mode ?? "agent";
                 }
-                const modelSelect = document.getElementById("modelSelect");
-                if (modelSelect && persistedState.model) {
+                const unifiedSelect =
+                  document.getElementById("unifiedModelSelect");
+                if (unifiedSelect && persistedState.model) {
                   const allowedModel = resolveAllowedModelOrFallback(
                     persistedState.model,
                   );
-                  modelSelect.value = allowedModel;
+                  unifiedSelect.value = allowedModel;
                   currentAiSettings.selectedModel = allowedModel;
+                  currentAiSettings.selectedProvider = allowedModel.startsWith(
+                    "ollama:",
+                  )
+                    ? "ollama"
+                    : "openai";
                   if (
                     currentAiSettings.hasUserApiKey ||
                     isFreeQuotaModel(allowedModel)
@@ -3336,7 +3350,7 @@
 
         const modeSelect = document.getElementById("modeSelect");
         const mode = modeSelect ? modeSelect.value : "agent";
-        const modelSelect = document.getElementById("modelSelect");
+        const modelSelect = document.getElementById("unifiedModelSelect");
         const selectedModel = ensureSupportedModel(
           (modelSelect && modelSelect.value) ||
             currentAiSettings.selectedModel ||
@@ -5781,9 +5795,18 @@ ${result.summary || "Executed successfully."}`,
               }
             }
 
+            if (
+              String(step?.type || "").toLowerCase() === "file_write" &&
+              !/\[(?:writeFile|writeFileVico)\]/i.test(stepOutput) &&
+              /\[(?:file|diff)\s+/i.test(stepOutput)
+            ) {
+              stepOutput = `[writeFile]\n${stepOutput.trim()}\n[/writeFile]`;
+              context += `\n[System Feedback] Auto-wrapped bare [file]/[diff] output into [writeFile] for execution.\n`;
+            }
+
             // --- AUTO-FIX: Raw Markdown to [writeFile] ---
-            // If the model is in file_write mode but ONLY returns a markdown code block
-            // without [writeFile] tags, we try to wrap it automatically if we can determine the file name.
+            // Local models often return a fenced code block without agent tags.
+            // Try to infer the target file from the step description and wrap it.
             if (
               String(step?.type || "").toLowerCase() === "file_write" &&
               !/\[(?:writeFile|writeFileVico)\]/i.test(stepOutput)
@@ -5793,12 +5816,19 @@ ${result.summary || "Executed successfully."}`,
               );
               if (codeBlockMatch) {
                 const code = codeBlockMatch[1].trim();
-                // Try to guess file name from step description if possible
-                const fileNameMatch = String(step?.content || "").match(
-                  /(?:file|create|update)\s+[`'"]?([^`'"\s]+)[`'"]?/i,
-                );
+                const stepHint = String(step?.description || "");
+                const fileNameMatch =
+                  stepHint.match(
+                    /(?:read|write|modify|update|create|edit|overwrite|replace)\s+[`'"]?([^`'"\s]+(?:\.[A-Za-z0-9._-]+)?)[`'"]?/i,
+                  ) ||
+                  stepHint.match(
+                    /[`'"]([^`'"]+\.[A-Za-z0-9._-]+)[`'"]/i,
+                  ) ||
+                  stepHint.match(
+                    /\b([A-Za-z0-9_./\\-]+\.[A-Za-z0-9._-]+)\b/,
+                  );
                 if (fileNameMatch) {
-                  const fileName = fileNameMatch[1];
+                  const fileName = fileNameMatch[1].replace(/\\/g, "/");
                   stepOutput = `[writeFile]\n[file name="${fileName}"]\n${code}\n[/file]\n[/writeFile]`;
                   context += `\n[System Feedback] Auto-wrapped raw markdown code block into [writeFile] for ${fileName}.\n`;
                 }
