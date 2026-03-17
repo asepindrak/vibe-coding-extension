@@ -2,9 +2,14 @@
 
 ## [Unreleased]
 
-## [2.0.2] - 2026-03-04
+## [2.0.3] - 2026-03-18
 
 ### Added
+
+## 2.0.3
+
+- Coding Agent Improvements
+- UI Improvements
 
 ## 2.0.2
 

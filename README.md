@@ -187,6 +187,11 @@ MIT License
 
 # 📜 Release Notes
 
+## 2.0.3
+
+- Coding Agent Improvements
+- UI Improvements
+
 ## 2.0.2
 
 - Multi Model Support (OpenAI)
