@@ -852,7 +852,9 @@
       <!-- ADDED: Plan Status Container above input -->
       <div id="planStatusContainer" class="plan-status-container hidden">
         <div class="plan-status-header">
-          <span class="font-bold" style="color: #58a6ff">Current Plan</span>
+          <div class="flex items-center gap-2">
+            <span class="font-bold" style="color: #58a6ff">Current Plan</span>
+          </div>
           <button id="closePlanStatus" class="bg-transparent border-none cursor-pointer text-gray-300 p-1 flex-center">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
               stroke="currentColor">
@@ -914,6 +916,15 @@
         </button>
       </div>
       <div id="planContent" class="popup-content custom-scrollbar text-sm text-gray-300"></div>
+      <div id="planFooter" class="p-2 border-t border-gray-700 hidden">
+        <button id="keepAllFilesBtn" class="btn-diff w-full"
+          style="background-color: #238636; color: white; margin-top: 0;">
+          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+          </svg>
+          Keep All Modified Files
+        </button>
+      </div>
     </div>
 
     <!-- History Popup -->
@@ -1048,6 +1059,8 @@
       var cachedProjectContext = ""
       var cachedIsEmptyWorkspace = false
       var cachedContextVersion = -1
+      window.lastWorkflowParams = null
+      window.currentModifiedFiles = new Set()
 
       function updateQuotaBadgeFromSettings() {
         const badge = document.getElementById("quotaBadge")
@@ -1428,10 +1441,14 @@
 
         const normalizePath = (p) => {
           let normalized = p.replace(/\\/g, "/").toLowerCase().trim()
+          // Strip leading ./ or /
+          normalized = normalized.replace(/^\.?\//, "")
           // Strip common prefixes from markers
           normalized = normalized.replace(/^project context \((.*)\)$/, "$1")
           normalized = normalized.replace(/^project memory \((.*)\)$/, "$1")
           normalized = normalized.replace(/^file content \((.*)\)$/, "$1")
+          // Strip again after markers in case they contained ./
+          normalized = normalized.replace(/^\.?\//, "")
           return normalized.trim()
         }
         const targetPath = normalizePath(filePath)
@@ -2977,6 +2994,7 @@
         const newChatButton = document.getElementById("newChatButton")
         const historyButton = document.getElementById("historyButton")
 
+        window.lastWorkflowParams = null
         sendMessageButton.classList.remove("hidden")
         stopButton.classList.add("hidden")
         loader.classList.add("hidden")
@@ -3329,7 +3347,7 @@
       }
 
       const isVanillaWebRequest = (text) =>
-        /(\bno framework\b|\bvanilla\b|\bplain html\b|\bhtml\s*\+\s*javascript\b|\bsingle html\b)/i.test(
+        /(\bno framework\b|\bvanilla\b|\bplain html\b|\bhtml\s*\+\s*javascript\b|\bsingle html\b|\bphp\b|\bhtml\b)/i.test(
           text || "",
         )
       const isVerificationCommandLite = (cmd) =>
@@ -3400,6 +3418,8 @@
         attachments,
         isRetry = false,
         aiConfig = {},
+        existingContext = "",
+        existingWorkflowMeta = null,
       ) {
         const resolveVerificationModeFromRequest = (text) => {
           const src = String(text || "")
@@ -3445,14 +3465,14 @@
           ) && /\b(simple|sederhana)\b/i.test(message || "")
             ? 8
             : 10
-        let currentContext = ""
-        let currentModifiedFiles = new Set()
+        let currentContext = existingContext || ""
+        window.currentModifiedFiles = new Set()
         let currentUniqueId = uniqueId
         let repeatedPlanCount = 0
         let lastPlanSignature = ""
         let consecutiveFailedIterations = 0
         let consecutiveVerificationOnlyIterations = 0
-        const workflowMeta = {
+        const workflowMeta = existingWorkflowMeta || {
           changeVersion: 0,
           lastVerifiedVersion: -1,
           successfulVerificationCommands: new Set(),
@@ -3481,7 +3501,7 @@
           "composer.json",
         ]
         const isWebRequest = (text) =>
-          /(web|website|frontend|ui|landing|dashboard|streaming|next\.?js|react)/i.test(
+          /(web|website|frontend|ui|landing|dashboard|streaming|next\.?js|react|php|html)/i.test(
             text || "",
           )
         const requiresConcreteCoding = (text) => {
@@ -3636,7 +3656,11 @@
           currentContext += `\n=== HISTORY & LESSONS POLICY ===\n- Never edit .vico/history.md or .vico/lessons.md while planning, thinking, or reading; treat those files as read-only references until functional code is written.\n- Only append or modify history/lessons after all coding steps are complete and verified, and only as a final summary action requested by the user.\n- If the user did not explicitly ask for documentation/recap updates, keep history.md and lessons.md untouched.\n============================\n`
           currentContext += `\n=== VERIFICATION POLICY ===\n- Run build/test/lint ONLY at the end, after implementation steps are done.\n- Do NOT repeat the same verification command if it already passed and no new code changes occurred.\n- For simple vanilla HTML/JS requests, verification is lightweight and optional; do not force integration/e2e test loops.\n- NEVER propose manual verification requiring GUI actions (open browser/url/file, click buttons, open file://).\n- If implementation is already persisted and there is no critical build/runtime error, finalize without extra strict verification loops.\n============================\n`
           currentContext += `\n=== FILE STRUCTURE AWARENESS ===\nBefore creating any new file or component, you MUST check the 'PROJECT FILE STRUCTURE' provided in the context. \n- If this is a Next.js project, verify if it uses the 'app/' directory (App Router) or 'pages/' directory (Pages Router). \n- Do NOT create 'pages/index.js' if 'app/page.tsx' exists. \n- Do NOT mix TypeScript (.ts/.tsx) and JavaScript (.js/.jsx) unless the project already does. Follow existing patterns.\n================================\n`
-          currentContext += `\n=== DEFAULT WEB POLICY ===\nIf user asks for a web app and does not specify framework, default to Next.js + Tailwind CSS using NON-INTERACTIVE scaffold command.\n- Preferred scaffold command: npx create-next-app . --yes --ts --eslint --tailwind --app --use-npm\n- Never run npm install/build/test before dependency file exists.\n================================\n`
+          if (userRequestedVanillaNoFrameworkGlobal) {
+            currentContext += `\n=== WEB POLICY (VANILLA/PHP) ===\nUser requested a non-framework implementation (HTML/PHP).\n- DO NOT scaffold Next.js/Vite/React.\n- Implement directly with plain files (index.php, index.html, etc.).\n- Use Tailwind via CDN if modern styling is needed.\n================================\n`
+          } else {
+            currentContext += `\n=== DEFAULT WEB POLICY ===\nIf user asks for a web app and does not specify framework, default to Next.js + Tailwind CSS using NON-INTERACTIVE scaffold command.\n- Preferred scaffold command: npx create-next-app . --yes --ts --eslint --tailwind --app --use-npm\n- Never run npm install/build/test before dependency file exists.\n================================\n`
+          }
           currentContext += `\n=== WEB FRAMEWORK OVERRIDE ===\nIf user explicitly asks for HTML/CSS/JavaScript without framework (for example: 'tanpa framework', 'no framework', 'vanilla'), DO NOT scaffold Next.js/Vite/React.\nImplement directly with plain files (for example: index.html + script.js), and use Tailwind via CDN unless user requests another setup.\n================================\n`
           currentContext += `\n=== DEPENDENCY & IMPORT POLICY ===\nBefore writing any external import (for example: import Hls from 'hls.js'), verify dependency source first.\n- For explicit vanilla/no-framework requests: NEVER use bare npm imports. Use CDN/browser script import and global object fallback.\n- If project has dependency manifest and framework-based build is used: install missing package first, then import.\n- Never reference non-existent local files in import path.\n================================\n`
           currentContext += `\n=== CONTENT FIDELITY POLICY ===\n- Use literal values from user prompt exactly. Never replace provided URL with placeholders.\n- Forbidden placeholder patterns: example.com, your-*.m3u8, final-*.m3u8, TODO placeholder URLs.\n- Do not add extra branding words like 'Final' unless user explicitly asked for it.\n================================\n`
@@ -3684,7 +3708,11 @@
               (fileList.length === 1 && fileList[0] === ".vico/history.md")
 
             if (isEmptyWorkspace) {
-              currentContext += `\n=== CRITICAL: EMPTY WORKSPACE DETECTED ===\n- The workspace is empty (or only contains history).\n- You MUST run a scaffold command as the FIRST step.\n- Preferred command: [command] npx create-next-app . --yes --ts --eslint --tailwind --app --src-dir --import-alias "@/*" --use-npm [/command]\n- Do NOT write files before scaffolding.\n========================================\n`
+              if (userRequestedVanillaNoFrameworkGlobal) {
+                currentContext += `\n=== CRITICAL: EMPTY WORKSPACE DETECTED ===\n- The workspace is empty.\n- User explicitly requested a non-framework implementation (PHP/Vanilla HTML).\n- DO NOT scaffold any framework (Next.js/React/etc).\n- Implement directly by creating the requested files (e.g., index.php, index.html).\n========================================\n`
+              } else {
+                currentContext += `\n=== CRITICAL: EMPTY WORKSPACE DETECTED ===\n- The workspace is empty (or only contains history).\n- You MUST run a scaffold command as the FIRST step.\n- Preferred command: [command] npx create-next-app . --yes --ts --eslint --tailwind --app --src-dir --import-alias "@/*" --use-npm [/command]\n- Do NOT write files before scaffolding.\n========================================\n`
+              }
             }
 
             if (fileList.length > 0) {
@@ -4133,7 +4161,7 @@
               currentContext +=
                 "\n[System Feedback] Manual verification step removed (open browser/url/file is not possible in sandbox). Use executable checks only, or complete based on persisted file changes.\n"
             }
-            if (planSteps.length === 0 && currentModifiedFiles.size > 0) {
+            if (planSteps.length === 0 && window.currentModifiedFiles.size > 0) {
               updateMessagesAssistant({
                 uniqueId: `assistant-${currentUniqueId}`,
                 content:
@@ -4162,7 +4190,7 @@
                 currentContext +=
                   "\n[System Feedback] Simple vanilla task: verification terminal step was removed to avoid unnecessary test/integration loops. Finalize using persisted file changes.\n"
               }
-              if (planSteps.length === 0 && currentModifiedFiles.size > 0) {
+              if (planSteps.length === 0 && window.currentModifiedFiles.size > 0) {
                 updateMessagesAssistant({
                   uniqueId: `assistant-${currentUniqueId}`,
                   content:
@@ -4205,7 +4233,7 @@
                   updateMessagesAssistant({
                     uniqueId: `assistant-${currentUniqueId}`,
                     content:
-                      "?? Empty project + explicit framework request. Enforcing scaffold-first.",
+                      "⚠️ Empty project + explicit framework request. Enforcing scaffold-first.",
                   })
                 } else {
                   currentContext +=
@@ -4217,7 +4245,7 @@
                 updateMessagesAssistant({
                   uniqueId: `assistant-${currentUniqueId}`,
                   content:
-                    "?? Plan rejected: empty workspace requires scaffold/init as first action. Replanning...",
+                    "⚠️ Plan rejected: empty workspace requires scaffold/init as first action. Replanning...",
                 })
                 continue
               } else {
@@ -4353,7 +4381,7 @@
             currentContext = result.context
 
             if (result.modifiedFiles) {
-              result.modifiedFiles.forEach((f) => currentModifiedFiles.add(f))
+              result.modifiedFiles.forEach((f) => window.currentModifiedFiles.add(f))
               if (workflowMeta && workflowMeta.fileTouchCounts) {
                 result.modifiedFiles.forEach((f) => {
                   const prev = workflowMeta.fileTouchCounts.get(f) || 0
@@ -4379,6 +4407,38 @@ Executed Steps:
 Execution Result:
 ${result.summary || "Executed successfully."}`,
             })
+
+            // CHECK FOR COMPLETION AFTER EXECUTION
+            // If the agent explicitly signals completion in the summary/execution output
+            const executionOutputLower = String(result.summary || "").toLowerCase()
+            const isExplicitlyDone =
+              /\[(?:COMPLETE|DONE)\]/i.test(executionOutputLower) ||
+              /\b(task|goal|objective) (is )?(complete|finished|done)\b/i.test(
+                executionOutputLower,
+              ) ||
+              /\b(selesai|sudah selesai|tugas selesai)\b/i.test(
+                executionOutputLower,
+              )
+
+            if (
+              isExplicitlyDone &&
+              !result.hadStepError &&
+              !result.autoFixTriggered
+            ) {
+              updateMessagesAssistant({
+                uniqueId: `assistant-${currentUniqueId}`,
+                content: `${result.summary || ""}\n\n✅ **Task Completed:** Agent explicitly signaled completion.`,
+              })
+              messageArray.push({
+                role: "assistant",
+                content:
+                  "✅ Task Completed: Agent explicitly signaled completion in execution output.",
+              })
+              saveState()
+              resetUI()
+              return
+            }
+
             const isSimpleAssetTask = /\b(logo|favicon|icon|branding)\b/i.test(
               String(message || ""),
             )
@@ -4422,6 +4482,29 @@ ${result.summary || "Executed successfully."}`,
             const hasCriticalFailure = criticalFailurePattern.test(
               String(result.summary || ""),
             )
+
+            // Special handling for simple tasks: if we changed files and no critical error, we can stop.
+            if (
+              (isSimpleVanillaTaskGlobal || isSimpleAssetTask) &&
+              hasPersistedImplementation &&
+              !hasCriticalFailure &&
+              !result.hadStepError &&
+              !result.autoFixTriggered
+            ) {
+              updateMessagesAssistant({
+                uniqueId: `assistant-${currentUniqueId}`,
+                content: `${result.summary || ""}\n\n✅ **Task Completed:** Implementation persisted for simple task.`,
+              })
+              messageArray.push({
+                role: "assistant",
+                content:
+                  "✅ Task Completed: Implementation persisted for simple task. Extra verification skipped.",
+              })
+              saveState()
+              resetUI()
+              return
+            }
+
             if (hasPersistedImplementation && !hasCriticalFailure) {
               updateMessagesAssistant({
                 uniqueId: `assistant-${currentUniqueId}`,
@@ -4440,7 +4523,7 @@ ${result.summary || "Executed successfully."}`,
               consecutiveFailedIterations++
               if (
                 isSimpleVanillaTaskGlobal &&
-                currentModifiedFiles.size > 0 &&
+                window.currentModifiedFiles.size > 0 &&
                 consecutiveFailedIterations >= 2
               ) {
                 updateMessagesAssistant({
@@ -4468,7 +4551,7 @@ ${result.summary || "Executed successfully."}`,
               consecutiveFailedIterations++
               if (
                 isSimpleVanillaTaskGlobal &&
-                currentModifiedFiles.size > 0 &&
+                window.currentModifiedFiles.size > 0 &&
                 consecutiveFailedIterations >= 2
               ) {
                 updateMessagesAssistant({
@@ -4545,14 +4628,25 @@ ${result.summary || "Executed successfully."}`,
 
         // Max iterations reached
         if (iteration >= MAX_ITERATIONS) {
+          window.lastWorkflowParams = {
+            message,
+            uniqueId,
+            attachments,
+            isRetry: false,
+            aiConfig,
+            existingContext: currentContext,
+            existingWorkflowMeta: workflowMeta,
+          }
+          const stopMsg = `**Stopped: Max iterations (${MAX_ITERATIONS}) reached.**\n\n[resumeButton]`
           updateMessagesAssistant({
             uniqueId: `assistant-${currentUniqueId}`,
-            content: `**Stopped: Max iterations (${MAX_ITERATIONS}) reached.**`,
+            content: stopMsg,
           })
           messageArray.push({
             role: "assistant",
-            content: "**Stopped: Max iterations reached.**",
+            content: stopMsg,
           })
+
           saveState()
           resetUI()
         }
@@ -4583,7 +4677,7 @@ ${result.summary || "Executed successfully."}`,
         const isSimpleVanillaTask =
           (aiConfig && aiConfig.isSimpleVanillaTask) || false
         const userRequestedVanillaNoFrameworkLocal =
-          /(\bno framework\b|\bvanilla\b|\bplain html\b|\bhtml\s*\+\s*javascript\b|\bsingle html\b)/i.test(
+          /(\bno framework\b|\bvanilla\b|\bplain html\b|\bhtml\s*\+\s*javascript\b|\bsingle html\b|\bphp\b|\bhtml\b)/i.test(
             String(originalRequest || ""),
           )
         const requestedUrlsLocal = Array.from(
@@ -4734,10 +4828,10 @@ ${result.summary || "Executed successfully."}`,
             )
 
             const doneRegex = new RegExp(
-              `^\\s*-\\s*\\[ðŸ”„\\]\\s*(Step\\s+${stepNum}:)`,
+              `^\\s*-\\s*\\[🔄\\]\\s*(Step\\s+${stepNum}:)`,
               "gm",
             )
-            planMarkdown = planMarkdown.replace(doneRegex, `- [âœ…] $1`)
+            planMarkdown = planMarkdown.replace(doneRegex, `- [✅] $1`)
             updateMessagesAssistant({
               uniqueId: `assistant-${uniqueId}`,
               content:
@@ -4747,7 +4841,7 @@ ${result.summary || "Executed successfully."}`,
             if (window.currentPlanMarkdown) {
               window.currentPlanMarkdown = window.currentPlanMarkdown.replace(
                 doneRegex,
-                `- [âœ…] Step ${stepNum}:`,
+                `- [✅] Step ${stepNum}:`,
               )
               updatePlanPopup(window.currentPlanMarkdown)
               updatePlanButtonTitle(window.currentPlanMarkdown)
@@ -4780,7 +4874,7 @@ ${result.summary || "Executed successfully."}`,
                       )
                       const currentThought = thoughtMatch
                         ? thoughtMatch[1].trim()
-                        : "Analyzing context..."
+                        : accumulated.substring(0, 100).trim() + "..."
                       updateMessagesAssistant({
                         uniqueId: `assistant-${uniqueId}`,
                         content:
@@ -4873,7 +4967,7 @@ ${result.summary || "Executed successfully."}`,
               )
               const thought = thoughtMatch
                 ? thoughtMatch[1].trim()
-                : "Analyzing context..."
+                : thinkOutput.trim() || "Analyzing context..."
 
               currentStepMarkdown += `\n  > *Thought:* ${thought}\n`
               updateMessagesAssistant({
@@ -4888,39 +4982,55 @@ ${result.summary || "Executed successfully."}`,
               })
             }
 
-            // Check for [readFile]
-            // Updated regex to be more flexible with quotes and spacing
-            const readFileRegex = /\[readFile\]([\s\S]*?)\[\/readFile\]/
-            const readFileMatch = thinkOutput.match(readFileRegex)
+            // Handle [readFile] in any output (Think or Execute phase)
+            const filesReadInThisStep = new Set()
+            const processReadFiles = async (text) => {
+              if (!text) return
+              // Support formats: [readFile]path[/readFile], [readFile file="path"], [readFile path="path"]
+              const readFileRegex = /\[readFile(?:[^\]]+)?\]([\s\S]*?)\[\/readFile\]/gi
+              const tagAttributeRegex = /\[readFile\s+(?:file|path)=["']([^"']+)["']\s*\]/gi
 
-            if (readFileMatch) {
-              const fileBlock = readFileMatch[1].trim()
-              const filePathsRegex = /\[file\s+path=["']([^"']+)["']\s*\]/g
-              let fileMatch
-              let foundFileTags = false
-
-              while ((fileMatch = filePathsRegex.exec(fileBlock)) !== null) {
-                foundFileTags = true
-                const filePath = fileMatch[1]
-                await doReadFile(filePath)
+              let match
+              // Handle [readFile]...[/readFile]
+              while ((match = readFileRegex.exec(text)) !== null) {
+                const content = match[1].trim()
+                if (content && !content.includes("[file")) {
+                  if (!filesReadInThisStep.has(content)) {
+                    filesReadInThisStep.add(content)
+                    await doReadFile(content)
+                  }
+                } else if (content.includes("[file")) {
+                  // Handle nested [file path="..."] format if used inside [readFile]
+                  const filePathsRegex = /\[file\s+path=["']([^"']+)["']\s*\]/g
+                  let fileMatch
+                  while ((fileMatch = filePathsRegex.exec(content)) !== null) {
+                    const filePath = fileMatch[1]
+                    if (!filesReadInThisStep.has(filePath)) {
+                      filesReadInThisStep.add(filePath)
+                      await doReadFile(filePath)
+                    }
+                  }
+                }
               }
 
-              // Fallback for plain [readFile]path/to/file[/readFile]
-              if (!foundFileTags && fileBlock.length > 0) {
-                // If the block is short and doesn't contain [file tags, treat as single path
-                if (!fileBlock.includes("[file")) {
-                  await doReadFile(fileBlock)
+              // Handle standalone [readFile file="path"] or [readFile path="path"] (no closing tag needed for attribute version)
+              // Reset regex state
+              tagAttributeRegex.lastIndex = 0
+              while ((match = tagAttributeRegex.exec(text)) !== null) {
+                const filePath = match[1]
+                if (!filesReadInThisStep.has(filePath)) {
+                  filesReadInThisStep.add(filePath)
+                  await doReadFile(filePath)
                 }
               }
             }
 
+            // Check for [readFile] in thinkOutput
+            await processReadFiles(thinkOutput)
+
             async function doReadFile(filePath) {
               // Visual feedback
-              currentStepMarkdown += `\n  > *Reading file:* ${filePath}\n`
-              updateMessagesAssistant({
-                uniqueId: `assistant-${uniqueId}`,
-                content: currentStepMarkdown,
-              })
+              console.log(`[webview] Reading file: ${filePath}`)
 
               // Send readFile to extension with timeout
               try {
@@ -4967,14 +5077,14 @@ ${result.summary || "Executed successfully."}`,
                 context = upsertFileInContext(context, filePath, fileContent)
 
                 // Visual feedback completion
-                currentStepMarkdown += `\n  > *Read complete.*\n`
+                currentStepMarkdown += `\n[terminal status="success" command="readFile ${filePath}"]Read complete: ${filePath}[/terminal]\n`
                 updateMessagesAssistant({
                   uniqueId: `assistant-${uniqueId}`,
                   content: currentStepMarkdown,
                 })
               } catch (e) {
                 context += `\nError reading file ${filePath}: ${e}\n`
-                currentStepMarkdown += `\n  > *Error reading file:* ${e}\n`
+                currentStepMarkdown += `\n[terminal status="error" command="readFile ${filePath}"]Error reading file: ${e}[/terminal]\n`
                 updateMessagesAssistant({
                   uniqueId: `assistant-${uniqueId}`,
                   content: currentStepMarkdown,
@@ -5296,43 +5406,97 @@ ${result.summary || "Executed successfully."}`,
             }
 
             const extractLegacyExecutePayload = (rawText, stepType) => {
-              const text = String(rawText || "").trim()
+              let text = String(rawText || "").trim()
               if (!text) return null
-              if (
-                /\[(?:writeFile|writeFileVico|command|REPLAN)\]/i.test(text)
-              ) {
-                return null
+
+              // Pre-processing: Search for [writeFile] or [command] inside markdown code blocks
+              // and extract it if found. This handles cases where the LLM wraps the tag in markdown.
+              const markdownBlockMatch = text.match(/```(?:\w+)?\s*([\s\S]*?\[(?:writeFile|writeFileVico|command|REPLAN)\][\s\S]*?)```/i)
+              if (markdownBlockMatch) {
+                text = markdownBlockMatch[1].trim()
               }
 
-              let jsonText = text
-              const fenced = text.match(/^```(?:json)?\s*([\s\S]*?)```$/i)
-              if (fenced && fenced[1]) {
-                jsonText = fenced[1].trim()
+              // If it already has executable tags (possibly after stripping markdown), 
+              // don't try to parse as legacy JSON, but return the stripped text.
+              if (/\[(?:writeFile|writeFileVico|command|REPLAN)\]/i.test(text)) {
+                return text
               }
+
+              let jsonText = ""
+              // Strategy 1: Find fenced JSON code block anywhere in the text
+              const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i)
+              if (jsonMatch && jsonMatch[1]) {
+                jsonText = jsonMatch[1].trim()
+              } else {
+                // Strategy 2: Look for the first '{' and last '}' to extract raw JSON
+                const firstBrace = text.indexOf("{")
+                const lastBrace = text.lastIndexOf("}")
+                if (
+                  firstBrace !== -1 &&
+                  lastBrace !== -1 &&
+                  lastBrace > firstBrace
+                ) {
+                  jsonText = text.substring(firstBrace, lastBrace + 1)
+                }
+              }
+
+              if (!jsonText) return null
 
               let parsed = null
               try {
                 parsed = JSON.parse(jsonText)
               } catch (_e) {
+                // If parsing fails, it's not valid JSON
                 return null
               }
 
               if (!parsed || typeof parsed !== "object") return null
+
+              // Support multi-file plan conversion from legacy JSON
+              if (Array.isArray(parsed.plan) && parsed.plan.length > 0) {
+                let multiWriteBlocks = ""
+                parsed.plan.forEach((p) => {
+                  if (p && typeof p.command === "string" && p.command.trim()) {
+                    const writePayload = parseEchoRedirectWrite(p.command)
+                    if (writePayload) {
+                      // Extract only the [file]...[/file] part and wrap in one [writeFile] later or just join them
+                      const fileMatch = writePayload.match(
+                        /\[file\s+[^\]]+\][\s\S]*?\[\/file\]/i,
+                      )
+                      if (fileMatch) {
+                        multiWriteBlocks += fileMatch[0] + "\n"
+                      }
+                    }
+                  }
+                })
+                if (multiWriteBlocks) {
+                  return `[writeFile]\n${multiWriteBlocks}[/writeFile]`
+                }
+              }
+
               const resolveCommand = () => {
+                // Check direct command property
                 if (
                   typeof parsed.command === "string" &&
                   parsed.command.trim()
                 ) {
                   return parsed.command.trim()
                 }
+                // Check plan array - often used in legacy "plan-during-execute" responses
                 if (Array.isArray(parsed.plan)) {
+                  // Find the first step that has a command
                   const cmdStep = parsed.plan.find(
                     (p) =>
                       p && typeof p.command === "string" && p.command.trim(),
                   )
-                  if (cmdStep && cmdStep.command) {
-                    return String(cmdStep.command).trim()
-                  }
+                  if (cmdStep) return String(cmdStep.command).trim()
+                }
+                // Check if it's just a single step object with command
+                if (
+                  typeof parsed.type === "string" &&
+                  typeof parsed.command === "string"
+                ) {
+                  return parsed.command.trim()
                 }
                 return ""
               }
@@ -5352,12 +5516,31 @@ ${result.summary || "Executed successfully."}`,
             )
             if (legacyPayload) {
               stepOutput = legacyPayload
-              context += `\n[System Feedback] Execute output was legacy JSON-plan format; auto-converted to executable agent tags.\n`
-              planMarkdown += `\n> *?? Legacy execute output detected and auto-converted to executable tags.*\n`
-              updateMessagesAssistant({
-                uniqueId: `assistant-${uniqueId}`,
-                content: planMarkdown,
-              })
+              // If we auto-converted, don't show the warning if it's already executable now
+              if (!/\[(?:writeFile|writeFileVico|command|REPLAN)\]/i.test(stepOutput)) {
+                context += `\n[System Feedback] Execute output was legacy JSON-plan format; auto-converted to executable agent tags.\n`
+                planMarkdown += `\n> *⚠️ Legacy execute output detected and auto-converted to executable tags.*\n`
+              }
+            }
+
+            // --- AUTO-FIX: Raw Markdown to [writeFile] ---
+            // If the model is in file_write mode but ONLY returns a markdown code block 
+            // without [writeFile] tags, we try to wrap it automatically if we can determine the file name.
+            if (
+              String(step?.type || "").toLowerCase() === "file_write" &&
+              !/\[(?:writeFile|writeFileVico)\]/i.test(stepOutput)
+            ) {
+              const codeBlockMatch = stepOutput.match(/```(?:\w+)?\s*([\s\S]*?)```/i)
+              if (codeBlockMatch) {
+                const code = codeBlockMatch[1].trim()
+                // Try to guess file name from step description if possible
+                const fileNameMatch = String(step?.content || "").match(/(?:file|create|update)\s+[`'"]?([^`'"\s]+)[`'"]?/i)
+                if (fileNameMatch) {
+                  const fileName = fileNameMatch[1]
+                  stepOutput = `[writeFile]\n[file name="${fileName}"]\n${code}\n[/file]\n[/writeFile]`
+                  context += `\n[System Feedback] Auto-wrapped raw markdown code block into [writeFile] for ${fileName}.\n`
+                }
+              }
             }
             // Enhanced writeFile format validation
             const hasWriteFileTag = /\[(?:writeFile|writeFileVico)\]/i.test(
@@ -5369,6 +5552,15 @@ ${result.summary || "Executed successfully."}`,
                 /\[(\/?)writeFileVico\s*\]/gi,
                 "[$1writeFile]",
               )
+
+              // Extract only the [writeFile] block and everything inside it
+              // This removes any pre-amble or post-amble text the LLM might have included
+              const writeFileMatch = stepOutput.match(
+                /\[writeFile\][\s\S]*?\[\/writeFile\]/i,
+              )
+              if (writeFileMatch) {
+                stepOutput = writeFileMatch[0]
+              }
 
               const hasClosingTag = /\[\/(?:writeFile|writeFileVico)\]/i.test(
                 stepOutput,
@@ -5394,11 +5586,17 @@ ${result.summary || "Executed successfully."}`,
             }
 
             // If it contains writeFile, we want to render the panel, so don't wrap the whole thing in backticks
+            // If it contains writeFile, we want to render the panel, so don't wrap the whole thing in backticks
             // if it's likely to be a writeFile response.
             if (hasWriteFileTag) {
               planMarkdown += `\n${stepOutput}\n`
             } else {
               planMarkdown += `\n> *Execution Output:*\n\`\`\`\n${stepOutput.slice(0, 1000)}${stepOutput.length > 1000 ? "..." : ""}\n\`\`\`\n`
+            }
+
+            // Internal feedback to encourage multi-file scaffolding
+            if (hasWriteFileTag && stepOutput.match(/\[file\s+/gi)?.length === 1) {
+              context += `\n[System Feedback] You only modified ONE file. If the task requires scaffolding (like multiple routes, components, or lib files), you SHOULD provide ALL necessary files in a single [writeFile] block to complete the task faster.\n`
             }
 
             updateMessagesAssistant({
@@ -5548,6 +5746,19 @@ ${result.summary || "Executed successfully."}`,
               workflowMeta.recent_steps = workflowMeta.recent_steps.slice(-20)
             }
 
+            // Process any [readFile] tags in execute output as well (graceful fallback)
+            // We do this BEFORE REPLAN check so we can detect if the agent read files 
+            // but then immediately asked for a replan claiming it didn't.
+            const capturedReadFiles = []
+            const originalDoReadFile = doReadFile
+            // Wrap doReadFile to capture what was read
+            doReadFile = async (path) => {
+              capturedReadFiles.push(path)
+              return await originalDoReadFile(path)
+            }
+            await processReadFiles(stepOutput)
+            doReadFile = originalDoReadFile // Restore
+
             if (stepOutput.includes("[REPLAN]")) {
               const replanMatch =
                 stepOutput.match(/\[REPLAN\]([\s\S]*?)\[\/REPLAN\]/i) ||
@@ -5566,6 +5777,36 @@ ${result.summary || "Executed successfully."}`,
                   content: planMarkdown,
                 })
                 continue
+              }
+
+              // Special case: Agent asks for REPLAN claiming it couldn't read files, 
+              // but we actually just read files in this step (either in Think or Execute phase).
+              if (filesReadInThisStep.size > 0 || capturedReadFiles.length > 0) {
+                const readPaths = Array.from(new Set([...filesReadInThisStep, ...capturedReadFiles])).join(", ")
+                context += `\n[System Feedback] You requested REPLAN because: "${replanReason}"\n` +
+                  `[System Feedback] HOWEVER, the system successfully read these files in this step: ${readPaths}.\n` +
+                  `[System Feedback] The content is already in your context. DO NOT REPLAN. Execute the original step now (writeFile or command).\n`
+
+                planMarkdown += `\n> *ℹ️ Agent requested replan but files were successfully read (${readPaths}).*\n`
+                planMarkdown += `\n> *🔄 Context updated. Retrying original step...*\n`
+
+                updateMessagesAssistant({
+                  uniqueId: `assistant-${uniqueId}`,
+                  content: planMarkdown,
+                })
+
+                const retryRegex = new RegExp(`^\\s*-\\s*\\[[ 🔄]\\]\\s*(Step\\s+${stepNum}:)`, "gm")
+                planMarkdown = planMarkdown.replace(retryRegex, `- [🔄] $1 (Retrying with read context)`)
+
+                updateMessagesAssistant({
+                  uniqueId: `assistant-${uniqueId}`,
+                  content: planMarkdown,
+                })
+
+                // Do NOT set hadStepError = true. 
+                // Breaking here will return to the workflow loop, which will see the plan isn't done 
+                // and will re-run this step in the next iteration with the updated context.
+                break
               }
 
               // Check if currentStepMarkdown is defined, if not, fallback to planMarkdown or empty string
@@ -6109,7 +6350,7 @@ ${result.summary || "Executed successfully."}`,
                   )
                 }
                 if (verificationCommand && isSimpleVanillaTask) {
-                  planMarkdown += `\n> *?? Verification command skipped for simple vanilla task: \`${command}\`.*\n`
+                  planMarkdown += `\n> *⚠️ Verification command skipped for simple vanilla task: \`${command}\`.*\n`
                   context += `\n[System Feedback] Skipped verification command "${command}" for simple vanilla request to avoid unnecessary integration/test loops. Rely on persisted file-write validation and complete.\n`
                   updateMessagesAssistant({
                     uniqueId: `assistant-${uniqueId}`,
@@ -6285,6 +6526,13 @@ ${result.summary || "Executed successfully."}`,
                     : ""
                   const isMissingImportError =
                     !!missingSymbol && /^[A-Z]/.test(missingSymbol)
+
+                  // Database credential/connection error detection
+                  const isDbConnectionError =
+                    /P1001|P1012|ECONNREFUSED|Access denied for user|Unknown database/i.test(
+                      terminalOutput,
+                    )
+
                   if (isAlreadyScaffoldedError) {
                     context += `\n[System Feedback] Scaffold command was attempted again but project is already initialized. Skip scaffold and continue implementation/build/test only.\n`
                     planMarkdown += `\n> *ℹ️ Scaffold skipped: project already initialized. Continuing with implementation.*\n`
@@ -6296,6 +6544,35 @@ ${result.summary || "Executed successfully."}`,
                   }
                   autoFixTriggered = true
                   hadStepError = true
+
+                  // Handle database connection errors with AskUserQuestion
+                  if (isDbConnectionError) {
+                    const dbType = terminalOutput.includes("mysql")
+                      ? "MySQL"
+                      : "Database"
+                    const answer = await askUserQuestion([
+                      {
+                        header: "DB Config",
+                        question: `${dbType} connection failed. Please provide the correct DATABASE_URL or credentials (username/password/host/port).`,
+                        multiSelect: false,
+                        options: [
+                          {
+                            label: "I'll fix it",
+                            description:
+                              "I will update the .env or config file manually.",
+                          },
+                        ],
+                      },
+                    ])
+
+                    if (answer && answer[0] !== "I'll fix it") {
+                      context += `\n[System Feedback] User provided database info: ${answer[0]}\n[System Feedback] Use this information to update .env or prisma.config.ts and retry the command.\n`
+                      planMarkdown += `\n> *ℹ️ User provided database credentials. Agent will update configuration and retry.*\n`
+                    } else {
+                      context += `\n[System Feedback] Database connection error (P1001/P1012/Access Denied). Agent must check .env, prisma.config.ts, and verify MySQL service is running.\n`
+                    }
+                  }
+
                   const failureGuidance = isScaffoldMissingError
                     ? userRequestedVanillaNoFrameworkLocal
                       ? `\n[System Feedback] Command "${command}" was blocked because no dependency manifest exists.\n[System Feedback] User explicitly requested NO FRAMEWORK/vanilla web. Do NOT scaffold Next.js.\n[System Feedback] Continue with direct file edits (index.html/script.js/styles.css) and avoid npm build/dev unless explicitly required.\n`
@@ -6314,6 +6591,8 @@ ${result.summary || "Executed successfully."}`,
                     planMarkdown += `\n> *⚠️ Command failed: package.json is invalid JSON. Agent will fix package.json before retrying build/test/install.*\n`
                   } else if (isMissingImportError) {
                     planMarkdown += `\n> *⚠️ Build failed: missing import/symbol '${missingSymbol}'. Agent will fix file imports/exports before retrying build.*\n`
+                  } else if (isDbConnectionError) {
+                    planMarkdown += `\n> *⚠️ Database connection failed. Agent will ask for credentials or fix configuration.*\n`
                   } else {
                     planMarkdown += `\n> *⚠️ Command failed. Agent will fix the root cause and replan in the next iteration.*\n`
                   }
@@ -6323,7 +6602,7 @@ ${result.summary || "Executed successfully."}`,
                   })
 
                   const errorRegex = new RegExp(
-                    `^\\s*-\\s*\\[🔄\\]\\s*(Step\\s+${stepNum}:)`,
+                    `^\\s*-\\s*\\[[ 🔄]\\]\\s*(Step\\s+${stepNum}:)`,
                     "gm",
                   )
                   planMarkdown = planMarkdown.replace(errorRegex, `- [❌] $1`)
@@ -6355,6 +6634,15 @@ ${result.summary || "Executed successfully."}`,
               stepOutput,
             )
             const hasCommandTag = /\[command\]/i.test(stepOutput)
+            if (hasCommandTag) {
+              // Extract only the [command] block to prevent preamble/postamble issues
+              const commandMatch = stepOutput.match(
+                /\[command\][\s\S]*?\[\/command\]/i,
+              )
+              if (commandMatch) {
+                stepOutput = commandMatch[0]
+              }
+            }
             const hasReplanTag = /\[REPLAN\]/i.test(stepOutput)
             const rawStepType = String(step?.type || "").toLowerCase()
             const currentStepType =
@@ -6366,30 +6654,66 @@ ${result.summary || "Executed successfully."}`,
             // Fail-fast for action steps: prevent false "done" when model returns planning JSON/non-executable text.
             if (!hasReplanTag) {
               if (currentStepType === "file_write" && !hasWriteTag) {
-                hadStepError = true
-                context +=
-                  `\n[System Feedback] Invalid execute output for file_write step: missing [writeFile] block.\n` +
-                  `[System Feedback] Return executable write payload only: [writeFile][file name="..."]...[/file][/writeFile] or [writeFile][diff name="..."]...[/diff][/writeFile].\n` +
-                  (looksLikeJsonPlan
-                    ? `[System Feedback] Previous output was JSON plan text, not execution payload.\n`
-                    : "")
-                planMarkdown += `\n> *⚠️ Invalid execute output: file_write step returned non-write content. Replanning...*\n`
+                const hasReadFileTagInOutput = /\[readFile(?:[^\]]+)?\]/i.test(stepOutput)
+                const hasCommandTagInOutput = /\[command\]/i.test(stepOutput)
+
+                if (hasReadFileTagInOutput) {
+                  const readPaths = capturedReadFiles.length > 0 ? capturedReadFiles.join(", ") : "requested files"
+                  context += `\n[System Feedback] You performed a READ (${readPaths}) during a WRITE step.\n` +
+                    `[System Feedback] The content has been added to your context. NOW provide the [writeFile] block for the original task.\n` +
+                    `[System Feedback] DO NOT return [readFile] again for this step. Execute the WRITE now.\n`
+
+                  planMarkdown += `\n> *ℹ️ Agent needed more context to complete the write (read: ${readPaths}).*\n`
+                  planMarkdown += `\n> *🔄 Context updated. Retrying write operation...*\n`
+
+                  updateMessagesAssistant({
+                    uniqueId: `assistant-${uniqueId}`,
+                    content: planMarkdown,
+                  })
+
+                  const retryRegex = new RegExp(`^\\s*-\\s*\\[[ 🔄]\\]\\s*(Step\\s+${stepNum}:)`, "gm")
+                  planMarkdown = planMarkdown.replace(retryRegex, `- [🔄] $1 (Retrying with more context)`)
+
+                  updateMessagesAssistant({
+                    uniqueId: `assistant-${uniqueId}`,
+                    content: planMarkdown,
+                  })
+                  break
+                } else if (hasCommandTagInOutput) {
+                  hadStepError = true
+                  context += `\n[System Feedback] ERROR: Step Type is 'file_write' but you returned a [command].\n` +
+                    `[System Feedback] If you need to run a command, it MUST be a 'terminal_command' step in the plan.\n` +
+                    `[System Feedback] Since you are in 'file_write' step, you MUST output [writeFile].\n`
+                  planMarkdown += `\n> *⚠️ Step mismatch: file_write step returned [command] tag. Replanning...*\n`
+                } else {
+                  hadStepError = true
+                  context +=
+                    `\n[System Feedback] ERROR: Invalid execute output for 'file_write' step.\n` +
+                    `[System Feedback] You returned plain text or markdown instead of the executable [writeFile] tag.\n` +
+                    `[System Feedback] CRITICAL: You MUST use the EXACT format below (NO markdown backticks around it):\n` +
+                    `[writeFile]\n[file name="path/to/file.ts"]\n// content here\n[/file]\n[/writeFile]\n` +
+                    (looksLikeJsonPlan
+                      ? `[System Feedback] Previous output was JSON plan text, not execution payload.\n`
+                      : "")
+                  planMarkdown += `\n> *⚠️ Invalid execute output: file_write step returned non-write content. Replanning...*\n`
+                }
+                planMarkdown += `\n<details><summary><b>Debug: Raw Agent Output</b></summary>\n\n\`\`\`\n${stepOutput.substring(0, 2000)}${stepOutput.length > 2000 ? "..." : ""}\n\`\`\`\n\n</details>\n`
                 updateMessagesAssistant({
                   uniqueId: `assistant-${uniqueId}`,
                   content: planMarkdown,
                 })
 
                 const errorRegex = new RegExp(
-                  `^\\s*-\\s*\\[ðŸ”„\\]\\s*(Step\\s+${stepNum}:)`,
+                  `^\\s*-\\s*\\[[ 🔄]\\]\\s*(Step\\s+${stepNum}:)`,
                   "gm",
                 )
-                planMarkdown = planMarkdown.replace(errorRegex, `- [âŒ] $1`)
+                planMarkdown = planMarkdown.replace(errorRegex, `- [❌] $1`)
                 planMarkdown += `\n  > *Step ${stepNum} Failed. Recovery plan will be generated automatically in the next iteration.*\n`
                 if (window.currentPlanMarkdown) {
                   window.currentPlanMarkdown =
                     window.currentPlanMarkdown.replace(
                       errorRegex,
-                      `- [âŒ] Step ${stepNum}:`,
+                      `- [❌] Step ${stepNum}:`,
                     )
                   updatePlanPopup(window.currentPlanMarkdown)
                   updatePlanButtonTitle(window.currentPlanMarkdown)
@@ -6402,27 +6726,39 @@ ${result.summary || "Executed successfully."}`,
               }
 
               if (currentStepType === "terminal_command" && !hasCommandTag) {
+                const hasWriteTagInOutput = /\[(?:writeFile|writeFileVico)\]/i.test(stepOutput)
+
                 hadStepError = true
-                context +=
-                  `\n[System Feedback] Invalid execute output for terminal_command step: missing [command] block.\n` +
-                  `[System Feedback] Return exactly one [command]...[/command] block.\n`
-                planMarkdown += `\n> *⚠️ Invalid execute output: terminal_command step returned non-command content. Replanning...*\n`
+                if (hasWriteTagInOutput) {
+                  context += `\n[System Feedback] ERROR: Step Type is 'terminal_command' but you returned a [writeFile].\n` +
+                    `[System Feedback] If you need to write a file, it MUST be a 'file_write' step in the plan.\n` +
+                    `[System Feedback] Since you are in 'terminal_command' step, you MUST output [command].\n`
+                  planMarkdown += `\n> *⚠️ Step mismatch: terminal_command step returned [writeFile] tag. Replanning...*\n`
+                } else {
+                  context +=
+                    `\n[System Feedback] ERROR: Invalid execute output for 'terminal_command' step. Your response did not contain a [command] block.\n` +
+                    `[System Feedback] Your response was: "${stepOutput.substring(0, 500)}${stepOutput.length > 500 ? "..." : ""}"\n` +
+                    `[System Feedback] CRITICAL: You are in EXECUTION mode. Do NOT plan or return JSON. You MUST return ONLY the executable [command] block.\n` +
+                    `[System Feedback] Example: [command]ls -la[/command]\n`
+                  planMarkdown += `\n> *⚠️ Invalid execute output: terminal_command step returned non-command content. Replanning...*\n`
+                }
+                planMarkdown += `\n<details><summary><b>Debug: Raw Agent Output</b></summary>\n\n\`\`\`\n${stepOutput.substring(0, 2000)}${stepOutput.length > 2000 ? "..." : ""}\n\`\`\`\n\n</details>\n`
                 updateMessagesAssistant({
                   uniqueId: `assistant-${uniqueId}`,
                   content: planMarkdown,
                 })
 
                 const errorRegex = new RegExp(
-                  `^\\s*-\\s*\\[ðŸ”„\\]\\s*(Step\\s+${stepNum}:)`,
+                  `^\\s*-\\s*\\[[ 🔄]\\]\\s*(Step\\s+${stepNum}:)`,
                   "gm",
                 )
-                planMarkdown = planMarkdown.replace(errorRegex, `- [âŒ] $1`)
+                planMarkdown = planMarkdown.replace(errorRegex, `- [❌] $1`)
                 planMarkdown += `\n  > *Step ${stepNum} Failed. Recovery plan will be generated automatically in the next iteration.*\n`
                 if (window.currentPlanMarkdown) {
                   window.currentPlanMarkdown =
                     window.currentPlanMarkdown.replace(
                       errorRegex,
-                      `- [âŒ] Step ${stepNum}:`,
+                      `- [❌] Step ${stepNum}:`,
                     )
                   updatePlanPopup(window.currentPlanMarkdown)
                   updatePlanButtonTitle(window.currentPlanMarkdown)
@@ -6433,6 +6769,43 @@ ${result.summary || "Executed successfully."}`,
                 })
                 break
               }
+
+              if (currentStepType === "file_read") {
+                const hasReadFileTag = /\[readFile(?:[^\]]+)?\]/i.test(stepOutput)
+                if (!hasReadFileTag) {
+                  hadStepError = true
+                  context += `\n[System Feedback] ERROR: Step Type is 'file_read' but you did not return a [readFile] tag.\n` +
+                    `[System Feedback] You MUST use [readFile][file path="..."][/readFile] to read files.\n`
+                  planMarkdown += `\n> *⚠️ Invalid execute output: file_read step missing [readFile] tag. Replanning...*\n`
+
+                  planMarkdown += `\n<details><summary><b>Debug: Raw Agent Output</b></summary>\n\n\`\`\`\n${stepOutput.substring(0, 2000)}${stepOutput.length > 2000 ? "..." : ""}\n\`\`\`\n\n</details>\n`
+                  updateMessagesAssistant({
+                    uniqueId: `assistant-${uniqueId}`,
+                    content: planMarkdown,
+                  })
+
+                  const errorRegex = new RegExp(
+                    `^\\s*-\\s*\\[[ 🔄]\\]\\s*(Step\\s+${stepNum}:)`,
+                    "gm",
+                  )
+                  planMarkdown = planMarkdown.replace(errorRegex, `- [❌] $1`)
+                  planMarkdown += `\n  > *Step ${stepNum} Failed. Recovery plan will be generated automatically in the next iteration.*\n`
+                  if (window.currentPlanMarkdown) {
+                    window.currentPlanMarkdown =
+                      window.currentPlanMarkdown.replace(
+                        errorRegex,
+                        `- [❌] Step ${stepNum}:`,
+                      )
+                    updatePlanPopup(window.currentPlanMarkdown)
+                    updatePlanButtonTitle(window.currentPlanMarkdown)
+                  }
+                  updateMessagesAssistant({
+                    uniqueId: `assistant-${uniqueId}`,
+                    content: planMarkdown,
+                  })
+                  break
+                }
+              }
             }
 
             // After loop
@@ -6440,7 +6813,7 @@ ${result.summary || "Executed successfully."}`,
 
             // Update to Done - use more flexible regex
             const doneRegex = new RegExp(
-              `^\\s*-\\s*\\[🔄\\]\\s*(Step\\s+${stepNum}:)`,
+              `^\\s*-\\s*\\[[ 🔄]\\]\\s*(Step\\s+${stepNum}:)`,
               "gm",
             )
             planMarkdown = planMarkdown.replace(doneRegex, `- [✅] $1`)
@@ -6479,7 +6852,7 @@ ${result.summary || "Executed successfully."}`,
               "error",
             )
             const errorRegex = new RegExp(
-              `^\\s*-\\s*\\[🔄\\]\\s*(Step\\s+${stepNum}:)`,
+              `^\\s*-\\s*\\[[ 🔄]\\]\\s*(Step\\s+${stepNum}:)`,
               "gm",
             )
             planMarkdown = planMarkdown.replace(errorRegex, `- [❌] $1`)
@@ -6794,6 +7167,10 @@ ${result.summary || "Executed successfully."}`,
           if (planStatusContent) {
             planStatusContent.innerHTML = taskHtml
           }
+          const planStatusContainer = document.getElementById("planStatusContainer")
+          if (planStatusContainer) {
+            planStatusContainer.classList.remove("hidden")
+          }
         } else if (planMarkdown && planMarkdown.trim().length > 0) {
           // Fallback: If no structured tasks found, but plan exists, show generic button
           planButton.title = `Show Plan`
@@ -6856,6 +7233,20 @@ ${result.summary || "Executed successfully."}`,
           }
 
           planContent.innerHTML = html
+
+          const planFooter = document.getElementById("planFooter")
+          const keepAllFilesBtn = document.getElementById("keepAllFilesBtn")
+          if (planFooter && keepAllFilesBtn) {
+            if (window.currentModifiedFiles && window.currentModifiedFiles.size > 0) {
+              planFooter.classList.remove("hidden")
+              keepAllFilesBtn.onclick = () => {
+                const filePaths = Array.from(window.currentModifiedFiles)
+                window.keepAllModifiedFiles(filePaths)
+              }
+            } else {
+              planFooter.classList.add("hidden")
+            }
+          }
         }
       }
 
@@ -6872,6 +7263,10 @@ ${result.summary || "Executed successfully."}`,
         const newChatButton = document.getElementById("newChatButton")
         const historyButton = document.getElementById("historyButton")
 
+        window.lastWorkflowParams = null
+        window.currentModifiedFiles = new Set()
+        const planFooter = document.getElementById("planFooter")
+        if (planFooter) planFooter.classList.add("hidden")
         loader.classList.add("hidden")
         sendBtn.classList.remove("hidden")
         stopBtn.classList.add("hidden")
@@ -7544,7 +7939,7 @@ ${result.summary || "Executed successfully."}`,
           "[$1writeFile]",
         )
         const parts = normalizedContent.split(
-          /(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[writeFile\][\s\S]*?\[\/writeFile\]|\[(?:file|diff)\s+(?:name|path)=["']?.*?["']?\][\s\S]*?\[\/(?:file|diff)\]|\[openDiff path=["']?.*?["']?\]|\[keepAllFiles files=["']?.*?["']?\]|\[att-img .*?\]|\[att-file .*?\]|\[file\][\s\S]*?\[file\]|\[status\][\s\S]*?\[\/status\]|\[manual_?context\][\s\S]*?\[\/manual_?context\]|\[terminal[\s\S]*?\[\/terminal\]|\[thinking[\s\S]*?\[\/thinking\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|####.*|###.*|##.*|#.*|^- .*)/gm,
+          /(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[writeFile\][\s\S]*?\[\/writeFile\]|\[(?:file|diff)\s+(?:name|path)=["']?.*?["']?\][\s\S]*?\[\/(?:file|diff)\]|\[openDiff path=["']?.*?["']?\]|\[keepAllFiles files=["']?.*?["']?\]|\[att-img .*?\]|\[att-file .*?\]|\[file\][\s\S]*?\[file\]|\[status\][\s\S]*?\[\/status\]|\[manual_?context\][\s\S]*?\[\/manual_?context\]|\[terminal[\s\S]*?\[\/terminal\]|\[thinking[\s\S]*?\[\/thinking\]|\[resumeButton\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|####.*|###.*|##.*|#.*|^- .*)/gm,
         )
 
         parts
@@ -7578,7 +7973,7 @@ ${result.summary || "Executed successfully."}`,
                 head.className = "terminal-head"
                 const title = document.createElement("span")
                 title.className = "terminal-title"
-                title.textContent = "Sandbox WriteFile"
+                title.textContent = "Vico Write"
                 const badge = document.createElement("span")
                 badge.className = "terminal-badge terminal-success"
                 badge.textContent = "Patch"
@@ -7610,8 +8005,8 @@ ${result.summary || "Executed successfully."}`,
                 setSummaryWithIcon(
                   wrapperSummary,
                   fileList.length > 0
-                    ? `WriteFile (${fileList.length} target${fileList.length > 1 ? "s" : ""})`
-                    : "WriteFile",
+                    ? `Vico Write (${fileList.length} target${fileList.length > 1 ? "s" : ""})`
+                    : "Vico Write",
                 )
                 wrapper.appendChild(wrapperSummary)
                 wrapper.appendChild(panel)
@@ -7791,7 +8186,14 @@ ${result.summary || "Executed successfully."}`,
 
                 const title = document.createElement("span")
                 title.className = "terminal-title"
-                title.textContent = "Sandbox Terminal"
+                const lowerCommand = command.toLowerCase()
+                if (lowerCommand.includes("readfile") || lowerCommand.includes("cat ") || lowerCommand.includes("grep ")) {
+                  title.textContent = "Vico Read"
+                } else if (lowerCommand.includes("writefile") || lowerCommand.includes("echo ") || lowerCommand.includes("sed ")) {
+                  title.textContent = "Vico Write"
+                } else {
+                  title.textContent = "Vico Terminal"
+                }
                 head.appendChild(title)
 
                 const badge = document.createElement("span")
@@ -7812,9 +8214,16 @@ ${result.summary || "Executed successfully."}`,
                 const wrapper = document.createElement("details")
                 wrapper.className = "step-history-details"
                 const wrapperSummary = document.createElement("summary")
+                const lowerCommandStr = (command || "").toLowerCase()
+                let summaryTitle = command ? `Terminal: ${command}` : "Vico Terminal"
+                if (lowerCommandStr.includes("readfile") || lowerCommandStr.includes("cat ") || lowerCommandStr.includes("grep ")) {
+                  summaryTitle = command ? `Vico Read: ${command}` : "Vico Read"
+                } else if (lowerCommandStr.includes("writefile") || lowerCommandStr.includes("echo ") || lowerCommandStr.includes("sed ")) {
+                  summaryTitle = command ? `Vico Write: ${command}` : "Vico Write"
+                }
                 setSummaryWithIcon(
                   wrapperSummary,
-                  command ? `Terminal: ${command}` : "Sandbox Terminal",
+                  summaryTitle,
                 )
                 wrapper.appendChild(wrapperSummary)
                 wrapper.appendChild(panel)
@@ -7869,6 +8278,39 @@ ${result.summary || "Executed successfully."}`,
               }
 
               container.appendChild(codeDiv)
+            } else if (part === "[resumeButton]") {
+              const btn = document.createElement("button")
+              btn.className =
+                "btn-continue-workflow flex items-center gap-2 transition-all duration-200 mt-3 mb-2 group"
+              btn.innerHTML = `
+                <div class="flex items-center justify-center w-5 h-5 rounded-full bg-white/20 group-hover:bg-white/30 transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" style="width: 12px; height: 12px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
+                </div>
+                <span class="font-semibold tracking-wide">Continue</span>
+              `
+              btn.onclick = async () => {
+                btn.disabled = true
+                btn.classList.add("opacity-50", "cursor-not-allowed")
+                btn.innerHTML = `
+                  <div class="animate-spin rounded-full h-4 w-4 border-2 border-white/20 border-t-white"></div>
+                  <span>Resuming...</span>
+                `
+                if (window.lastWorkflowParams) {
+                  const params = window.lastWorkflowParams
+                  handleAgentWorkflow(
+                    "Continue",
+                    params.uniqueId,
+                    params.attachments,
+                    params.isRetry,
+                    params.aiConfig,
+                    params.existingContext,
+                    params.existingWorkflowMeta
+                  )
+                }
+              }
+              container.appendChild(btn)
             } else if (part.startsWith("`") && part.endsWith("`")) {
               const inlineCode = part.slice(1, -1)
               const codeSpan = document.createElement("code")

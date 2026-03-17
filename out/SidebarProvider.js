@@ -694,13 +694,20 @@ ${structurePrompt}
                         // 5. Prepare User Content
                         let userContent = "";
                         if (mode === "plan") {
+                            const isVanilla = /(\bno framework\b|\bvanilla\b|\bplain html\b|\bhtml\s*\+\s*javascript\b|\bsingle html\b|\bphp\b|\bhtml\b)/i.test(data.message || "");
                             const planDirectives = (isNewProject || isEmptyWorkspace)
-                                ? `- CRITICAL: THE PROJECT IS EMPTY. Your plan MUST start with a 'terminal_command' to scaffold the project (e.g., npx create-next-app@latest . --ts --tailwind --eslint --app --src-dir --import-alias "@/*" --use-npm).
+                                ? (isVanilla
+                                    ? `- CRITICAL: THE PROJECT IS EMPTY. User explicitly requested a non-framework implementation (HTML/PHP).
+- DO NOT scaffold any framework (Next.js/React/etc).
+- Implement directly by creating the requested files (e.g., index.php, index.html).
+- Do NOT include any 'file_read' steps in your plan. There are no files to read yet.
+- After planning the file structure, your plan should proceed with 'file_write' steps to implement the requested features.`
+                                    : `- CRITICAL: THE PROJECT IS EMPTY. Your plan MUST start with a 'terminal_command' to scaffold the project (e.g., npx create-next-app@latest . --ts --tailwind --eslint --app --src-dir --import-alias "@/*" --use-npm).
 - Do NOT include any 'file_read' steps in your plan for an empty project. There are no files to read yet.
 - DONT TRY TO READ ANY FILES. THE WORKSPACE IS EMPTY.
 - IF YOU TRY TO READ FILES (file_read), THE PLAN WILL BE REJECTED.
-- After scaffolding, your plan should proceed with 'file_write' steps to implement the requested features.
-- Output MUST be a valid JSON plan object with "tech_stack", "risk_level", and "plan" (array of steps) keys.`
+- After scaffolding, your plan should proceed with 'file_write' steps to implement the requested features.`)
+                                    + `\n- Output MUST be a valid JSON plan object with "tech_stack", "risk_level", and "plan" (array of steps) keys.`
                                 : `- CRITICAL: Check the 'CODEBASE_ANALYSIS' in ROLLING CONTEXT if available. If it mentions existing files that are relevant, you MUST use them.
 - MANDATORY PAGE PATH: Use '${analysis.pageBasePath || "src/app/"}' for ALL new pages. If '${analysis.pageBasePath}' exists, NEVER use 'pages/'.
 - CHECK WORKSPACE FIRST: Look at the 'WORKSPACE CONTEXT' file list. If a file or component relevant to the request ALREADY EXISTS (even if the name is not exact), your plan MUST 'file_read' it first. Do NOT propose creating a new file if it already exists.

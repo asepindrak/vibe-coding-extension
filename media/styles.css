@@ -377,6 +377,37 @@ code {
     color: #58a6ff;
 }
 
+/* Continue Workflow Button */
+.btn-continue-workflow {
+    background: linear-gradient(135deg, #1f6feb 0%, #388bfd 100%);
+    color: white;
+    border: none;
+    border-radius: 20px;
+    padding: 8px 16px;
+    font-size: 12px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(31, 111, 235, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.btn-continue-workflow:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(31, 111, 235, 0.4);
+    background: linear-gradient(135deg, #388bfd 0%, #58a6ff 100%);
+}
+
+.btn-continue-workflow:active {
+    transform: translateY(0);
+}
+
+.btn-continue-workflow:disabled {
+    background: #30363d;
+    color: #8b949e;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+}
+
 /* --- Input Area (Fixed at Bottom) --- */
 #messageInputContainer {
     flex-shrink: 0;
