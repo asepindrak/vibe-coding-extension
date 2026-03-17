@@ -187,7 +187,7 @@ MIT License
 
 # 📜 Release Notes
 
-## 2.0.3
+## 2.0.4
 
 - Coding Agent Improvements
 - UI Improvements
