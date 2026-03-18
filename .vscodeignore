@@ -1,53 +1,11 @@
-# VSCode
 .vscode/**
 .vscode-test/**
-**/.vscode-test.*
-
-# Source (exclude kalau publish hasil build saja)
 src/**
-**/*.ts
-**/*.map
-
-# Config
+.gitignore
+.yarnrc
+vsc-extension-quickstart.md
 **/tsconfig.json
 **/eslint.config.mjs
-
-# Git
-.git/**
-.gitignore
-.gitattributes
-
-# Dependencies
-node_modules/**
-npm-debug.log*
-yarn.lock
-pnpm-lock.yaml
-
-# Build output
-dist/**
-build/**
-coverage/**
-
-# Tests
-test/**
-tests/**
-__tests__/**
-
-# Docs
-docs/**
-vsc-extension-quickstart.md
-
-# Env
-.env
-.env.*
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-
-# Misc
-*.tsbuildinfo
-.yarnrc
+**/*.map
+**/*.ts
+**/.vscode-test.*
