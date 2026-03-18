@@ -1,4 +1,48 @@
-node_modules
+# Dependencies
+node_modules/
+
+# VSIX package
 vibe-coding-*.vsix
-.vscode-test
-out
+
+# Build output
+dist/
+out/
+build/
+coverage/
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Env
+.env
+.env.*
+
+# VSCode
+.vscode/
+.vscode-test/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+test-results/
+playwright-report/
+
+# Cache
+.cache/
+.tmp/
+.temp/
+
+# Optional (uncomment if needed)
+# bun.lockb
+# yarn.lock
+# pnpm-lock.yaml
