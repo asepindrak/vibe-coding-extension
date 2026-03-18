@@ -26,6 +26,7 @@ pnpm-lock.yaml
 # Build output
 dist/**
 out/**
+!out/extension.js
 build/**
 coverage/**
 
@@ -36,7 +37,6 @@ __tests__/**
 
 # Docs
 docs/**
-*.md
 vsc-extension-quickstart.md
 
 # Env
