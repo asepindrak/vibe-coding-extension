@@ -9,6 +9,28 @@
     <!-- Link to the Prism CSS for syntax highlighting -->
     <link rel="stylesheet" href="%STYLES_PATH%" />
     <style>
+      /* Clean Chat UI Overrides */
+      .message-container,
+      .message-shell,
+      .message-main {
+        width: 100%;
+      }
+      .message-bubble,
+      .user-message,
+      .agent-message {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        width: 100%;
+        padding: 0;
+      }
+      .message-inline-label {
+        display: none;
+      }
+      .message-avatar {
+        display: none !important;
+      }
+
       /* Layout Utilities */
       .flex {
         display: flex;
@@ -608,7 +630,7 @@
       .step-history-details {
         margin-top: 2px;
         border: none;
-        border-radius: 0;
+        border-radius: 6px;
         background: transparent;
       }
 
@@ -616,7 +638,7 @@
         cursor: pointer;
         list-style: none;
         padding: 2px 0;
-        font-size: 12px;
+        font-size: 11px;
         color: #c9d1d9;
         border: none;
         display: flex;
@@ -625,11 +647,13 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        border-radius: 6px;
       }
 
       .step-history-details > div,
       .step-history-details > pre {
         padding: 2px 0;
+        font-size: 11px;
       }
 
       .step-history-details ul,
@@ -5484,8 +5508,16 @@ ${result.summary || "Executed successfully."}`,
           return false;
         };
         const shouldRunThinkPhase = (step) => {
-          if (isSimpleActionStep(step)) return false;
           const stepType = String(step?.type || "").toLowerCase();
+          // Force Think on risky write steps to avoid blind overwrites
+          if (
+            ["file_write", "file_modify", "apply_patch", "patch"].includes(
+              stepType,
+            )
+          ) {
+            return true;
+          }
+          if (isSimpleActionStep(step)) return false;
           const desc = String(step?.description || "").toLowerCase();
           if (
             ["file_read", "search", "find_files", "analyze"].includes(stepType)
@@ -6117,6 +6149,49 @@ ${result.summary || "Executed successfully."}`,
               }
             }
 
+            // Early guard to prevent rendering invalid write payloads (e.g., writeFile containing readFile)
+            if (hasWriteFileTag) {
+              const preWfMatch = stepOutput.match(
+                /\[writeFile\]([\s\S]*?)\[\/writeFile\]/i,
+              );
+              const preWfBody = preWfMatch ? preWfMatch[1] : "";
+              const preHasInnerReadFile = /\[readFile(?:[^\]]*)?\]/i.test(
+                preWfBody,
+              );
+              const preWritableCheck = hasWritableBlocks(stepOutput);
+              if (
+                preHasInnerReadFile ||
+                (!preWritableCheck.hasFileBlock &&
+                  !preWritableCheck.hasDiffBlock)
+              ) {
+                try {
+                  const preReadTargets = Array.from(
+                    String(preWfBody || "").matchAll(
+                      /\[file\s+path=["']?([^"'\]]+)["']?\]/gi,
+                    ),
+                  )
+                    .map((m) => m[1])
+                    .filter(Boolean);
+                  if (preReadTargets.length > 0) {
+                    for (const p of preReadTargets) {
+                      try {
+                        const c = await readContextFile(p);
+                        if (c) context = upsertFileInContext(context, p, c);
+                      } catch (e) {}
+                    }
+                  }
+                } catch (_e) {}
+                hadStepError = true;
+                planMarkdown += `\n> *⚠️ Invalid write payload detected: do not include [readFile] inside [writeFile], and provide [file] or [diff] blocks with actual code.*\n`;
+                context += `\n[System Feedback] ERROR: file_write step returned an invalid [writeFile] payload (contains [readFile] and/or missing [file]/[diff] blocks).\n[System Feedback] Read the necessary files during Think phase if needed, then output a valid [writeFile] with [file name="..."]NEW_CONTENT[/file] or [diff]. Do NOT include [readFile] inside [writeFile].\n`;
+                updateMessagesAssistant({
+                  uniqueId: `assistant-${uniqueId}`,
+                  content: planMarkdown,
+                });
+                break;
+              }
+            }
+
             planMarkdown = appendExecutionOutputMarkdown({
               planMarkdown,
               stepOutput,
@@ -6529,6 +6604,37 @@ ${result.summary || "Executed successfully."}`,
                 );
               }
 
+              // Guard: prevent empty full-overwrite on non-empty files
+              try {
+                const payloadBlocks = getFilePayloadBlocks(stepOutput) || [];
+                const emptyOverwrites = [];
+                for (const blk of payloadBlocks) {
+                  const prev = beforeSnapshot.get(blk.path);
+                  const newBody = String(
+                    normalizeFileBlockContent(blk.content) || "",
+                  ).trim();
+                  if (
+                    typeof prev === "string" &&
+                    prev.trim().length > 0 &&
+                    newBody.length === 0
+                  ) {
+                    emptyOverwrites.push(blk.path);
+                  }
+                }
+                if (emptyOverwrites.length > 0) {
+                  hadStepError = true;
+                  context += `\n[Write Feedback] Detected attempt to overwrite with empty content: ${emptyOverwrites.join(", ")}.\n[Write Feedback] Do NOT write placeholders/empty blocks. Read the current file if needed, then produce full, valid content.\n`;
+                  planMarkdown += `\n> ⚠️ Write blocked: empty full-overwrite detected for ${emptyOverwrites.join(", ")}. Replanning with proper content...\n`;
+                  updateMessagesAssistant({
+                    uniqueId: `assistant-${uniqueId}`,
+                    content: planMarkdown,
+                  });
+                  break;
+                }
+              } catch (e) {
+                // fail-safe: if guard throws, do not block execution
+              }
+
               // Wait for writeFile to finish to avoid race conditions with subsequent readFiles
               await waitForWriteFile(vscode, stepOutput, 10000);
 
@@ -6810,7 +6916,8 @@ ${result.summary || "Executed successfully."}`,
                 if (fileChangeSummaries.length > 0) {
                   planMarkdown += "\n  > File Changes:";
                   for (const ch of fileChangeSummaries) {
-                    planMarkdown += `\n- ${ch.path} +${ch.added} -${ch.removed} [openFile path="${ch.path}"] [openDiff path="${ch.path}"]`;
+                    // Use custom tag to render a nice row with filename, colored diff counts, and action buttons
+                    planMarkdown += `\n[fileChange path="${ch.path}" added="${ch.added}" removed="${ch.removed}"]`;
                   }
                   planMarkdown += "\n";
                 }
@@ -7428,11 +7535,11 @@ ${result.summary || "Executed successfully."}`,
 
         // Move Modified Files section to the end (after summary)
         if (modifiedFiles.size > 0) {
-          planMarkdown += `\n\n**Modified Files:**\n`;
+          planMarkdown += `\n\n**Modified Files:**\n\n`;
           const filesList = Array.from(modifiedFiles).join(",");
           // Add Open Diff buttons for each file
           modifiedFiles.forEach((file) => {
-            planMarkdown += `\n[openDiff path="${file}"]`;
+            planMarkdown += `\n\n[openDiff path="${file}"]`;
           });
           // Add Keep All Files button at the end
           planMarkdown += `\n\n[keepAllFiles files="${filesList}"]\n`;
@@ -8456,12 +8563,13 @@ ${result.summary || "Executed successfully."}`,
           "[$1writeFile]",
         );
         const parts = normalizedContent.split(
-          /(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[writeFile\][\s\S]*?\[\/writeFile\]|\[(?:file|diff)\s+(?:name|path)=["']?.*?["']?\][\s\S]*?\[\/(?:file|diff)\]|\[openDiff path=["']?.*?["']?\]|\[keepAllFiles files=["']?.*?["']?\]|\[att-img .*?\]|\[att-file .*?\]|\[file\][\s\S]*?\[file\]|\[status\][\s\S]*?\[\/status\]|\[manual_?context\][\s\S]*?\[\/manual_?context\]|\[terminal[\s\S]*?\[\/terminal\]|\[thinking[\s\S]*?\[\/thinking\]|\[resumeButton\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|####.*|###.*|##.*|#.*|^- .*)/gm,
+          /(```[\s\S]*?```|`[^`]+`|\[selection\][\s\S]*?\[selection\]|\[fullcode\][\s\S]*?\[fullcode\]|\[labelInstruction\][\s\S]*?\[labelInstruction\]|\[files\][\s\S]*?\[files\]|\[writeFile\][\s\S]*?\[\/writeFile\]|\[(?:file|diff)\s+(?:name|path)=["']?.*?["']?\][\s\S]*?\[\/(?:file|diff)\]|\[fileChange\s+[^\]]+\]|\[openDiff path=["']?.*?["']?\]|\[keepAllFiles files=["']?.*?["']?\]|\[att-img .*?\]|\[att-file .*?\]|\[file\][\s\S]*?\[file\]|\[status\][\s\S]*?\[\/status\]|\[manual_?context\][\s\S]*?\[\/manual_?context\]|\[terminal[\s\S]*?\[\/terminal\]|\[thinking[\s\S]*?\[\/thinking\]|\[resumeButton\]|\*\*[^*]+\*\*|\*\"[^*]+\*|_([^_]+)_|>.*|(\[.*?\]\(.*?\))|####.*|###.*|##.*|#.*|^- .*)/gm,
         );
 
         parts
           .filter((part) => part)
           .forEach((part, i) => {
+            if (!part || /^\s*$/.test(part)) return;
             if (
               part.startsWith("[selection]") &&
               part.endsWith("[selection]")
@@ -8555,6 +8663,72 @@ ${result.summary || "Executed successfully."}`,
                 btn.innerHTML = `<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Keep All Modified Files`;
                 btn.onclick = () => window.keepAllModifiedFiles(filePaths);
                 container.appendChild(btn);
+              }
+            } else if (part.startsWith("[fileChange ")) {
+              const match = part.match(
+                /\[fileChange\s+path="(.*?)"\s+added="(\d+)"\s+removed="(\d+)"\]/,
+              );
+              if (match) {
+                const fullPath = match[1];
+                const added = parseInt(match[2] || "0", 10);
+                const removed = parseInt(match[3] || "0", 10);
+                const fileName = fullPath.split(/[\\\/]/).pop();
+
+                const row = document.createElement("div");
+                row.style.display = "flex";
+                row.style.alignItems = "center";
+                row.style.justifyContent = "space-between";
+                row.style.gap = "8px";
+                row.style.padding = "6px 8px";
+                row.style.border = "1px solid #30363d";
+                row.style.borderRadius = "8px";
+                row.style.margin = "4px 0";
+
+                const left = document.createElement("div");
+                left.style.display = "flex";
+                left.style.alignItems = "center";
+                left.style.gap = "10px";
+
+                const nameSpan = document.createElement("span");
+                nameSpan.style.fontWeight = "600";
+                nameSpan.style.color = "#c9d1d9";
+                nameSpan.textContent = fileName;
+
+                const plusSpan = document.createElement("span");
+                plusSpan.textContent = `+${added}`;
+                plusSpan.style.color = "#3fb950"; // green
+                plusSpan.style.fontWeight = "600";
+
+                const minusSpan = document.createElement("span");
+                minusSpan.textContent = `-${removed}`;
+                minusSpan.style.color = "#f85149"; // red
+                minusSpan.style.fontWeight = "600";
+
+                left.appendChild(nameSpan);
+                left.appendChild(plusSpan);
+                left.appendChild(minusSpan);
+
+                const actions = document.createElement("div");
+                actions.style.display = "flex";
+                actions.style.gap = "6px";
+
+                const openBtn = document.createElement("button");
+                openBtn.className = "btn-diff";
+                openBtn.textContent = "Open File";
+                openBtn.onclick = () => window.openFile(fullPath);
+
+                const diffBtn = document.createElement("button");
+                diffBtn.className = "btn-diff";
+                diffBtn.textContent = "Diff";
+                diffBtn.onclick = () => window.openDiff(fullPath);
+
+                actions.appendChild(openBtn);
+                actions.appendChild(diffBtn);
+
+                row.appendChild(left);
+                row.appendChild(actions);
+
+                container.appendChild(row);
               }
             } else if (part.startsWith('[openDiff path="')) {
               const match = part.match(/\[openDiff path="(.*?)"\]/);
