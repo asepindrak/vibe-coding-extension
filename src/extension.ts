@@ -7,6 +7,16 @@ import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
 import * as crypto from "crypto";
+import {
+  createDiffBlockRegex,
+  createFileBlockRegex,
+} from "./writePayload";
+import {
+  CUSTOM_PROVIDER_SETTINGS_KEY,
+  hasCustomProviderSettings,
+  normalizeCustomProviderSettings,
+  resolveProviderKind,
+} from "./aiProviderSettings";
 
 async function fetchAi(
   url: string,
@@ -16,7 +26,9 @@ async function fetchAi(
   userApiKey?: string,
   context?: vscode.ExtensionContext,
 ) {
-  if (provider === "ollama") {
+  const providerKind = resolveProviderKind(provider, model);
+
+  if (providerKind === "ollama") {
     let ollamaModel = model || "llama3";
     if (ollamaModel.startsWith("ollama:")) {
       ollamaModel = ollamaModel.replace("ollama:", "");
@@ -72,6 +84,62 @@ async function fetchAi(
           .split("\n")
           .map((s: string) => s.trim())
           .filter(Boolean)[0] || ""
+      : content;
+
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ message }),
+      text: async () => JSON.stringify({ message }),
+    } as any;
+  }
+
+  const customProviderSettings = normalizeCustomProviderSettings(
+    context?.globalState.get(CUSTOM_PROVIDER_SETTINGS_KEY),
+  );
+  if (providerKind === "custom" && hasCustomProviderSettings(customProviderSettings)) {
+    const body = options.body ? JSON.parse(options.body) : {};
+    const apiUrl = customProviderSettings.baseUrl;
+    const resolvedModel = customProviderSettings.model || model || "gpt-4o";
+
+    const messages = url.endsWith("/suggest")
+      ? [
+          {
+            role: "system",
+            content:
+              "You are a code completion engine. Return ONLY the continuation for the current line.",
+          },
+          { role: "user", content: body.message || "" },
+        ]
+      : [{ role: "user", content: body.message || "" }];
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (userApiKey && userApiKey.trim()) {
+      headers.Authorization = `Bearer ${userApiKey}`;
+    }
+
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model: resolvedModel,
+        messages,
+        stream: false,
+      }),
+      signal: options.signal,
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Custom provider error: ${errText}`);
+    }
+
+    const json: any = await response.json();
+    const content = json.choices?.[0]?.message?.content || "";
+    const message = url.endsWith("/suggest")
+      ? content.replace(/\r/g, "").split("\n")[0].trim() || ""
       : content;
 
     return {
@@ -239,10 +307,15 @@ async function fetchSuggestions(
   const userApiKey = (await context.secrets.get("vico.userOpenAIApiKey")) || "";
   const customApiUrl =
     context.globalState.get<string>("vico.customApiUrl") || "";
+  const customProviderSettings = normalizeCustomProviderSettings(
+    context.globalState.get(CUSTOM_PROVIDER_SETTINGS_KEY),
+  );
 
   const token = context.globalState.get("token");
   const isCustomProvider =
     provider === "ollama" ||
+    provider === "custom" ||
+    hasCustomProviderSettings(customProviderSettings) ||
     (userApiKey && userApiKey.trim().length > 0) ||
     (customApiUrl && customApiUrl.trim().length > 0);
 
@@ -705,10 +778,8 @@ async function writeFileVico(
     // 2. Parse [file name="path"]...[/file] OR [diff name="path"]...[/diff]
     // Improved regex to handle newlines and various attributes robustly, and allow missing closing tags
     // Stop at the next [file], [diff], or [writeFile] tag (opening or closing)
-    const fileRegex =
-      /\[file\s+(?:name|path)=["']?([^"'\s\]]+)["']?(?:\s+type=["'][^"']+["'])?\]([\s\S]*?)(?:\[\s*\/file\s*\]|(?=\[\/?(?:file|diff|writeFile|writeFileVico))|$)/gi;
-    const diffRegex =
-      /\[diff\s+(?:name|path)=["']?([^"'\s\]]+)["']?\]([\s\S]*?)(?:\[\s*\/diff\s*\]|(?=\[\/?(?:file|diff|writeFile|writeFileVico))|$)/gi;
+    const fileRegex = createFileBlockRegex();
+    const diffRegex = createDiffBlockRegex();
     let fileMatch;
     let filesCreated = 0;
     let duplicateSkipped = false;
@@ -1351,8 +1422,10 @@ async function writeFileVico(
 let loadingStatusBarItem: vscode.StatusBarItem;
 
 export function activate(context: vscode.ExtensionContext) {
+  const diffManager = DiffManager.getInstance(context);
   // Register the Sidebar Panel FIRST to avoid Temporal Dead Zone
   const sidebarProvider = new SidebarProvider(context.extensionUri, context);
+
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
       "vibe-coding-sidebar",
@@ -1383,7 +1456,25 @@ export function activate(context: vscode.ExtensionContext) {
     },
   );
 
-  context.subscriptions.push(
+  const pendingTreeCommands = [
+    vscode.commands.registerCommand(
+      "vibe-coding.revealPendingChange",
+      async (uri: vscode.Uri, hunkIndex?: number) => {
+        const document = await vscode.workspace.openTextDocument(uri);
+        await vscode.window.showTextDocument(document, {
+          preview: false,
+          preserveFocus: false,
+          viewColumn: vscode.ViewColumn.Active,
+        });
+        if (typeof hunkIndex === "number") {
+          for (let i = 0; i <= hunkIndex; i++) {
+            await vscode.commands.executeCommand("vibe-coding.nextDiffHunk");
+          }
+          return;
+        }
+        await vscode.commands.executeCommand("vibe-coding.nextDiffHunk");
+      },
+    ),
     vscode.commands.registerCommand(
       "vibe-coding.openDiff",
       async (args: any) => {
@@ -1437,7 +1528,9 @@ export function activate(context: vscode.ExtensionContext) {
         );
       },
     ),
-  );
+  ];
+
+  context.subscriptions.push(...pendingTreeCommands);
 
   context.subscriptions.push(disposable);
 
@@ -2304,9 +2397,14 @@ async function triggerCodeCompletion(
   const userApiKey = (await context.secrets.get("vico.userOpenAIApiKey")) || "";
   const customApiUrl =
     context.globalState.get<string>("vico.customApiUrl") || "";
+  const customProviderSettings = normalizeCustomProviderSettings(
+    context.globalState.get(CUSTOM_PROVIDER_SETTINGS_KEY),
+  );
 
   const isCustomProvider =
     provider === "ollama" ||
+    provider === "custom" ||
+    hasCustomProviderSettings(customProviderSettings) ||
     (userApiKey && userApiKey.trim().length > 0) ||
     (customApiUrl && customApiUrl.trim().length > 0);
 

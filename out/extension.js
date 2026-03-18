@@ -47,8 +47,11 @@ const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
 const os = __importStar(require("os"));
 const crypto = __importStar(require("crypto"));
+const writePayload_1 = require("./writePayload");
+const aiProviderSettings_1 = require("./aiProviderSettings");
 async function fetchAi(url, options, model, provider, userApiKey, context) {
-    if (provider === "ollama") {
+    const providerKind = (0, aiProviderSettings_1.resolveProviderKind)(provider, model);
+    if (providerKind === "ollama") {
         let ollamaModel = model || "llama3";
         if (ollamaModel.startsWith("ollama:")) {
             ollamaModel = ollamaModel.replace("ollama:", "");
@@ -96,6 +99,52 @@ async function fetchAi(url, options, model, provider, userApiKey, context) {
                 .split("\n")
                 .map((s) => s.trim())
                 .filter(Boolean)[0] || ""
+            : content;
+        return {
+            ok: true,
+            status: 200,
+            json: async () => ({ message }),
+            text: async () => JSON.stringify({ message }),
+        };
+    }
+    const customProviderSettings = (0, aiProviderSettings_1.normalizeCustomProviderSettings)(context?.globalState.get(aiProviderSettings_1.CUSTOM_PROVIDER_SETTINGS_KEY));
+    if (providerKind === "custom" && (0, aiProviderSettings_1.hasCustomProviderSettings)(customProviderSettings)) {
+        const body = options.body ? JSON.parse(options.body) : {};
+        const apiUrl = customProviderSettings.baseUrl;
+        const resolvedModel = customProviderSettings.model || model || "gpt-4o";
+        const messages = url.endsWith("/suggest")
+            ? [
+                {
+                    role: "system",
+                    content: "You are a code completion engine. Return ONLY the continuation for the current line.",
+                },
+                { role: "user", content: body.message || "" },
+            ]
+            : [{ role: "user", content: body.message || "" }];
+        const headers = {
+            "Content-Type": "application/json",
+        };
+        if (userApiKey && userApiKey.trim()) {
+            headers.Authorization = `Bearer ${userApiKey}`;
+        }
+        const response = await fetch(apiUrl, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+                model: resolvedModel,
+                messages,
+                stream: false,
+            }),
+            signal: options.signal,
+        });
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`Custom provider error: ${errText}`);
+        }
+        const json = await response.json();
+        const content = json.choices?.[0]?.message?.content || "";
+        const message = url.endsWith("/suggest")
+            ? content.replace(/\r/g, "").split("\n")[0].trim() || ""
             : content;
         return {
             ok: true,
@@ -218,8 +267,11 @@ async function fetchSuggestions(context, editor) {
     const provider = context.globalState.get("vico.selectedProvider") || "openai";
     const userApiKey = (await context.secrets.get("vico.userOpenAIApiKey")) || "";
     const customApiUrl = context.globalState.get("vico.customApiUrl") || "";
+    const customProviderSettings = (0, aiProviderSettings_1.normalizeCustomProviderSettings)(context.globalState.get(aiProviderSettings_1.CUSTOM_PROVIDER_SETTINGS_KEY));
     const token = context.globalState.get("token");
     const isCustomProvider = provider === "ollama" ||
+        provider === "custom" ||
+        (0, aiProviderSettings_1.hasCustomProviderSettings)(customProviderSettings) ||
         (userApiKey && userApiKey.trim().length > 0) ||
         (customApiUrl && customApiUrl.trim().length > 0);
     if (!token && !isCustomProvider) {
@@ -539,8 +591,8 @@ async function writeFileVico(context, editor, sidebarProvider) {
         // 2. Parse [file name="path"]...[/file] OR [diff name="path"]...[/diff]
         // Improved regex to handle newlines and various attributes robustly, and allow missing closing tags
         // Stop at the next [file], [diff], or [writeFile] tag (opening or closing)
-        const fileRegex = /\[file\s+(?:name|path)=["']?([^"'\s\]]+)["']?(?:\s+type=["'][^"']+["'])?\]([\s\S]*?)(?:\[\s*\/file\s*\]|(?=\[\/?(?:file|diff|writeFile|writeFileVico))|$)/gi;
-        const diffRegex = /\[diff\s+(?:name|path)=["']?([^"'\s\]]+)["']?\]([\s\S]*?)(?:\[\s*\/diff\s*\]|(?=\[\/?(?:file|diff|writeFile|writeFileVico))|$)/gi;
+        const fileRegex = (0, writePayload_1.createFileBlockRegex)();
+        const diffRegex = (0, writePayload_1.createDiffBlockRegex)();
         let fileMatch;
         let filesCreated = 0;
         let duplicateSkipped = false;
@@ -997,6 +1049,7 @@ async function writeFileVico(context, editor, sidebarProvider) {
 }
 let loadingStatusBarItem;
 function activate(context) {
+    const diffManager = DiffManager_1.DiffManager.getInstance(context);
     // Register the Sidebar Panel FIRST to avoid Temporal Dead Zone
     const sidebarProvider = new SidebarProvider_1.SidebarProvider(context.extensionUri, context);
     context.subscriptions.push(vscode.window.registerWebviewViewProvider("vibe-coding-sidebar", sidebarProvider, {
@@ -1011,40 +1064,58 @@ function activate(context) {
         vico_logger_1.default.info("writeFile command triggered");
         await writeFileVico(context, vscode.window.activeTextEditor, sidebarProvider);
     });
-    context.subscriptions.push(vscode.commands.registerCommand("vibe-coding.openDiff", async (args) => {
-        // args: { filePath, code }
-        if (!args || !args.filePath || !args.code) {
-            vscode.window.showErrorMessage("Invalid arguments for openDiff");
-            return;
-        }
-        if (!vscode.workspace.workspaceFolders) {
-            vscode.window.showErrorMessage("No workspace folder open!");
-            return;
-        }
-        const projectRoot = vscode.workspace.workspaceFolders[0].uri;
-        let cleanPath = args.filePath.trim();
-        if (cleanPath.startsWith("/") || cleanPath.startsWith("\\")) {
-            cleanPath = cleanPath.substring(1);
-        }
-        const fileUri = vscode.Uri.joinPath(projectRoot, cleanPath);
-        // Ensure directory exists
-        const dirUri = vscode.Uri.file(path.dirname(fileUri.fsPath));
-        await vscode.workspace.fs.createDirectory(dirUri);
-        const tempDir = os.tmpdir();
-        const fileName = path.basename(fileUri.fsPath);
-        // Use hash of file path to ensure only one diff tab per file
-        const fileHash = crypto
-            .createHash("md5")
-            .update(fileUri.fsPath)
-            .digest("hex");
-        const tempFilePath = path.join(tempDir, `vico_diff_${fileHash}_${fileName}`);
-        fs.writeFileSync(tempFilePath, args.code);
-        const tempUri = vscode.Uri.file(tempFilePath);
-        await vscode.commands.executeCommand("vscode.diff", fileUri, tempUri, `${fileName} ↔ Proposed Changes`, {
-            preview: false,
-            viewColumn: vscode.ViewColumn.Beside,
-        });
-    }));
+    const pendingTreeCommands = [
+        vscode.commands.registerCommand("vibe-coding.revealPendingChange", async (uri, hunkIndex) => {
+            const document = await vscode.workspace.openTextDocument(uri);
+            await vscode.window.showTextDocument(document, {
+                preview: false,
+                preserveFocus: false,
+                viewColumn: vscode.ViewColumn.Active,
+            });
+            if (typeof hunkIndex === "number") {
+                for (let i = 0; i <= hunkIndex; i++) {
+                    await vscode.commands.executeCommand("vibe-coding.nextDiffHunk");
+                }
+                return;
+            }
+            await vscode.commands.executeCommand("vibe-coding.nextDiffHunk");
+        }),
+        vscode.commands.registerCommand("vibe-coding.openDiff", async (args) => {
+            // args: { filePath, code }
+            if (!args || !args.filePath || !args.code) {
+                vscode.window.showErrorMessage("Invalid arguments for openDiff");
+                return;
+            }
+            if (!vscode.workspace.workspaceFolders) {
+                vscode.window.showErrorMessage("No workspace folder open!");
+                return;
+            }
+            const projectRoot = vscode.workspace.workspaceFolders[0].uri;
+            let cleanPath = args.filePath.trim();
+            if (cleanPath.startsWith("/") || cleanPath.startsWith("\\")) {
+                cleanPath = cleanPath.substring(1);
+            }
+            const fileUri = vscode.Uri.joinPath(projectRoot, cleanPath);
+            // Ensure directory exists
+            const dirUri = vscode.Uri.file(path.dirname(fileUri.fsPath));
+            await vscode.workspace.fs.createDirectory(dirUri);
+            const tempDir = os.tmpdir();
+            const fileName = path.basename(fileUri.fsPath);
+            // Use hash of file path to ensure only one diff tab per file
+            const fileHash = crypto
+                .createHash("md5")
+                .update(fileUri.fsPath)
+                .digest("hex");
+            const tempFilePath = path.join(tempDir, `vico_diff_${fileHash}_${fileName}`);
+            fs.writeFileSync(tempFilePath, args.code);
+            const tempUri = vscode.Uri.file(tempFilePath);
+            await vscode.commands.executeCommand("vscode.diff", fileUri, tempUri, `${fileName} ↔ Proposed Changes`, {
+                preview: false,
+                viewColumn: vscode.ViewColumn.Beside,
+            });
+        }),
+    ];
+    context.subscriptions.push(...pendingTreeCommands);
     context.subscriptions.push(disposable);
     context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
         if (e.affectsConfiguration("vibeCoding.inline.enabled")) {
@@ -1682,7 +1753,10 @@ async function triggerCodeCompletion(context, comment, allCode) {
     const provider = context.globalState.get("vico.selectedProvider") || "openai";
     const userApiKey = (await context.secrets.get("vico.userOpenAIApiKey")) || "";
     const customApiUrl = context.globalState.get("vico.customApiUrl") || "";
+    const customProviderSettings = (0, aiProviderSettings_1.normalizeCustomProviderSettings)(context.globalState.get(aiProviderSettings_1.CUSTOM_PROVIDER_SETTINGS_KEY));
     const isCustomProvider = provider === "ollama" ||
+        provider === "custom" ||
+        (0, aiProviderSettings_1.hasCustomProviderSettings)(customProviderSettings) ||
         (userApiKey && userApiKey.trim().length > 0) ||
         (customApiUrl && customApiUrl.trim().length > 0);
     if (!token && !isCustomProvider) {

@@ -185,7 +185,6 @@
           "type": "webview",
           "id": "vibe-coding-sidebar",
           "name": "Vibe Coding - VICO",
-          "icon": "media/icon.svg",
           "contextualTitle": "Vibe Coding - VICO"
         }
       ]
@@ -292,6 +291,30 @@
         "command": "vibe-coding.rejectDiff",
         "title": "Discard",
         "icon": "$(close)"
+      },
+      {
+        "command": "vibe-coding.openPendingDiff",
+        "title": "Open Full Diff",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "vibe-coding.previousDiffHunk",
+        "title": "Previous Vico Change",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "vibe-coding.nextDiffHunk",
+        "title": "Next Vico Change",
+        "icon": "$(arrow-down)"
+      },
+      {
+        "command": "vibe-coding.showPendingChanges",
+        "title": "Show Vico Pending Changes",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "vibe-coding.revealPendingChange",
+        "title": "Reveal Pending Change"
       }
     ],
     "menus": {
@@ -305,6 +328,26 @@
           "command": "vibe-coding.rejectDiff",
           "when": "vibe-coding.isVicoDiff",
           "group": "navigation"
+        },
+        {
+          "command": "vibe-coding.openPendingDiff",
+          "when": "vibe-coding.isVicoDiff",
+          "group": "navigation"
+        },
+        {
+          "command": "vibe-coding.previousDiffHunk",
+          "when": "vibe-coding.isVicoDiff",
+          "group": "navigation"
+        },
+        {
+          "command": "vibe-coding.nextDiffHunk",
+          "when": "vibe-coding.isVicoDiff",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "vibe-coding.showPendingChanges"
         }
       ]
     },
@@ -318,6 +361,16 @@
         "command": "vibe-coding.fetchSuggestions",
         "key": "ctrl+shift+.",
         "when": "editorTextFocus"
+      },
+      {
+        "command": "vibe-coding.previousDiffHunk",
+        "key": "alt+[",
+        "when": "editorTextFocus && vibe-coding.isVicoDiff"
+      },
+      {
+        "command": "vibe-coding.nextDiffHunk",
+        "key": "alt+]",
+        "when": "editorTextFocus && vibe-coding.isVicoDiff"
       }
     ]
   },

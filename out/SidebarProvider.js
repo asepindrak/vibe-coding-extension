@@ -41,7 +41,9 @@ const os = __importStar(require("os"));
 const crypto = __importStar(require("crypto"));
 const cp = __importStar(require("child_process"));
 const DiffManager_1 = require("./DiffManager");
+const codeSearch_1 = require("./codeSearch");
 const utils_1 = require("./utils");
+const aiProviderSettings_1 = require("./aiProviderSettings");
 class SidebarProvider {
     _extensionUri;
     context;
@@ -606,7 +608,7 @@ class SidebarProvider {
 - NEVER output text like "Open Diff:", "Applying change", "Content:", or any other conversational status.
 - NEVER output markdown code fences (\`\`\` or \`\`\`javascript).
 - NEVER output "content: FILE_CONTENT" or "FULL_CONTENT_HERE".
-- ONLY use the following tags: [writeFile], [file], [diff], [command], [readFile], [searchFiles], [REPLAN].
+- ONLY use the following tags: [writeFile], [file], [diff], [command], [readFile], [searchFiles], [searchSymbols], [REPLAN].
 `;
                         // 3. Prepare Messages (Multi-system messages like in agent.js)
                         const messages = [];
@@ -859,7 +861,12 @@ NEW_CODE_TO_INSERT
                         else if (mode === "think") {
                             userContent = `Current Step to execute: ${JSON.stringify(data.step)}\n\nContext:\n${data.context}\n\nINSTRUCTION: Decide if you need to read more files or search for something before executing the step. If you have enough info, just say you're ready. Use [readFile] or [searchFiles] if needed.
 - If you need to read a file, output exactly: [readFile][file path="path/to/file"][/readFile]
-- If you need to search, output exactly: [searchFiles]query[/searchFiles]
+- If you need to search text, output exactly: [searchFiles]query[/searchFiles]
+- If you need symbol definitions, output exactly: [searchSymbols]query[/searchSymbols]
+- Prefer [searchSymbols] first for function/class/interface/variable discovery. If it returns nothing useful, then use [searchFiles].
+- Default search is literal text. Use [searchFiles]literal:exact text[/searchFiles] for symbols with special characters.
+- Use [searchFiles]re:/pattern/i[/searchFiles] only when you truly need regex.
+- After search finds a likely target file, use [readFile][file path="..."][/readFile] on the top candidate before writing.
 - If you are ready, output exactly: I am ready to execute the step.
 `;
                         }
@@ -1145,6 +1152,7 @@ NEW_CODE_TO_INSERT
                     const selectedProvider = this.context.globalState.get(SidebarProvider.MODEL_PROVIDER_KEY, "openai");
                     const userApiKey = (await this.context.secrets.get(SidebarProvider.USER_API_KEY_SECRET)) || "";
                     const customApiUrl = this.context.globalState.get("vico.customApiUrl") || "";
+                    const customProviderSettings = (0, aiProviderSettings_1.normalizeCustomProviderSettings)(this.context.globalState.get(aiProviderSettings_1.CUSTOM_PROVIDER_SETTINGS_KEY));
                     const usage = this.getMachinePromptUsage();
                     const remaining = Math.max(0, SidebarProvider.FREE_PROMPT_LIMIT - usage);
                     webviewView.webview.postMessage({
@@ -1152,6 +1160,8 @@ NEW_CODE_TO_INSERT
                         selectedModel,
                         selectedProvider,
                         customApiUrl,
+                        customProviderName: customProviderSettings.name,
+                        customProviderModel: customProviderSettings.model,
                         hasUserApiKey: userApiKey.trim().length > 0,
                         freePromptLimit: SidebarProvider.FREE_PROMPT_LIMIT,
                         machinePromptUsed: usage,
@@ -1161,11 +1171,17 @@ NEW_CODE_TO_INSERT
                 }
                 case "saveAiSettings": {
                     const selectedModel = this.normalizeModel(message.model);
-                    const selectedProvider = message.provider || "openai";
+                    const selectedProvider = (0, aiProviderSettings_1.resolveProviderKind)(String(message.provider || ""), selectedModel);
                     const customApiUrl = message.customApiUrl || "";
+                    const customProviderSettings = {
+                        name: String(message.customProviderName || "").trim(),
+                        baseUrl: customApiUrl,
+                        model: String(message.customProviderModel || "").trim(),
+                    };
                     await this.context.globalState.update(SidebarProvider.MODEL_SETTING_KEY, selectedModel);
                     await this.context.globalState.update(SidebarProvider.MODEL_PROVIDER_KEY, selectedProvider);
                     await this.context.globalState.update("vico.customApiUrl", customApiUrl);
+                    await this.context.globalState.update(aiProviderSettings_1.CUSTOM_PROVIDER_SETTINGS_KEY, customProviderSettings);
                     const keepExistingApiKey = !!message.keepExistingApiKey;
                     const userApiKey = String(message.userApiKey || "").trim();
                     if (userApiKey) {
@@ -1181,6 +1197,8 @@ NEW_CODE_TO_INSERT
                         selectedModel,
                         selectedProvider,
                         customApiUrl,
+                        customProviderName: customProviderSettings.name,
+                        customProviderModel: customProviderSettings.model,
                         hasUserApiKey: savedApiKey.trim().length > 0,
                         freePromptLimit: SidebarProvider.FREE_PROMPT_LIMIT,
                         machinePromptUsed: usage,
@@ -1195,12 +1213,16 @@ NEW_CODE_TO_INSERT
                         this.context.globalState.get(SidebarProvider.MODEL_SETTING_KEY, SidebarProvider.DEFAULT_MODEL));
                     const userApiKey = (await this.context.secrets.get(SidebarProvider.USER_API_KEY_SECRET)) || "";
                     const hasUserApiKey = userApiKey.trim().length > 0;
+                    const selectedProvider = (0, aiProviderSettings_1.resolveProviderKind)(String(message.provider ||
+                        this.context.globalState.get(SidebarProvider.MODEL_PROVIDER_KEY, "openai")), selectedModel);
+                    const customProviderSettings = (0, aiProviderSettings_1.normalizeCustomProviderSettings)(this.context.globalState.get(aiProviderSettings_1.CUSTOM_PROVIDER_SETTINGS_KEY));
                     let usage = this.getMachinePromptUsage();
                     let allowed = true;
                     let reason = "";
                     const isCountedMode = mode === "agent" || mode === "chat";
-                    const isOllama = selectedModel.startsWith("ollama:");
-                    if (isCountedMode && !hasUserApiKey && !isOllama) {
+                    const isOllama = selectedProvider === "ollama";
+                    const isCustom = selectedProvider === "custom";
+                    if (isCountedMode && !hasUserApiKey && !isOllama && !isCustom) {
                         if (!SidebarProvider.FREE_MODELS.has(selectedModel)) {
                             allowed = false;
                             reason = `Model ${selectedModel} is not included in free quota. Free quota only supports gpt-5.1-codex-mini and gpt-4o-mini. Please set your own OpenAI API key.`;
@@ -1223,7 +1245,10 @@ NEW_CODE_TO_INSERT
                         allowed,
                         reason,
                         selectedModel,
+                        selectedProvider,
                         customApiUrl,
+                        customProviderName: customProviderSettings.name,
+                        customProviderModel: customProviderSettings.model,
                         freePromptLimit: SidebarProvider.FREE_PROMPT_LIMIT,
                         machinePromptUsed: usage,
                         machinePromptRemaining: remaining,
@@ -1452,14 +1477,16 @@ NEW_CODE_TO_INSERT
                         }
                         const query = message.query;
                         this.sendLog(`[Search] Query received: "${query}"`);
-                        if (!query || query.length <= 2) {
+                        const parsedQuery = (0, codeSearch_1.parseSearchQuery)(query || "");
+                        if (!query || (0, codeSearch_1.shouldRejectSearchQuery)(parsedQuery)) {
                             webviewView.webview.postMessage({
                                 command: "searchResult",
-                                results: "Query too short for content search.",
+                                results: "Query too short for content search. Use at least 3 literal characters, or prefix with re: for regex search.",
                             });
                             return;
                         }
-                        const results = [];
+                        const rankedResults = [];
+                        const seenResults = new Set();
                         const excludePattern = "**/{node_modules,.git,dist,build,out,coverage,.vscode,.idea,tmp,temp,venv,__pycache__,.vico}/**";
                         const codeFilePattern = "**/*.{ts,js,tsx,jsx,json,html,css,scss,md,py,java,c,cpp,h,go,rs,php,rb,sh,yaml,yml,xml,sql,graphql,prisma,vue,svelte,astro}";
                         this.sendLog(`[Search] Finding files... Pattern: ${codeFilePattern}`);
@@ -1469,7 +1496,7 @@ NEW_CODE_TO_INSERT
                         // Search through file contents
                         let scannedCount = 0;
                         for (const file of matchingFiles) {
-                            if (signal.aborted || results.length >= 300) {
+                            if (signal.aborted || rankedResults.length >= 300) {
                                 this.sendLog(`[Search] Stopped. Aborted or limit reached.`);
                                 break;
                             }
@@ -1481,19 +1508,30 @@ NEW_CODE_TO_INSERT
                                 const document = await vscode.workspace.openTextDocument(file);
                                 const text = document.getText();
                                 const lines = text.split("\n");
-                                const regex = new RegExp(query, "i");
+                                const regex = parsedQuery.regex;
                                 for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
-                                    if (signal.aborted || results.length >= 300) {
+                                    if (signal.aborted || rankedResults.length >= 300) {
                                         break;
                                     }
                                     const line = lines[lineIdx];
                                     if (regex.test(line)) {
                                         const relativePath = vscode.workspace.asRelativePath(file);
                                         const lineNum = lineIdx + 1;
-                                        const preview = line.trim().substring(0, 200);
+                                        const preview = (0, codeSearch_1.createSearchResultPreview)(line);
                                         const resultStr = `${relativePath}:${lineNum}: ${preview}`;
-                                        if (!results.includes(resultStr)) {
-                                            results.push(resultStr);
+                                        if (!seenResults.has(resultStr)) {
+                                            seenResults.add(resultStr);
+                                            rankedResults.push({
+                                                relativePath,
+                                                lineNum,
+                                                preview,
+                                                score: (0, codeSearch_1.rankSearchMatch)({
+                                                    relativePath,
+                                                    lineNum,
+                                                    line,
+                                                    normalizedQuery: parsedQuery.normalizedQuery,
+                                                }),
+                                            });
                                         }
                                     }
                                 }
@@ -1503,8 +1541,22 @@ NEW_CODE_TO_INSERT
                                 continue;
                             }
                         }
-                        this.sendLog(`[Search] Completed. Found ${results.length} matches.`);
-                        const output = results.length > 0 ? results.join("\n") : "No matches found.";
+                        this.sendLog(`[Search] Completed. Found ${rankedResults.length} matches.`);
+                        rankedResults.sort((a, b) => {
+                            if (b.score !== a.score)
+                                return b.score - a.score;
+                            if (a.relativePath !== b.relativePath) {
+                                return a.relativePath.localeCompare(b.relativePath);
+                            }
+                            return a.lineNum - b.lineNum;
+                        });
+                        const outputLines = (0, codeSearch_1.formatRankedSearchResults)(rankedResults);
+                        const resultPrefix = parsedQuery.warnings.length > 0
+                            ? `${parsedQuery.warnings.join(" ")}\n`
+                            : "";
+                        const output = outputLines.length > 0
+                            ? `${resultPrefix}${outputLines.join("\n")}`
+                            : `${resultPrefix}No matches found.`;
                         const filteredOutput = output
                             .split("\n")
                             .filter((line) => !this.isTransientVicoArtifactPath(line))
@@ -1518,6 +1570,72 @@ NEW_CODE_TO_INSERT
                         this.sendLog(`[Search] Error: ${error.message}`);
                         webviewView.webview.postMessage({
                             command: "searchResult",
+                            error: error.message,
+                        });
+                    }
+                    return;
+                case "searchSymbols":
+                    if (this.checkDuplicateAction("searchSymbols", message.query)) {
+                        webviewView.webview.postMessage({
+                            command: "searchSymbolsResult",
+                            results: "You recently performed this symbol search. Please use the previous results or try a different query to avoid looping.",
+                        });
+                        return;
+                    }
+                    try {
+                        const workspaceFolders = vscode.workspace.workspaceFolders;
+                        if (!workspaceFolders) {
+                            throw new Error("No workspace open");
+                        }
+                        const query = (message.query || "").trim();
+                        this.sendLog(`[SearchSymbols] Query received: "${query}"`);
+                        if (query.length <= 1) {
+                            webviewView.webview.postMessage({
+                                command: "searchSymbolsResult",
+                                results: "Query too short for symbol search. Use at least 2 characters.",
+                            });
+                            return;
+                        }
+                        const symbols = (await vscode.commands.executeCommand("vscode.executeWorkspaceSymbolProvider", query)) || [];
+                        const rankedSymbols = symbols
+                            .map((symbol) => {
+                            const relativePath = vscode.workspace.asRelativePath(symbol.location.uri);
+                            return {
+                                name: symbol.name,
+                                kind: (0, codeSearch_1.formatSymbolKind)(symbol.kind),
+                                relativePath,
+                                lineNum: symbol.location.range.start.line + 1,
+                                score: (0, codeSearch_1.rankSymbolMatch)({
+                                    symbolName: symbol.name,
+                                    symbolKind: (0, codeSearch_1.formatSymbolKind)(symbol.kind),
+                                    relativePath,
+                                    lineNum: symbol.location.range.start.line + 1,
+                                    normalizedQuery: query,
+                                }),
+                            };
+                        })
+                            .filter((symbol) => !this.isTransientVicoArtifactPath(symbol.relativePath))
+                            .sort((a, b) => {
+                            if (b.score !== a.score)
+                                return b.score - a.score;
+                            if (a.relativePath !== b.relativePath) {
+                                return a.relativePath.localeCompare(b.relativePath);
+                            }
+                            return a.lineNum - b.lineNum;
+                        })
+                            .slice(0, 100);
+                        const outputLines = (0, codeSearch_1.formatRankedSymbolResults)(rankedSymbols);
+                        webviewView.webview.postMessage({
+                            command: "searchSymbolsResult",
+                            results: outputLines.length > 0
+                                ? outputLines.join("\n")
+                                : "No symbols found.",
+                        });
+                    }
+                    catch (error) {
+                        this.sendLog(`[SearchSymbols] Error: ${error.message}`);
+                        webviewView.webview.postMessage({
+                            command: "searchSymbolsResult",
                             error: error.message,
                         });
                     }
@@ -2573,6 +2691,12 @@ NEW_CODE_TO_INSERT
         const stylesPath = webview.asWebviewUri(vscode.Uri.file(path.join(this._extensionUri.fsPath, "media", "styles.css")));
         const prismPath = webview.asWebviewUri(vscode.Uri.file(path.join(this._extensionUri.fsPath, "media", "prism.css")));
         const prismJSPath = webview.asWebviewUri(vscode.Uri.file(path.join(this._extensionUri.fsPath, "media", "prism.js")));
+        const webviewHelpersPath = webview.asWebviewUri(vscode.Uri.file(path.join(this._extensionUri.fsPath, "media", "webview-helpers.js")));
+        const webviewWorkflowPath = webview.asWebviewUri(vscode.Uri.file(path.join(this._extensionUri.fsPath, "media", "webview-workflow.js")));
+        const webviewDiscoveryPath = webview.asWebviewUri(vscode.Uri.file(path.join(this._extensionUri.fsPath, "media", "webview-discovery.js")));
+        const webviewExecutionPath = webview.asWebviewUri(vscode.Uri.file(path.join(this._extensionUri.fsPath, "media", "webview-execution.js")));
+        const webviewThinkPath = webview.asWebviewUri(vscode.Uri.file(path.join(this._extensionUri.fsPath, "media", "webview-think.js")));
+        const webviewExecuteLoopPath = webview.asWebviewUri(vscode.Uri.file(path.join(this._extensionUri.fsPath, "media", "webview-execute-loop.js")));
         const chara = webview.asWebviewUri(vscode.Uri.file(path.join(this._extensionUri.fsPath, "media", "Syana Isniya.vrm")));
         const audio = webview.asWebviewUri(vscode.Uri.file(path.join(this._extensionUri.fsPath, "media", "welcome.mp3")));
         const vrm = webview.asWebviewUri(vscode.Uri.file(path.join(this._extensionUri.fsPath, "node_modules/@pixiv/three-vrm/lib/", "three-vrm.module.js")));
@@ -2583,6 +2707,12 @@ NEW_CODE_TO_INSERT
         htmlContent = htmlContent.replace("%STYLES_PATH%", stylesPath.toString());
         htmlContent = htmlContent.replace("%PRISM_PATH%", prismPath.toString());
         htmlContent = htmlContent.replace("%PRISMJS_PATH%", prismJSPath.toString());
+        htmlContent = htmlContent.replace("%WEBVIEW_HELPERS_PATH%", webviewHelpersPath.toString());
+        htmlContent = htmlContent.replace("%WEBVIEW_WORKFLOW_PATH%", webviewWorkflowPath.toString());
+        htmlContent = htmlContent.replace("%WEBVIEW_DISCOVERY_PATH%", webviewDiscoveryPath.toString());
+        htmlContent = htmlContent.replace("%WEBVIEW_EXECUTION_PATH%", webviewExecutionPath.toString());
+        htmlContent = htmlContent.replace("%WEBVIEW_THINK_PATH%", webviewThinkPath.toString());
+        htmlContent = htmlContent.replace("%WEBVIEW_EXECUTE_LOOP_PATH%", webviewExecuteLoopPath.toString());
         console.log(chara.toString());
         htmlContent = htmlContent.replace("%CHARA%", chara.toString());
         htmlContent = htmlContent.replace("%VRM%", vrm.toString());

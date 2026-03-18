@@ -349,19 +349,6 @@
         margin-bottom: 4px;
       }
 
-      .plan-status-container {
-        margin-bottom: 8px;
-        background-color: #161b22;
-        border: 1px solid #30363d;
-        border-radius: 6px;
-        font-size: 12px;
-        color: #c9d1d9;
-        max-height: 240px;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-      }
-
       .code-reference-chip {
         display: inline-flex;
         align-items: center;
@@ -413,23 +400,6 @@
       .code-reference-chip .remove-btn:hover {
         color: #f85149;
         background-color: rgba(248, 81, 73, 0.1);
-      }
-
-      .plan-status-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 4px 8px;
-        border-bottom: 1px solid #30363d;
-        flex-shrink: 0;
-      }
-
-      .plan-status-content {
-        overflow-y: auto;
-        flex: 1;
-        min-height: 0;
-        padding: 8px;
-        white-space: pre-wrap;
       }
 
       .popup-container {
@@ -636,19 +606,19 @@
 
       /* Step History & Others */
       .step-history-details {
-        margin-top: 8px;
-        border: 1px solid #30363d;
-        border-radius: 8px;
-        background: #0d1117;
+        margin-top: 2px;
+        border: none;
+        border-radius: 0;
+        background: transparent;
       }
 
       .step-history-details > summary {
         cursor: pointer;
         list-style: none;
-        padding: 8px 10px;
+        padding: 2px 0;
         font-size: 12px;
-        color: #8b949e;
-        border-bottom: 1px solid transparent;
+        color: #c9d1d9;
+        border: none;
         display: flex;
         align-items: center;
         gap: 8px;
@@ -659,13 +629,13 @@
 
       .step-history-details > div,
       .step-history-details > pre {
-        padding: 8px 10px;
+        padding: 2px 0;
       }
 
       .step-history-details ul,
       .step-history-details ol {
-        margin: 4px 0 4px 0;
-        padding-left: 18px;
+        margin: 4px 0 4px 12px;
+        padding-left: 12px;
         list-style-position: outside;
       }
 
@@ -675,7 +645,6 @@
       }
 
       .step-history-details[open] > summary {
-        border-bottom-color: #30363d;
         color: #c9d1d9;
       }
 
@@ -949,38 +918,6 @@
         class="flex flex-wrap gap-2 mb-2 hidden"
       ></div>
 
-      <!-- ADDED: Plan Status Container above input -->
-      <div id="planStatusContainer" class="plan-status-container hidden">
-        <div class="plan-status-header">
-          <div class="flex items-center gap-2">
-            <span class="font-bold" style="color: #58a6ff">Current Plan</span>
-          </div>
-          <button
-            id="closePlanStatus"
-            class="bg-transparent border-none cursor-pointer text-gray-300 p-1 flex-center"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="h-4 w-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
-        </div>
-        <div
-          id="planStatusContent"
-          class="plan-status-content custom-scrollbar"
-        ></div>
-      </div>
-
       <div id="composerRow" class="flex items-center gap-2">
         <input type="file" id="file-input" multiple class="hidden" />
         <button
@@ -1139,16 +1076,14 @@
         class="flex flex-col overflow-y-auto flex-grow custom-scrollbar"
       >
         <!-- History items will be injected here -->
-        <div class="p-4 text-center text-gray-500 text-sm">
-          No history found
-        </div>
+        <div class="history-empty-state">No history found</div>
       </div>
     </div>
 
     <!-- API Key Modal -->
     <div id="apiKeyModal" class="modal-overlay">
       <div class="modal-content" style="width: min(460px, calc(100vw - 24px))">
-        <div class="font-bold mb-1">OpenAI API Key</div>
+        <div class="font-bold mb-1">Provider Settings</div>
         <div class="text-xs text-gray-400 mb-2">
           Paste API key to update. Leave empty to keep current key.
         </div>
@@ -1159,7 +1094,29 @@
           class="input-standard mb-2"
         />
 
-        <div class="font-bold mb-1 mt-2">Custom API URL (Optional)</div>
+        <div class="font-bold mb-1 mt-2">Manual Provider Name</div>
+        <div class="text-xs text-gray-400 mb-2">
+          Label shown in the model selector for your manual provider.
+        </div>
+        <input
+          id="customProviderNameInput"
+          type="text"
+          placeholder="OpenRouter"
+          class="input-standard mb-2"
+        />
+
+        <div class="font-bold mb-1">Manual Provider Model</div>
+        <div class="text-xs text-gray-400 mb-2">
+          Model name sent to the custom endpoint.
+        </div>
+        <input
+          id="customProviderModelInput"
+          type="text"
+          placeholder="openai/gpt-4.1-mini"
+          class="input-standard mb-2"
+        />
+
+        <div class="font-bold mb-1">Custom API URL (Optional)</div>
         <div class="text-xs text-gray-400 mb-2">
           Endpoint for custom API (OpenAI compatible). Default is OpenAI.
         </div>
@@ -1234,6 +1191,12 @@
         </div>
       </div>
     </div>
+    <script src="%WEBVIEW_WORKFLOW_PATH%"></script>
+    <script src="%WEBVIEW_DISCOVERY_PATH%"></script>
+    <script src="%WEBVIEW_EXECUTION_PATH%"></script>
+    <script src="%WEBVIEW_THINK_PATH%"></script>
+    <script src="%WEBVIEW_EXECUTE_LOOP_PATH%"></script>
+    <script src="%WEBVIEW_HELPERS_PATH%"></script>
     <script type="module">
       var isLoading = false;
       var messageArray = [];
@@ -1254,6 +1217,8 @@
         selectedProvider: "openai",
         selectedModel: "gpt-5.1-codex-mini",
         customApiUrl: "",
+        customProviderName: "",
+        customProviderModel: "",
         hasUserApiKey: false,
         freePromptLimit: 20,
         machinePromptUsed: 0,
@@ -1289,7 +1254,7 @@
       var cachedProjectContext = "";
       var cachedIsEmptyWorkspace = false;
       var cachedContextVersion = -1;
-      window.lastWorkflowParams = null;
+      window.lastWorkflowParams = persistedState.lastWorkflowParams || null;
       window.currentModifiedFiles = new Set();
 
       function updateQuotaBadgeFromSettings() {
@@ -1343,6 +1308,45 @@
         { name: "⚡ gpt-4o-mini", value: "gpt-4o-mini" },
       ];
 
+      function hasCustomProviderConfigured() {
+        return !!(
+          String(currentAiSettings.customApiUrl || "").trim() &&
+          String(currentAiSettings.customProviderModel || "").trim()
+        );
+      }
+
+      function encodeModelSelection(model, provider) {
+        const cleanModel = String(model || "").trim();
+        if (provider === "custom" && cleanModel) {
+          return `custom::${cleanModel}`;
+        }
+        return cleanModel;
+      }
+
+      function decodeModelSelection(selectionValue) {
+        const raw = String(selectionValue || "").trim();
+        if (raw.startsWith("custom::")) {
+          return {
+            provider: "custom",
+            model: raw.replace(/^custom::/, ""),
+          };
+        }
+        if (raw.startsWith("ollama:")) {
+          return { provider: "ollama", model: raw };
+        }
+        return {
+          provider: "openai",
+          model: raw || "gpt-5.1-codex-mini",
+        };
+      }
+
+      function getSelectionValueForCurrentSettings() {
+        return encodeModelSelection(
+          currentAiSettings.selectedModel,
+          currentAiSettings.selectedProvider,
+        );
+      }
+
       let isUpdatingModelSelect = false;
       async function updateModelSelect() {
         const unifiedSelect = document.getElementById("unifiedModelSelect");
@@ -1352,7 +1356,7 @@
         try {
           // Save current selection to restore if possible
           const currentVal =
-            unifiedSelect.value || currentAiSettings.selectedModel;
+            unifiedSelect.value || getSelectionValueForCurrentSettings();
 
           // Fetch ollama models first so we have all data ready
           const ollamaModels = await fetchOllamaModels();
@@ -1390,6 +1394,19 @@
           }
           unifiedSelect.appendChild(ollamaGroup);
 
+          if (hasCustomProviderConfigured()) {
+            const customGroup = document.createElement("optgroup");
+            customGroup.label = "Manual Provider";
+            const opt = document.createElement("option");
+            opt.value = encodeModelSelection(
+              currentAiSettings.customProviderModel,
+              "custom",
+            );
+            opt.textContent = `🔌 ${currentAiSettings.customProviderName || "Custom"} · ${currentAiSettings.customProviderModel}`;
+            customGroup.appendChild(opt);
+            unifiedSelect.appendChild(customGroup);
+          }
+
           // Restore value
           if (
             Array.from(unifiedSelect.options).some(
@@ -1402,12 +1419,9 @@
           }
 
           // Sync back to settings
-          currentAiSettings.selectedModel = unifiedSelect.value;
-          currentAiSettings.selectedProvider = unifiedSelect.value.startsWith(
-            "ollama:",
-          )
-            ? "ollama"
-            : "openai";
+          const decodedSelection = decodeModelSelection(unifiedSelect.value);
+          currentAiSettings.selectedModel = decodedSelection.model;
+          currentAiSettings.selectedProvider = decodedSelection.provider;
         } finally {
           isUpdatingModelSelect = false;
         }
@@ -1425,23 +1439,25 @@
         return new Set(["gpt-5.1-codex-mini", "gpt-4o-mini"]);
       }
 
-      function ensureSupportedModel(selected) {
+      function ensureSupportedModel(selected, providerHint) {
         const candidate = String(selected || "").trim();
-        if (candidate.startsWith("ollama:")) {
-          return candidate;
-        }
+        const selectionValue = encodeModelSelection(
+          candidate,
+          providerHint || currentAiSettings.selectedProvider,
+        );
         const allowed = getModelOptionsSet();
-        if (allowed.has(candidate)) {
-          return candidate;
+        if (allowed.has(selectionValue)) {
+          return decodeModelSelection(selectionValue).model;
         }
         if (allowed.has("gpt-5.1-codex-mini")) {
           return "gpt-5.1-codex-mini";
         }
-        return Array.from(allowed)[0] || "gpt-5.1-codex-mini";
+        const firstAllowed = Array.from(allowed)[0] || "gpt-5.1-codex-mini";
+        return decodeModelSelection(firstAllowed).model;
       }
 
-      function isFreeQuotaModel(model) {
-        if (String(model || "").startsWith("ollama:")) {
+      function isFreeQuotaModel(model, providerHint) {
+        if ((providerHint || currentAiSettings.selectedProvider) !== "openai") {
           return true;
         }
         return ["gpt-5.1-codex-mini", "gpt-4o-mini"].includes(
@@ -1450,8 +1466,15 @@
       }
 
       function resolveAllowedModelOrFallback(model) {
-        const m = ensureSupportedModel(model);
-        if (currentAiSettings.hasUserApiKey || isFreeQuotaModel(m)) {
+        const m = ensureSupportedModel(
+          model,
+          currentAiSettings.selectedProvider,
+        );
+        if (
+          currentAiSettings.selectedProvider !== "openai" ||
+          currentAiSettings.hasUserApiKey ||
+          isFreeQuotaModel(m, currentAiSettings.selectedProvider)
+        ) {
           return m;
         }
         return isFreeQuotaModel(lastAllowedModel)
@@ -1889,10 +1912,21 @@
               window.removeEventListener("message", handleMessage);
               currentAiSettings.selectedModel = ensureSupportedModel(
                 event.data.selectedModel || currentAiSettings.selectedModel,
+                event.data.selectedProvider ||
+                  currentAiSettings.selectedProvider,
               );
+              currentAiSettings.selectedProvider =
+                event.data.selectedProvider ||
+                currentAiSettings.selectedProvider;
               currentAiSettings.hasUserApiKey = !!event.data.hasUserApiKey;
               currentAiSettings.customApiUrl =
                 event.data.customApiUrl || currentAiSettings.customApiUrl;
+              currentAiSettings.customProviderName =
+                event.data.customProviderName ||
+                currentAiSettings.customProviderName;
+              currentAiSettings.customProviderModel =
+                event.data.customProviderModel ||
+                currentAiSettings.customProviderModel;
               currentAiSettings.freePromptLimit =
                 event.data.freePromptLimit ?? currentAiSettings.freePromptLimit;
               currentAiSettings.machinePromptUsed =
@@ -1911,6 +1945,7 @@
             requestId,
             mode,
             model,
+            provider: currentAiSettings.selectedProvider,
           });
         });
       }
@@ -1919,10 +1954,24 @@
         const modal = document.getElementById("apiKeyModal");
         const input = document.getElementById("apiKeyInput");
         const customUrlInput = document.getElementById("customApiUrlInput");
+        const customProviderNameInput = document.getElementById(
+          "customProviderNameInput",
+        );
+        const customProviderModelInput = document.getElementById(
+          "customProviderModelInput",
+        );
         if (!modal || !input) return;
         input.value = "";
         if (customUrlInput && currentAiSettings.customApiUrl) {
           customUrlInput.value = currentAiSettings.customApiUrl;
+        }
+        if (customProviderNameInput) {
+          customProviderNameInput.value =
+            currentAiSettings.customProviderName || "";
+        }
+        if (customProviderModelInput) {
+          customProviderModelInput.value =
+            currentAiSettings.customProviderModel || "";
         }
         modal.style.display = "flex";
         setTimeout(() => input.focus(), 10);
@@ -1934,31 +1983,79 @@
         modal.style.display = "none";
       }
 
+      async function askUserQuestion(questions) {
+        const prompts = Array.isArray(questions) ? questions : [];
+        if (prompts.length === 0) return [];
+        const answers = [];
+        for (const item of prompts) {
+          const promptText = String(item?.question || "Provide input:");
+          const optionLabels = Array.isArray(item?.options)
+            ? item.options
+                .map((opt) => String(opt?.label || "").trim())
+                .filter(Boolean)
+            : [];
+          const defaultValue = optionLabels.length === 1 ? optionLabels[0] : "";
+          const suffix =
+            optionLabels.length > 0
+              ? `\n\nOptions: ${optionLabels.join(" / ")}`
+              : "";
+          const response = window.prompt(
+            `${promptText}${suffix}`,
+            defaultValue,
+          );
+          if (response === null) {
+            return null;
+          }
+          answers.push(String(response).trim());
+        }
+        return answers;
+      }
+
       function submitApiKeyFromModal() {
         const unifiedSelect = document.getElementById("unifiedModelSelect");
         const input = document.getElementById("apiKeyInput");
         const customUrlInput = document.getElementById("customApiUrlInput");
+        const customProviderNameInput = document.getElementById(
+          "customProviderNameInput",
+        );
+        const customProviderModelInput = document.getElementById(
+          "customProviderModelInput",
+        );
         if (!input) return;
+        const decodedSelection = decodeModelSelection(
+          (unifiedSelect && unifiedSelect.value) ||
+            getSelectionValueForCurrentSettings(),
+        );
         vscode.postMessage({
           type: "saveAiSettings",
-          model:
-            (unifiedSelect && unifiedSelect.value) ||
-            currentAiSettings.selectedModel ||
-            "gpt-5.1-codex-mini",
+          model: decodedSelection.model || currentAiSettings.selectedModel,
           provider:
-            unifiedSelect &&
-            unifiedSelect.value &&
-            unifiedSelect.value.startsWith("ollama:")
-              ? "ollama"
-              : "openai",
+            decodedSelection.provider || currentAiSettings.selectedProvider,
           userApiKey: input.value.trim(),
           customApiUrl: customUrlInput ? customUrlInput.value.trim() : "",
+          customProviderName: customProviderNameInput
+            ? customProviderNameInput.value.trim()
+            : "",
+          customProviderModel: customProviderModelInput
+            ? customProviderModelInput.value.trim()
+            : "",
           keepExistingApiKey: input.value.trim() === "",
         });
         closeApiKeyModal();
       }
 
       function saveState() {
+        const persistableLastParams = (() => {
+          const p = window.lastWorkflowParams;
+          if (!p) return null;
+          return {
+            attachments: Array.isArray(p.attachments) ? p.attachments : [],
+            aiConfig: p.aiConfig || {},
+            existingContext: p.existingContext || "",
+            existingWorkflowMeta: null, // drop non-serializable fields (Map/Set) on persist
+          };
+        })();
+
         vscode.setState({
           messagesHTML: document.getElementById("content").innerHTML,
           input: document.getElementById("messageInput")?.value ?? "",
@@ -1970,9 +2067,12 @@
             document.getElementById("unifiedModelSelect")?.value ??
               currentAiSettings.selectedModel ??
               "gpt-5.1-codex-mini",
+            currentAiSettings.selectedProvider,
           ),
+          provider: currentAiSettings.selectedProvider,
           currentSessionId: currentSessionId,
           selectedCodeReferences: selectedCodeReferences,
+          lastWorkflowParams: persistableLastParams,
         });
 
         // Notify extension about the current session ID
@@ -2067,13 +2167,6 @@
           // Reset plan button and status
           const planButton = document.getElementById("planButton");
           if (planButton) planButton.style.display = "none";
-          const planStatusContainer = document.getElementById(
-            "planStatusContainer",
-          );
-          if (planStatusContainer) planStatusContainer.classList.add("hidden");
-          const planStatusContent =
-            document.getElementById("planStatusContent");
-          if (planStatusContent) planStatusContent.innerHTML = "";
 
           window.fileContentMap.clear();
           window.filePathCache.clear();
@@ -2201,7 +2294,7 @@
 
         if (!window.chatHistory || window.chatHistory.length === 0) {
           listContainer.innerHTML =
-            '<div class="p-4 text-center text-gray-500 text-sm">No history found</div>';
+            '<div class="history-empty-state">No history found</div>';
           return;
         }
 
@@ -2281,17 +2374,19 @@
         }
         if (unifiedSelect) {
           unifiedSelect.addEventListener("change", () => {
-            const requestedModel = ensureSupportedModel(
+            const decodedSelection = decodeModelSelection(
               unifiedSelect.value || "gpt-5.1-codex-mini",
             );
-            const provider = requestedModel.startsWith("ollama:")
-              ? "ollama"
-              : "openai";
+            const provider = decodedSelection.provider;
+            const requestedModel = ensureSupportedModel(
+              decodedSelection.model || "gpt-5.1-codex-mini",
+              provider,
+            );
 
             if (
               provider === "openai" &&
               !currentAiSettings.hasUserApiKey &&
-              !isFreeQuotaModel(requestedModel)
+              !isFreeQuotaModel(requestedModel, provider)
             ) {
               unifiedSelect.value = resolveAllowedModelOrFallback(
                 currentAiSettings.selectedModel,
@@ -2302,11 +2397,16 @@
             }
             currentAiSettings.selectedModel = requestedModel;
             currentAiSettings.selectedProvider = provider;
-            lastAllowedModel = requestedModel;
+            if (provider === "openai") {
+              lastAllowedModel = requestedModel;
+            }
             vscode.postMessage({
               type: "saveAiSettings",
               model: currentAiSettings.selectedModel,
               provider: currentAiSettings.selectedProvider,
+              customApiUrl: currentAiSettings.customApiUrl,
+              customProviderName: currentAiSettings.customProviderName,
+              customProviderModel: currentAiSettings.customProviderModel,
               userApiKey: "",
               keepExistingApiKey: true,
             });
@@ -2450,21 +2550,9 @@
           });
         }
 
-        // Plan Button Logic (Handled above in DOMContentLoaded)
-        const planStatusContainer = document.getElementById(
-          "planStatusContainer",
-        );
-        const closePlanStatus = document.getElementById("closePlanStatus");
-
         const closePlanPopupBtn = document.getElementById("closePlanPopup");
         if (closePlanPopupBtn) {
           closePlanPopupBtn.addEventListener("click", hidePlanPopup);
-        }
-
-        if (closePlanStatus && planStatusContainer) {
-          closePlanStatus.addEventListener("click", () => {
-            planStatusContainer.classList.add("hidden");
-          });
         }
 
         messageInput.value = messageInput.value.trim();
@@ -2721,23 +2809,27 @@
               ...currentAiSettings,
               ...messageEvent,
             };
-            const unifiedSelect =
-              document.getElementById("unifiedModelSelect");
+            const unifiedSelect = document.getElementById("unifiedModelSelect");
             if (unifiedSelect) {
               await updateModelSelect();
               const allowedModel = resolveAllowedModelOrFallback(
                 currentAiSettings.selectedModel,
               );
-              unifiedSelect.value = allowedModel;
+              unifiedSelect.value = encodeModelSelection(
+                allowedModel,
+                currentAiSettings.selectedProvider,
+              );
               currentAiSettings.selectedModel = allowedModel;
-              currentAiSettings.selectedProvider = allowedModel.startsWith(
-                "ollama:",
-              )
-                ? "ollama"
-                : "openai";
+              currentAiSettings.selectedProvider = decodeModelSelection(
+                unifiedSelect.value,
+              ).provider;
               if (
+                currentAiSettings.selectedProvider !== "openai" ||
                 currentAiSettings.hasUserApiKey ||
-                isFreeQuotaModel(allowedModel)
+                isFreeQuotaModel(
+                  allowedModel,
+                  currentAiSettings.selectedProvider,
+                )
               ) {
                 lastAllowedModel = allowedModel;
               }
@@ -2751,23 +2843,27 @@
               ...currentAiSettings,
               ...messageEvent,
             };
-            const unifiedSelect =
-              document.getElementById("unifiedModelSelect");
+            const unifiedSelect = document.getElementById("unifiedModelSelect");
             if (unifiedSelect) {
               await updateModelSelect();
               const allowedModel = resolveAllowedModelOrFallback(
                 currentAiSettings.selectedModel,
               );
-              unifiedSelect.value = allowedModel;
+              unifiedSelect.value = encodeModelSelection(
+                allowedModel,
+                currentAiSettings.selectedProvider,
+              );
               currentAiSettings.selectedModel = allowedModel;
-              currentAiSettings.selectedProvider = allowedModel.startsWith(
-                "ollama:",
-              )
-                ? "ollama"
-                : "openai";
+              currentAiSettings.selectedProvider = decodeModelSelection(
+                unifiedSelect.value,
+              ).provider;
               if (
+                currentAiSettings.selectedProvider !== "openai" ||
                 currentAiSettings.hasUserApiKey ||
-                isFreeQuotaModel(allowedModel)
+                isFreeQuotaModel(
+                  allowedModel,
+                  currentAiSettings.selectedProvider,
+                )
               ) {
                 lastAllowedModel = allowedModel;
               }
@@ -2873,16 +2969,22 @@
                   const allowedModel = resolveAllowedModelOrFallback(
                     persistedState.model,
                   );
-                  unifiedSelect.value = allowedModel;
+                  unifiedSelect.value = encodeModelSelection(
+                    allowedModel,
+                    persistedState.provider ||
+                      currentAiSettings.selectedProvider,
+                  );
                   currentAiSettings.selectedModel = allowedModel;
-                  currentAiSettings.selectedProvider = allowedModel.startsWith(
-                    "ollama:",
-                  )
-                    ? "ollama"
-                    : "openai";
+                  currentAiSettings.selectedProvider = decodeModelSelection(
+                    unifiedSelect.value,
+                  ).provider;
                   if (
+                    currentAiSettings.selectedProvider !== "openai" ||
                     currentAiSettings.hasUserApiKey ||
-                    isFreeQuotaModel(allowedModel)
+                    isFreeQuotaModel(
+                      allowedModel,
+                      currentAiSettings.selectedProvider,
+                    )
                   ) {
                     lastAllowedModel = allowedModel;
                   }
@@ -2914,16 +3016,22 @@
                   const allowedModel = resolveAllowedModelOrFallback(
                     persistedState.model,
                   );
-                  unifiedSelect.value = allowedModel;
+                  unifiedSelect.value = encodeModelSelection(
+                    allowedModel,
+                    persistedState.provider ||
+                      currentAiSettings.selectedProvider,
+                  );
                   currentAiSettings.selectedModel = allowedModel;
-                  currentAiSettings.selectedProvider = allowedModel.startsWith(
-                    "ollama:",
-                  )
-                    ? "ollama"
-                    : "openai";
+                  currentAiSettings.selectedProvider = decodeModelSelection(
+                    unifiedSelect.value,
+                  ).provider;
                   if (
+                    currentAiSettings.selectedProvider !== "openai" ||
                     currentAiSettings.hasUserApiKey ||
-                    isFreeQuotaModel(allowedModel)
+                    isFreeQuotaModel(
+                      allowedModel,
+                      currentAiSettings.selectedProvider,
+                    )
                   ) {
                     lastAllowedModel = allowedModel;
                   }
@@ -3077,6 +3185,19 @@
         return arr;
       }
 
+      function isResumeCommand(text) {
+        const t = String(text || "")
+          .trim()
+          .toLowerCase();
+        return [
+          "continue",
+          "lanjut",
+          "lanjutkan",
+          "resume",
+          "teruskan",
+        ].includes(t);
+      }
+
       function handleKeyDown(event) {
         if (event.key === "Enter" && !event.shiftKey) {
           event.preventDefault();
@@ -3096,6 +3217,22 @@
         const messageInput = document.getElementById("messageInput");
         const messageVal = messageInput.value.trim();
         if (!messageVal) return;
+
+        // Early: if user types a resume-intent command in Agent mode and we have a previous workflow, resume it
+        try {
+          const modeSelect = document.getElementById("modeSelect");
+          const currentMode = modeSelect ? modeSelect.value : "agent";
+          if (
+            currentMode === "agent" &&
+            isResumeCommand(messageVal) &&
+            window.lastWorkflowParams
+          ) {
+            await resumeLastWorkflowFromButton();
+            return;
+          }
+        } catch (e) {
+          console.warn("Resume intent check failed:", e);
+        }
 
         lastSentMessage = messageVal;
 
@@ -3160,9 +3297,11 @@
           (unifiedSelect && unifiedSelect.value) ||
             currentAiSettings.selectedModel ||
             "gpt-5.1-codex-mini",
+          currentAiSettings.selectedProvider,
         );
         if (
           (mode === "agent" || mode === "chat") &&
+          currentAiSettings.selectedProvider === "openai" &&
           !isFreeQuotaModel(selectedModel) &&
           !currentAiSettings.hasUserApiKey
         ) {
@@ -3213,6 +3352,84 @@
         console.log("send message to API");
         if (!message) return;
         sendMessageToApi(message);
+      }
+
+      async function resumeLastWorkflowFromButton(buttonEl = null) {
+        if (isLoading) return;
+        const params = window.lastWorkflowParams;
+        if (!params) {
+          resetSendUiAfterEarlyExit();
+          if (buttonEl) {
+            buttonEl.disabled = false;
+            buttonEl.classList.remove("opacity-50", "cursor-not-allowed");
+            buttonEl.innerHTML = `
+              <div class="flex items-center justify-center w-5 h-5 rounded-full bg-white/20 group-hover:bg-white/30 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" style="width: 12px; height: 12px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+              </div>
+              <span class="font-semibold tracking-wide">Continue</span>
+            `;
+          }
+          return;
+        }
+
+        isLoading = true;
+        abortController = new AbortController();
+        lastSentMessage = "Continue";
+
+        const generatingEl = document.getElementById("generating");
+        if (generatingEl) generatingEl.innerHTML = "Generating...";
+        const sendMessageButton = document.getElementById("button-send");
+        const stopButton = document.getElementById("button-stop");
+        const newChatButton = document.getElementById("newChatButton");
+        const historyButton = document.getElementById("historyButton");
+        const messageInput = document.getElementById("messageInput");
+
+        if (sendMessageButton) sendMessageButton.classList.add("hidden");
+        if (stopButton) stopButton.classList.remove("hidden");
+        if (newChatButton) newChatButton.disabled = true;
+        if (historyButton) historyButton.disabled = true;
+        if (messageInput) messageInput.disabled = true;
+
+        const uniqueId = Date.now() + Math.random();
+        displayMessagesAssistant({
+          role: "user",
+          content: "Continue",
+          uniqueId,
+        });
+        messageArray.push({ role: "user", content: "Continue" });
+        saveState();
+
+        displayMessagesAssistant({
+          role: "assistant",
+          content: "",
+          uniqueId: `assistant-${uniqueId}`,
+        });
+
+        agentAbortController = new AbortController();
+        try {
+          await handleAgentWorkflow(
+            "Continue",
+            uniqueId,
+            Array.isArray(params.attachments) ? params.attachments : [],
+            false,
+            params.aiConfig || {},
+            params.existingContext || "",
+            params.existingWorkflowMeta || null,
+          );
+        } catch (err) {
+          if (err?.name !== "AbortError") {
+            console.error("Resume workflow error:", err);
+            updateMessagesAssistant({
+              uniqueId: `assistant-${uniqueId}`,
+              content: `⚠️ Failed to resume workflow: ${err?.message || err}`,
+            });
+          }
+          isLoading = false;
+          pendingPromptAccess = null;
+          resetSendUiAfterEarlyExit();
+        }
       }
 
       function stopGeneration() {
@@ -3355,6 +3572,7 @@
           (modelSelect && modelSelect.value) ||
             currentAiSettings.selectedModel ||
             "gpt-5.1-codex-mini",
+          currentAiSettings.selectedProvider,
         );
 
         // Workspace dirty auto-sync is disabled; do not block send flow.
@@ -3380,10 +3598,19 @@
         }
         currentAiSettings.selectedModel = ensureSupportedModel(
           pendingPromptAccess.selectedModel || selectedModel,
+          pendingPromptAccess.selectedProvider ||
+            currentAiSettings.selectedProvider,
         );
+        currentAiSettings.selectedProvider =
+          pendingPromptAccess.selectedProvider ||
+          currentAiSettings.selectedProvider;
         if (
+          currentAiSettings.selectedProvider !== "openai" ||
           currentAiSettings.hasUserApiKey ||
-          isFreeQuotaModel(currentAiSettings.selectedModel)
+          isFreeQuotaModel(
+            currentAiSettings.selectedModel,
+            currentAiSettings.selectedProvider,
+          )
         ) {
           lastAllowedModel = currentAiSettings.selectedModel;
         }
@@ -3410,7 +3637,11 @@
           try {
             await handleAgentWorkflow(message, uniqueId, snapshot, false, {
               model: currentAiSettings.selectedModel || selectedModel,
+              provider: currentAiSettings.selectedProvider,
               userApiKey: resolvedUserApiKey,
+              customApiUrl: currentAiSettings.customApiUrl,
+              customProviderName: currentAiSettings.customProviderName,
+              customProviderModel: currentAiSettings.customProviderModel,
               history: compactHistory(messageArray), // Also send for consistency
             });
           } catch (err) {
@@ -3428,7 +3659,11 @@
           message,
           mode: mode,
           model: currentAiSettings.selectedModel || selectedModel,
+          provider: currentAiSettings.selectedProvider,
           userApiKey: resolvedUserApiKey,
+          customApiUrl: currentAiSettings.customApiUrl,
+          customProviderName: currentAiSettings.customProviderName,
+          customProviderModel: currentAiSettings.customProviderModel,
           attachments: normalizedAttachments,
           guardrails: currentGuardrails,
           sessionId: currentSessionId,
@@ -3527,8 +3762,8 @@
           const hasClosingWriteFile = /\[\/(?:writeFile|writeFileVico)\]/i.test(
             assistantMessage,
           );
-          const hasFileBlock = assistantMessage.includes("[file ");
-          const hasDiffBlock = assistantMessage.includes("[diff ");
+          const { hasFileBlock, hasDiffBlock } =
+            hasWritableBlocks(assistantMessage);
 
           console.log(
             `[writeFile] Validation: hasWriteFile=${hasWriteFile}, hasClosing=${hasClosingWriteFile}, hasFile=${hasFileBlock}, hasDiff=${hasDiffBlock}`,
@@ -3694,7 +3929,10 @@
           aiConfig.model ||
             currentAiSettings.selectedModel ||
             "gpt-5.1-codex-mini",
+          aiConfig.provider || currentAiSettings.selectedProvider,
         );
+        const selectedProvider =
+          aiConfig.provider || currentAiSettings.selectedProvider || "openai";
         const userApiKey = aiConfig.userApiKey || "";
         const verificationMode =
           aiConfig.verificationMode ||
@@ -3724,6 +3962,231 @@
         let lastPlanSignature = "";
         let consecutiveFailedIterations = 0;
         let consecutiveVerificationOnlyIterations = 0;
+        let recoveryPending = false;
+        const bootDiagnostics = [];
+        const resolveBootHelper = (name, candidates, fallback) => {
+          for (const candidate of candidates) {
+            if (typeof candidate.value === "function") {
+              return candidate.value;
+            }
+          }
+          bootDiagnostics.push(name);
+          return fallback;
+        };
+        const getWriteTargetMatches = resolveBootHelper(
+          "getWriteTargetMatches",
+          [
+            { value: window.VicoWebviewHelpers?.getWriteTargetMatches },
+            { value: window.VicoWorkflowHelpers?.getWriteTargetMatches },
+            { value: window.getWriteTargetMatches },
+          ],
+          (text) =>
+            Array.from(
+              String(text || "").matchAll(
+                /\[(file|diff)\s+(?:name|path)=["']?([^"'\s\]]+)["']?(?:\s+type=["'][^"']+["'])?\]/gi,
+              ),
+            ).map((m) => ({
+              kind:
+                String(m[1] || "").toLowerCase() === "diff" ? "diff" : "file",
+              path: String(m[2] || "").trim(),
+            })),
+        );
+        const hasWritableBlocks = resolveBootHelper(
+          "hasWritableBlocks",
+          [
+            { value: window.VicoWebviewHelpers?.hasWritableBlocks },
+            { value: window.VicoWorkflowHelpers?.hasWritableBlocks },
+            { value: window.hasWritableBlocks },
+          ],
+          (text) => {
+            const targets = getWriteTargetMatches(text);
+            return {
+              hasFileBlock: targets.some((t) => t.kind === "file"),
+              hasDiffBlock: targets.some((t) => t.kind === "diff"),
+            };
+          },
+        );
+        const getFilePayloadBlocks = resolveBootHelper(
+          "getFilePayloadBlocks",
+          [
+            { value: window.VicoWebviewHelpers?.getFilePayloadBlocks },
+            { value: window.VicoWorkflowHelpers?.getFilePayloadBlocks },
+            { value: window.getFilePayloadBlocks },
+          ],
+          (text) =>
+            Array.from(
+              String(text || "").matchAll(
+                /\[file\s+(?:name|path)=["']?([^"'\s\]]+)["']?(?:\s+type=["'][^"']+["'])?\]([\s\S]*?)(?:\[\s*\/file\s*\]|(?=\[\/?(?:file|diff|writeFile|writeFileVico))|$)/gi,
+              ),
+            ).map((m) => ({
+              path: String(m[1] || "").trim(),
+              content: String(m[2] || ""),
+            })),
+        );
+        const getCompletionState = resolveBootHelper(
+          "getCompletionState",
+          [
+            { value: window.VicoWebviewHelpers?.getCompletionState },
+            { value: window.VicoWorkflowHelpers?.getCompletionState },
+            { value: window.getCompletionState },
+          ],
+          (inputs) => ({
+            recoverySatisfied:
+              inputs.recoveryStepExecuted ||
+              (inputs.verificationOnlyPlan &&
+                !inputs.hadStepError &&
+                !inputs.autoFixTriggered),
+            canUseCompletionShortcut: !inputs.recoveryPending,
+          }),
+        );
+        const buildDiscoverySuggestion = resolveBootHelper(
+          "buildDiscoverySuggestion",
+          [
+            { value: window.VicoWebviewHelpers?.buildDiscoverySuggestion },
+            { value: window.buildDiscoverySuggestion },
+          ],
+          () => "",
+        );
+        const summarizeExecutionOutput = resolveBootHelper(
+          "summarizeExecutionOutput",
+          [
+            { value: window.VicoWebviewHelpers?.summarizeExecutionOutput },
+            { value: window.VicoExecutionHelpers?.summarizeExecutionOutput },
+            { value: window.summarizeExecutionOutput },
+          ],
+          (step, output) => ({
+            step: step && step.step,
+            description: step && step.description,
+            changed_files: [],
+            command: "",
+            has_replan: /\[REPLAN\s*\]/i.test(String(output || "")),
+            has_write: /\[(?:writeFile|writeFileVico)\s*\]/i.test(
+              String(output || ""),
+            ),
+            short_output: String(output || "").slice(0, 1500),
+            at: new Date().toISOString(),
+          }),
+        );
+        const collectWriteTargets = resolveBootHelper(
+          "collectWriteTargets",
+          [
+            { value: window.VicoWebviewHelpers?.collectWriteTargets },
+            { value: window.VicoExecutionHelpers?.collectWriteTargets },
+            { value: window.collectWriteTargets },
+          ],
+          (text) => {
+            const matches = getWriteTargetMatches(text);
+            return {
+              matches,
+              targetFiles: Array.from(new Set(matches.map((m) => m.path))),
+              diffTargets: Array.from(
+                new Set(
+                  matches.filter((m) => m.kind === "diff").map((m) => m.path),
+                ),
+              ),
+            };
+          },
+        );
+        const normalizeFileBlockContent = resolveBootHelper(
+          "normalizeFileBlockContent",
+          [
+            { value: window.VicoWebviewHelpers?.normalizeFileBlockContent },
+            { value: window.VicoExecutionHelpers?.normalizeFileBlockContent },
+            { value: window.normalizeFileBlockContent },
+          ],
+          (content) => String(content || ""),
+        );
+        const readFileWithTimeout = resolveBootHelper(
+          "readFileWithTimeout",
+          [
+            { value: window.VicoWebviewHelpers?.readFileWithTimeout },
+            { value: window.VicoExecutionHelpers?.readFileWithTimeout },
+            { value: window.readFileWithTimeout },
+          ],
+          async () => null,
+        );
+        const waitForWriteFile = resolveBootHelper(
+          "waitForWriteFile",
+          [
+            { value: window.VicoWebviewHelpers?.waitForWriteFile },
+            { value: window.VicoExecutionHelpers?.waitForWriteFile },
+            { value: window.waitForWriteFile },
+          ],
+          async () => undefined,
+        );
+        const executeCommandWithStreaming = resolveBootHelper(
+          "executeCommandWithStreaming",
+          [
+            { value: window.VicoWebviewHelpers?.executeCommandWithStreaming },
+            { value: window.VicoExecutionHelpers?.executeCommandWithStreaming },
+            { value: window.executeCommandWithStreaming },
+          ],
+          async () => ({ exitCode: 0, output: "" }),
+        );
+        const analyzeCommandFailure = resolveBootHelper(
+          "analyzeCommandFailure",
+          [
+            { value: window.VicoWebviewHelpers?.analyzeCommandFailure },
+            { value: window.VicoExecutionHelpers?.analyzeCommandFailure },
+            { value: window.analyzeCommandFailure },
+          ],
+          () => ({}),
+        );
+        const runThinkDiscovery = resolveBootHelper(
+          "runThinkDiscovery",
+          [
+            { value: window.VicoThinkHelpers?.runThinkDiscovery },
+            { value: window.runThinkDiscovery },
+          ],
+          async ({ context = "", markdown = "" }) => ({
+            context,
+            markdown,
+          }),
+        );
+        const normalizeExecuteStepOutput = resolveBootHelper(
+          "normalizeExecuteStepOutput",
+          [
+            {
+              value: window.VicoExecuteLoopHelpers?.normalizeExecuteStepOutput,
+            },
+            { value: window.normalizeExecuteStepOutput },
+          ],
+          (inputs) => ({
+            stepOutput: String(inputs?.stepOutput || ""),
+            context: String(inputs?.context || ""),
+            notices: [],
+            hasWriteFileTag: /\[(?:writeFile|writeFileVico)\]/i.test(
+              String(inputs?.stepOutput || ""),
+            ),
+            formatWarnings: [],
+          }),
+        );
+        const appendExecutionOutputMarkdown = resolveBootHelper(
+          "appendExecutionOutputMarkdown",
+          [
+            {
+              value:
+                window.VicoExecuteLoopHelpers?.appendExecutionOutputMarkdown,
+            },
+            { value: window.appendExecutionOutputMarkdown },
+          ],
+          (inputs) => String(inputs?.planMarkdown || ""),
+        );
+        window.__vicoBootDiagnostics = bootDiagnostics;
+        if (bootDiagnostics.length > 0) {
+          console.warn(
+            "[Vico boot diagnostics] Missing helper implementations:",
+            bootDiagnostics.join(", "),
+          );
+          window.setTimeout(() => {
+            const banner = document.createElement("div");
+            banner.className = "vico-boot-diagnostics";
+            banner.textContent =
+              "Vico boot diagnostics: fallback helpers active for " +
+              bootDiagnostics.join(", ");
+            document.body.appendChild(banner);
+          }, 0);
+        }
         const workflowMeta = existingWorkflowMeta || {
           changeVersion: 0,
           lastVerifiedVersion: -1,
@@ -4287,7 +4750,10 @@
                     userId,
                     token,
                     model: selectedModel,
+                    provider: selectedProvider,
                     userApiKey,
+                    customApiUrl:
+                      aiConfig.customApiUrl || currentAiSettings.customApiUrl,
                     verification_mode: verificationMode,
                     message,
                     attachments,
@@ -4685,7 +5151,8 @@ ${result.summary || "Executed successfully."}`,
             if (
               isExplicitlyDone &&
               !result.hadStepError &&
-              !result.autoFixTriggered
+              !result.autoFixTriggered &&
+              canUseCompletionShortcut
             ) {
               updateMessagesAssistant({
                 uniqueId: `assistant-${currentUniqueId}`,
@@ -4707,6 +5174,15 @@ ${result.summary || "Executed successfully."}`,
             const verificationOnlyPlan =
               planSteps.length > 0 &&
               planSteps.every((s) => isVerificationOnlyStep(s));
+            const completionState = getCompletionState({
+              recoveryPending,
+              recoveryStepExecuted: !!result.recoveryStepExecuted,
+              verificationOnlyPlan,
+              hadStepError: !!result.hadStepError,
+              autoFixTriggered: !!result.autoFixTriggered,
+            });
+            const { recoverySatisfied, canUseCompletionShortcut } =
+              completionState;
             const noFileChangesThisIteration =
               !result.modifiedFiles || result.modifiedFiles.size === 0;
             if (
@@ -4721,7 +5197,8 @@ ${result.summary || "Executed successfully."}`,
             }
             if (
               consecutiveVerificationOnlyIterations >=
-              (isSimpleVanillaTaskGlobal || isSimpleAssetTask ? 1 : 2)
+                (isSimpleVanillaTaskGlobal || isSimpleAssetTask ? 1 : 2) &&
+              canUseCompletionShortcut
             ) {
               updateMessagesAssistant({
                 uniqueId: `assistant-${currentUniqueId}`,
@@ -4744,14 +5221,14 @@ ${result.summary || "Executed successfully."}`,
             const hasCriticalFailure = criticalFailurePattern.test(
               String(result.summary || ""),
             );
-
             // Special handling for simple tasks: if we changed files and no critical error, we can stop.
             if (
               (isSimpleVanillaTaskGlobal || isSimpleAssetTask) &&
               hasPersistedImplementation &&
               !hasCriticalFailure &&
               !result.hadStepError &&
-              !result.autoFixTriggered
+              !result.autoFixTriggered &&
+              canUseCompletionShortcut
             ) {
               updateMessagesAssistant({
                 uniqueId: `assistant-${currentUniqueId}`,
@@ -4767,7 +5244,13 @@ ${result.summary || "Executed successfully."}`,
               return;
             }
 
-            if (hasPersistedImplementation && !hasCriticalFailure) {
+            if (
+              hasPersistedImplementation &&
+              !hasCriticalFailure &&
+              !result.hadStepError &&
+              !result.autoFixTriggered &&
+              canUseCompletionShortcut
+            ) {
               updateMessagesAssistant({
                 uniqueId: `assistant-${currentUniqueId}`,
                 content: `${result.summary || ""}\n\n✅ **Task Completed:** Implementation persisted. Skipping extra strict verification.`,
@@ -4782,6 +5265,7 @@ ${result.summary || "Executed successfully."}`,
               return;
             }
             if (result.autoFixTriggered) {
+              recoveryPending = true;
               consecutiveFailedIterations++;
               if (
                 isSimpleVanillaTaskGlobal &&
@@ -4810,6 +5294,7 @@ ${result.summary || "Executed successfully."}`,
               continue;
             }
             if (result.hadStepError) {
+              recoveryPending = true;
               consecutiveFailedIterations++;
               if (
                 isSimpleVanillaTaskGlobal &&
@@ -4837,6 +5322,9 @@ ${result.summary || "Executed successfully."}`,
               });
               continue;
             }
+            if (recoveryPending && recoverySatisfied) {
+              recoveryPending = false;
+            }
             consecutiveFailedIterations = 0;
             if (
               result.modifiedFiles &&
@@ -4849,7 +5337,8 @@ ${result.summary || "Executed successfully."}`,
             if (
               isSimpleVanillaTaskGlobal &&
               result.modifiedFiles &&
-              result.modifiedFiles.size > 0
+              result.modifiedFiles.size > 0 &&
+              canUseCompletionShortcut
             ) {
               updateMessagesAssistant({
                 uniqueId: `assistant-${currentUniqueId}`,
@@ -4932,7 +5421,10 @@ ${result.summary || "Executed successfully."}`,
           aiConfig.model ||
             currentAiSettings.selectedModel ||
             "gpt-5.1-codex-mini",
+          aiConfig.provider || currentAiSettings.selectedProvider,
         );
+        const selectedProvider =
+          aiConfig.provider || currentAiSettings.selectedProvider || "openai";
         const userApiKey = aiConfig.userApiKey || "";
         const verificationMode =
           (aiConfig && aiConfig.verificationMode) || "normal";
@@ -4954,6 +5446,7 @@ ${result.summary || "Executed successfully."}`,
         let modifiedFiles = new Set();
         let autoFixTriggered = false;
         let hadStepError = false;
+        let recoveryStepExecuted = false;
         const stepHistoryBlocks = [];
         const escapeRegExp = (s) =>
           String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -5178,7 +5671,10 @@ ${result.summary || "Executed successfully."}`,
                       userId,
                       token,
                       model: selectedModel,
+                      provider: selectedProvider,
                       userApiKey,
+                      customApiUrl:
+                        aiConfig.customApiUrl || currentAiSettings.customApiUrl,
                       verification_mode: verificationMode,
                       step,
                       context, // Pass the accumulated context
@@ -5244,281 +5740,26 @@ ${result.summary || "Executed successfully."}`,
               });
             }
 
-            // Handle [readFile] in any output (Think or Execute phase)
-            const filesReadInThisStep = new Set();
-            const processReadFiles = async (text) => {
-              if (!text) return;
-              // Support formats: [readFile]path[/readFile], [readFile file="path"], [readFile path="path"]
-              const readFileRegex =
-                /\[readFile(?:[^\]]+)?\]([\s\S]*?)\[\/readFile\]/gi;
-              const tagAttributeRegex =
-                /\[readFile\s+(?:file|path)=["']([^"']+)["']\s*\]/gi;
-
-              let match;
-              // Handle [readFile]...[/readFile]
-              while ((match = readFileRegex.exec(text)) !== null) {
-                const content = match[1].trim();
-                if (content && !content.includes("[file")) {
-                  if (!filesReadInThisStep.has(content)) {
-                    filesReadInThisStep.add(content);
-                    await doReadFile(content);
-                  }
-                } else if (content.includes("[file")) {
-                  // Handle nested [file path="..."] format if used inside [readFile]
-                  const filePathsRegex = /\[file\s+path=["']([^"']+)["']\s*\]/g;
-                  let fileMatch;
-                  while ((fileMatch = filePathsRegex.exec(content)) !== null) {
-                    const filePath = fileMatch[1];
-                    if (!filesReadInThisStep.has(filePath)) {
-                      filesReadInThisStep.add(filePath);
-                      await doReadFile(filePath);
-                    }
-                  }
-                }
-              }
-
-              // Handle standalone [readFile file="path"] or [readFile path="path"] (no closing tag needed for attribute version)
-              // Reset regex state
-              tagAttributeRegex.lastIndex = 0;
-              while ((match = tagAttributeRegex.exec(text)) !== null) {
-                const filePath = match[1];
-                if (!filesReadInThisStep.has(filePath)) {
-                  filesReadInThisStep.add(filePath);
-                  await doReadFile(filePath);
-                }
-              }
-            };
-
-            // Check for [readFile] in thinkOutput
-            await processReadFiles(thinkOutput);
-
-            async function doReadFile(filePath) {
-              // Visual feedback
-              console.log(`[webview] Reading file: ${filePath}`);
-
-              // Send readFile to extension with timeout
-              try {
-                const fileContent = await new Promise((resolve, reject) => {
-                  // Define handler first so we can remove it
-                  let handleMessage;
-                  let handleStop;
-
-                  const timeout = setTimeout(() => {
-                    window.removeEventListener("message", handleMessage);
-                    window.removeEventListener("agent-stop", handleStop);
-                    resolve(`Error: Timeout reading file ${filePath}`);
-                  }, 15000); // 15 second timeout
-
-                  handleStop = () => {
-                    clearTimeout(timeout);
-                    window.removeEventListener("message", handleMessage);
-                    window.removeEventListener("agent-stop", handleStop);
-                    const err = new Error("Aborted by user");
-                    err.name = "AbortError";
-                    reject(err);
-                  };
-
-                  handleMessage = (event) => {
-                    if (
-                      event.data.command === "readFileResult" &&
-                      event.data.filePath === filePath
-                    ) {
-                      clearTimeout(timeout);
-                      window.removeEventListener("message", handleMessage);
-                      window.removeEventListener("agent-stop", handleStop);
-                      resolve(event.data.content || event.data.error || "");
-                    }
-                  };
-                  window.addEventListener("message", handleMessage);
-                  window.addEventListener("agent-stop", handleStop);
-                  vscode.postMessage({ type: "readFile", filePath });
-                });
-
-                const err = new Error("Aborted by user");
-                err.name = "AbortError";
-                if (!isLoading) throw err;
-
-                context = upsertFileInContext(context, filePath, fileContent);
-
-                // Visual feedback completion
-                currentStepMarkdown += `\n[terminal status="success" command="readFile ${filePath}"]Read complete: ${filePath}[/terminal]\n`;
-                updateMessagesAssistant({
-                  uniqueId: `assistant-${uniqueId}`,
-                  content: currentStepMarkdown,
-                });
-              } catch (e) {
-                context += `\nError reading file ${filePath}: ${e}\n`;
-                currentStepMarkdown += `\n[terminal status="error" command="readFile ${filePath}"]Error reading file: ${e}[/terminal]\n`;
-                updateMessagesAssistant({
-                  uniqueId: `assistant-${uniqueId}`,
-                  content: currentStepMarkdown,
-                });
-              }
-            }
-
-            // Check for [searchFiles]
-            const searchFilesRegex =
-              /\[searchFiles\]([\s\S]*?)\[\/searchFiles\]/i;
-            const searchFilesMatch = thinkOutput.match(searchFilesRegex);
-            if (searchFilesMatch) {
-              const query = searchFilesMatch[1].trim();
-              currentStepMarkdown += `\n  > *Searching for:* \`${query}\`\n`;
-              updateMessagesAssistant({
-                uniqueId: `assistant-${uniqueId}`,
-                content: currentStepMarkdown,
-              });
-
-              try {
-                const searchResult = await new Promise((resolve, reject) => {
-                  let handleMessage;
-                  let handleStop;
-
-                  const timeout = setTimeout(() => {
-                    window.removeEventListener("message", handleMessage);
-                    window.removeEventListener("agent-stop", handleStop);
-                    resolve("Error: Timeout searching files.");
-                  }, 60000);
-
-                  handleStop = () => {
-                    clearTimeout(timeout);
-                    window.removeEventListener("message", handleMessage);
-                    window.removeEventListener("agent-stop", handleStop);
-                    const err = new Error("Aborted by user");
-                    err.name = "AbortError";
-                    reject(err);
-                  };
-
-                  handleMessage = (event) => {
-                    if (event.data.command === "systemLog") {
-                      currentStepMarkdown += `\n  > *${event.data.message}*`;
-                      updateMessagesAssistant({
-                        uniqueId: `assistant-${uniqueId}`,
-                        content: currentStepMarkdown,
-                      });
-                    }
-                    if (event.data.command === "searchResult") {
-                      clearTimeout(timeout);
-                      window.removeEventListener("message", handleMessage);
-                      window.removeEventListener("agent-stop", handleStop);
-                      resolve(
-                        event.data.results || event.data.error || "No matches.",
-                      );
-                    }
-                  };
-                  window.addEventListener("message", handleMessage);
-                  window.addEventListener("agent-stop", handleStop);
-                  vscode.postMessage({ command: "search", query });
-                });
-
-                const err = new Error("Aborted by user");
-                err.name = "AbortError";
-                if (!isLoading) throw err;
-
-                context += `\nSearch Results for "${query}":\n${searchResult}\n`;
-                currentStepMarkdown += `\n  > *Search complete.*\n`;
-                const displayResults =
-                  searchResult.length > 500
-                    ? searchResult.slice(0, 500) + "\n... (truncated)"
-                    : searchResult;
-                currentStepMarkdown += `\n\`\`\`\n${displayResults}\n\`\`\`\n`;
-                updateMessagesAssistant({
-                  uniqueId: `assistant-${uniqueId}`,
-                  content: currentStepMarkdown,
-                });
-              } catch (e) {
-                context += `\nError searching: ${e}\n`;
-              }
-            }
-
-            // Check for [findFiles]
-            const findFilesRegex = /\[findFiles\]([\s\S]*?)\[\/findFiles\]/i;
-            const findFilesMatch = thinkOutput.match(findFilesRegex);
-            if (findFilesMatch) {
-              const pattern = findFilesMatch[1].trim();
-              currentStepMarkdown += `\n  > *Finding files:* \`${pattern}\`\n`;
-              updateMessagesAssistant({
-                uniqueId: `assistant-${uniqueId}`,
-                content: currentStepMarkdown,
-              });
-
-              let findResult = "";
-              try {
-                if (window.filePathCache && window.filePathCache.has(pattern)) {
-                  findResult = window.filePathCache.get(pattern);
-                  currentStepMarkdown += `\n  > *Found in cache.*\n`;
-                  console.log(`[webview] Cache hit for pattern: ${pattern}`);
-                } else {
-                  findResult = await new Promise((resolve, reject) => {
-                    let handleMessage;
-                    let handleStop;
-
-                    const timeout = setTimeout(() => {
-                      window.removeEventListener("message", handleMessage);
-                      window.removeEventListener("agent-stop", handleStop);
-                      resolve("Error: Timeout finding files.");
-                    }, 60000);
-
-                    handleStop = () => {
-                      clearTimeout(timeout);
-                      window.removeEventListener("message", handleMessage);
-                      window.removeEventListener("agent-stop", handleStop);
-                      const err = new Error("Aborted by user");
-                      err.name = "AbortError";
-                      reject(err);
-                    };
-
-                    handleMessage = (event) => {
-                      if (event.data.command === "systemLog") {
-                        currentStepMarkdown += `\n  > *${event.data.message}*`;
-                        updateMessagesAssistant({
-                          uniqueId: `assistant-${uniqueId}`,
-                          content: currentStepMarkdown,
-                        });
-                      }
-                      if (event.data.command === "listFilesResult") {
-                        clearTimeout(timeout);
-                        window.removeEventListener("message", handleMessage);
-                        window.removeEventListener("agent-stop", handleStop);
-                        resolve(
-                          event.data.files
-                            ? event.data.files.join("\n")
-                            : event.data.error || "No files found.",
-                        );
-                      }
-                    };
-                    window.addEventListener("message", handleMessage);
-                    window.addEventListener("agent-stop", handleStop);
-                    vscode.postMessage({ command: "listFiles", pattern });
-                  });
-
-                  // Cache the result
-                  if (findResult && !findResult.startsWith("Error")) {
-                    if (window.filePathCache) {
-                      window.filePathCache.set(pattern, findResult);
-                      saveState(); // Persist immediately
-                    }
-                  }
-                }
-
-                const err = new Error("Aborted by user");
-                err.name = "AbortError";
-                if (!isLoading) throw err;
-
-                context += `\nFiles Found for "${pattern}":\n${findResult}\n`;
-                currentStepMarkdown += `\n  > *Find complete.*\n`;
-                const displayFiles =
-                  findResult.length > 500
-                    ? findResult.slice(0, 500) + "\n... (truncated)"
-                    : findResult;
-                currentStepMarkdown += `\n\`\`\`\n${displayFiles}\n\`\`\`\n`;
-                updateMessagesAssistant({
-                  uniqueId: `assistant-${uniqueId}`,
-                  content: currentStepMarkdown,
-                });
-              } catch (e) {
-                context += `\nError finding files: ${e}\n`;
-              }
-            }
+            let filesReadInThisStep = new Set();
+            const thinkDiscoveryState = await runThinkDiscovery({
+              vscode,
+              thinkOutput,
+              context,
+              markdown: currentStepMarkdown,
+              uniqueId,
+              filePathCache: window.filePathCache,
+              isLoading: () => isLoading,
+              upsertFileInContext,
+              updateMessagesAssistant,
+              saveState,
+            });
+            context = thinkDiscoveryState.context;
+            currentStepMarkdown = thinkDiscoveryState.markdown;
+            filesReadInThisStep = new Set(
+              Array.isArray(thinkDiscoveryState.filesReadInThisStep)
+                ? thinkDiscoveryState.filesReadInThisStep
+                : [],
+            );
 
             // Sync planMarkdown with currentStepMarkdown to include Think logs
             planMarkdown = currentStepMarkdown;
@@ -5585,7 +5826,10 @@ ${result.summary || "Executed successfully."}`,
                     userId,
                     token,
                     model: selectedModel,
+                    provider: selectedProvider,
                     userApiKey,
+                    customApiUrl:
+                      aiConfig.customApiUrl || currentAiSettings.customApiUrl,
                     verification_mode: verificationMode,
                     step,
                     context,
@@ -5821,12 +6065,8 @@ ${result.summary || "Executed successfully."}`,
                   stepHint.match(
                     /(?:read|write|modify|update|create|edit|overwrite|replace)\s+[`'"]?([^`'"\s]+(?:\.[A-Za-z0-9._-]+)?)[`'"]?/i,
                   ) ||
-                  stepHint.match(
-                    /[`'"]([^`'"]+\.[A-Za-z0-9._-]+)[`'"]/i,
-                  ) ||
-                  stepHint.match(
-                    /\b([A-Za-z0-9_./\\-]+\.[A-Za-z0-9._-]+)\b/,
-                  );
+                  stepHint.match(/[`'"]([^`'"]+\.[A-Za-z0-9._-]+)[`'"]/i) ||
+                  stepHint.match(/\b([A-Za-z0-9_./\\-]+\.[A-Za-z0-9._-]+)\b/);
                 if (fileNameMatch) {
                   const fileName = fileNameMatch[1].replace(/\\/g, "/");
                   stepOutput = `[writeFile]\n[file name="${fileName}"]\n${code}\n[/file]\n[/writeFile]`;
@@ -5857,8 +6097,8 @@ ${result.summary || "Executed successfully."}`,
               const hasClosingTag = /\[\/(?:writeFile|writeFileVico)\]/i.test(
                 stepOutput,
               );
-              const hasFileBlock = /\[file\s+/i.test(stepOutput);
-              const hasDiffBlock = /\[diff\s+/i.test(stepOutput);
+              const { hasFileBlock, hasDiffBlock } =
+                hasWritableBlocks(stepOutput);
 
               planMarkdown += `\n  > *Writing files...*\n`;
 
@@ -5877,14 +6117,12 @@ ${result.summary || "Executed successfully."}`,
               }
             }
 
-            // If it contains writeFile, we want to render the panel, so don't wrap the whole thing in backticks
-            // If it contains writeFile, we want to render the panel, so don't wrap the whole thing in backticks
-            // if it's likely to be a writeFile response.
-            if (hasWriteFileTag) {
-              planMarkdown += `\n${stepOutput}\n`;
-            } else {
-              planMarkdown += `\n> *Execution Output:*\n\`\`\`\n${stepOutput.slice(0, 1000)}${stepOutput.length > 1000 ? "..." : ""}\n\`\`\`\n`;
-            }
+            planMarkdown = appendExecutionOutputMarkdown({
+              planMarkdown,
+              stepOutput,
+              hasWriteFileTag,
+              formatWarnings: [],
+            });
 
             // Internal feedback to encourage multi-file scaffolding
             if (
@@ -5993,49 +6231,7 @@ ${result.summary || "Executed successfully."}`,
             }
 
             // Process Actions
-            const summarizeExecutionOutput = (output) => {
-              const changedFiles = [];
-              const fileRegex =
-                /\[(?:file|diff)\s+(?:name|path)=["']?([^"'\s\]]+)["']?\]/gi;
-              let m;
-              while ((m = fileRegex.exec(output)) !== null) {
-                changedFiles.push(m[1]);
-              }
-              const commandMatch = output.match(
-                /\[command\s*\]([\s\S]*?)\[\/command\s*\]/i,
-              );
-              const sanitizeExecutionText = (text) => {
-                return String(text || "")
-                  .replace(
-                    /\[(?:writeFile|writeFileVico)\][\s\S]*?\[\/(?:writeFile|writeFileVico)\]/g,
-                    "[writeFile block]",
-                  )
-                  .replace(
-                    /\[command\][\s\S]*?\[\/command\]/g,
-                    "[command block]",
-                  )
-                  .replace(
-                    /\[readFile\][\s\S]*?\[\/readFile\]/g,
-                    "[readFile block]",
-                  )
-                  .replace(/\s+/g, " ")
-                  .trim();
-              };
-              return {
-                step: step.step,
-                description: step.description,
-                changed_files: Array.from(new Set(changedFiles)).slice(0, 20),
-                command: commandMatch
-                  ? commandMatch[1].trim().slice(0, 500)
-                  : "",
-                has_replan: /\[REPLAN\s*\]/i.test(output),
-                has_write: /\[(?:writeFile|writeFileVico)\s*\]/i.test(output),
-                short_output: sanitizeExecutionText(output).slice(0, 1500),
-                at: new Date().toISOString(),
-              };
-            };
-
-            const summary = summarizeExecutionOutput(stepOutput);
+            const summary = summarizeExecutionOutput(step, stepOutput);
             workflowMeta.recent_steps.push(summary);
             if (workflowMeta.recent_steps.length > 20) {
               workflowMeta.recent_steps = workflowMeta.recent_steps.slice(-20);
@@ -6045,14 +6241,32 @@ ${result.summary || "Executed successfully."}`,
             // We do this BEFORE REPLAN check so we can detect if the agent read files
             // but then immediately asked for a replan claiming it didn't.
             const capturedReadFiles = [];
-            const originalDoReadFile = doReadFile;
-            // Wrap doReadFile to capture what was read
-            doReadFile = async (path) => {
-              capturedReadFiles.push(path);
-              return await originalDoReadFile(path);
-            };
-            await processReadFiles(stepOutput);
-            doReadFile = originalDoReadFile; // Restore
+            const extractExecuteReadTargets =
+              window.VicoDiscoveryHelpers?.extractReadFileTargets ||
+              ((text) =>
+                Array.from(
+                  String(text || "").matchAll(
+                    /\[readFile(?:\s+[^\]]*)?\](?:\s*\[file\s+path=["']?([^"'\]]+)["']?\]\s*\[\/file\]\s*|([\s\S]*?))\[\/readFile\]/gi,
+                  ),
+                )
+                  .map((m) => String(m[1] || m[2] || "").trim())
+                  .filter(Boolean));
+            for (const filePath of extractExecuteReadTargets(stepOutput)) {
+              capturedReadFiles.push(filePath);
+              try {
+                const fileContent = await readFileWithTimeout(
+                  vscode,
+                  filePath,
+                  15000,
+                  window.filePathCache,
+                );
+                if (typeof fileContent === "string") {
+                  context = upsertFileInContext(context, filePath, fileContent);
+                }
+              } catch (e) {
+                context += `\nError reading file ${filePath}: ${e}\n`;
+              }
+            }
 
             if (stepOutput.includes("[REPLAN]")) {
               const replanMatch =
@@ -6166,6 +6380,50 @@ ${result.summary || "Executed successfully."}`,
               stepOutput,
             );
             if (hasWriteFile) {
+              // Preflight guard: prevent executing write when payload contains [readFile] or missing [file]/[diff]
+              const wfMatch = stepOutput.match(
+                /\[writeFile\]([\s\S]*?)\[\/writeFile\]/i,
+              );
+              const wfBody = wfMatch ? wfMatch[1] : "";
+              const hasInnerReadFile = /\[readFile(?:[^\]]*)?\]/i.test(wfBody);
+              const writableCheck = hasWritableBlocks(stepOutput);
+              if (
+                hasInnerReadFile ||
+                (!writableCheck.hasFileBlock && !writableCheck.hasDiffBlock)
+              ) {
+                // Enrich context with any requested read targets so planner can generate actual content next
+                try {
+                  const readTargets = Array.from(
+                    String(wfBody || "").matchAll(
+                      /\[file\s+path=["']?([^"'\]]+)["']?\]/gi,
+                    ),
+                  )
+                    .map((m) => m[1])
+                    .filter(Boolean);
+                  if (readTargets.length > 0) {
+                    for (const p of readTargets) {
+                      try {
+                        const c = await readContextFile(p);
+                        if (c) {
+                          context = upsertFileInContext(context, p, c);
+                        }
+                      } catch (e) {
+                        // ignore individual read errors
+                      }
+                    }
+                  }
+                } catch (_e) {}
+
+                hadStepError = true;
+                planMarkdown += `\n> *⚠️ Invalid write payload detected: do not include [readFile] inside [writeFile], and provide [file] or [diff] blocks with actual code.*\n`;
+                context += `\n[System Feedback] ERROR: file_write step returned an invalid [writeFile] payload (contains [readFile] and/or missing [file]/[diff] blocks).\n[System Feedback] Read the necessary files during Think phase if needed, then output a valid [writeFile] with [file name="..."]NEW_CONTENT[/file] or [diff]. Do NOT include [readFile] inside [writeFile].\n`;
+                updateMessagesAssistant({
+                  uniqueId: `assistant-${uniqueId}`,
+                  content: planMarkdown,
+                });
+                break;
+              }
+
               const recoverTransientPath = (rawPath) => {
                 const normalized = String(rawPath || "").replace(/\\/g, "/");
                 const parts = normalized.split("/");
@@ -6237,65 +6495,28 @@ ${result.summary || "Executed successfully."}`,
                 }
               }
               const readFileForWriteCheck = (filePath, timeoutMs = 10000) =>
-                new Promise((resolve) => {
-                  let handleMessage;
-                  const timeout = setTimeout(() => {
-                    window.removeEventListener("message", handleMessage);
-                    resolve(null);
-                  }, timeoutMs);
-                  handleMessage = (event) => {
-                    if (
-                      event.data.command === "readFileResult" &&
-                      event.data.filePath === filePath
-                    ) {
-                      clearTimeout(timeout);
-                      window.removeEventListener("message", handleMessage);
-                      if (
-                        event.data.resolvedPath &&
-                        event.data.resolvedPath !== filePath
-                      ) {
-                        window.filePathCache.set(
-                          filePath,
-                          event.data.resolvedPath,
-                        );
-                      }
-                      if (event.data.error) resolve(null);
-                      else resolve(event.data.content || "");
-                    }
-                  };
-                  window.addEventListener("message", handleMessage);
-                  vscode.postMessage({ type: "readFile", filePath });
-                });
+                readFileWithTimeout(
+                  vscode,
+                  filePath,
+                  timeoutMs,
+                  window.filePathCache,
+                );
 
               // Collect target files first so we can verify persistence after write.
-              const targetFiles = new Set();
-              const diffTargets = new Set();
-              const targetFileRegex =
-                /\[(?:file|diff)\s+(?:name|path)=["']?([^"'\s\]]+)["']?/gi;
-              const diffTargetRegex =
-                /\[diff\s+(?:name|path)=["']?([^"'\s\]]+)["']?/gi;
-              let targetMatch;
-              while (
-                (targetMatch = targetFileRegex.exec(stepOutput)) !== null
-              ) {
-                if (targetMatch[1]) {
-                  targetFiles.add(targetMatch[1]);
-                  // Visual feedback for each file target
-                  currentStepMarkdown += `\n  > *Targeting file:* ${targetMatch[1]}\n`;
-                }
-              }
+              const {
+                matches: writeTargetMatches,
+                targetFiles: targetFilesList,
+                diffTargets: diffTargetsList,
+              } = collectWriteTargets(stepOutput);
+              const targetFiles = new Set(targetFilesList);
+              const diffTargets = new Set(diffTargetsList);
+              writeTargetMatches.forEach((target) => {
+                currentStepMarkdown += `\n  > *Targeting file:* ${target.path}\n`;
+              });
               updateMessagesAssistant({
                 uniqueId: `assistant-${uniqueId}`,
                 content: currentStepMarkdown,
               });
-              let diffTargetMatch;
-              while (
-                (diffTargetMatch = diffTargetRegex.exec(stepOutput)) !== null
-              ) {
-                if (diffTargetMatch[1]) {
-                  diffTargets.add(diffTargetMatch[1]);
-                }
-              }
               const beforeSnapshot = new Map();
               for (const tPath of targetFiles) {
                 let prev = window.fileContentMap.get(tPath);
@@ -6309,54 +6530,15 @@ ${result.summary || "Executed successfully."}`,
               }
 
               // Wait for writeFile to finish to avoid race conditions with subsequent readFiles
-              await new Promise((resolve, reject) => {
-                let handleMessage;
-                let handleStop;
+              await waitForWriteFile(vscode, stepOutput, 10000);
 
-                const timeout = setTimeout(() => {
-                  window.removeEventListener("message", handleMessage);
-                  window.removeEventListener("agent-stop", handleStop);
-                  resolve();
-                }, 10000);
-
-                handleStop = () => {
-                  clearTimeout(timeout);
-                  window.removeEventListener("message", handleMessage);
-                  window.removeEventListener("agent-stop", handleStop);
-                  const err = new Error("Aborted by user");
-                  err.name = "AbortError";
-                  reject(err);
-                };
-
-                handleMessage = (event) => {
-                  if (event.data.command === "writeFileFinished") {
-                    clearTimeout(timeout);
-                    window.removeEventListener("message", handleMessage);
-                    window.removeEventListener("agent-stop", handleStop);
-                    resolve();
-                  }
-                };
-                window.addEventListener("message", handleMessage);
-                window.addEventListener("agent-stop", handleStop);
-
-                // Send the message inside the promise setup to ensure we don't miss the response
-                // (though unlikely with JS event loop)
-                vscode.postMessage({
-                  type: "writeFile",
-                  assistantMessage: stepOutput,
-                });
-              });
-
-              const fileRegex =
-                /\[file\s+(?:name|path)=["']?([^"'\s\]]+)["']?(?:\s+type=["'][^"']+["'])?\]/gi;
-              let match;
-              while ((match = fileRegex.exec(stepOutput)) !== null) {
-                const fName = match[1];
+              writeTargetMatches.forEach((target) => {
+                const fName = target.path;
                 // Hide memory.md from modified files list in chat
                 if (!fName.endsWith("memory.md")) {
                   modifiedFiles.add(fName);
                 }
-              }
+              });
               if (workflowMeta && modifiedFiles.size > 0) {
                 workflowMeta.changeVersion += 1;
                 workflowMeta.successfulVerificationCommands.clear();
@@ -6364,33 +6546,9 @@ ${result.summary || "Executed successfully."}`,
               }
 
               // Extract and save file content for Open Diff button
-              const fileContentRegex =
-                /\[file\s+(?:name|path)=["']?([^"'\s\]]+)["']?(?:\s+type=["'][^"']+["'])?\]([\s\S]*?)(?:\[\s*\/file\s*\]|(?=\[\/?(?:file|diff|writeFile|writeFileVico))|$)/gi;
-              let contentMatch;
-
-              // Handle potential overlapping matches or multiple files in one block
-              // We need to be careful with greedy matching in [\s\S]*? if there are multiple files
-              // A safer approach might be to split by [file or just rely on the regex if well-formed
-
-              // Let's try to match all occurrences
-              const allContent = stepOutput;
-              let lastIndex = 0;
-
-              while (
-                (contentMatch = fileContentRegex.exec(allContent)) !== null
-              ) {
-                const fPath = contentMatch[1];
-                let fContent = contentMatch[2];
-
-                // FIX: Strip markdown code blocks if the agent mistakenly included them inside [file] tags
-                // This handles cases where the agent wraps code in ```typescript ... ``` inside [file] tags
-                const trimmed = fContent.trim();
-                if (trimmed.startsWith("```") && trimmed.endsWith("```")) {
-                  // Remove the first ```... line and the last ``` line to get raw code
-                  fContent = trimmed
-                    .replace(/^```[^\n]*\n/, "")
-                    .replace(/\n```$/, "");
-                }
+              getFilePayloadBlocks(stepOutput).forEach((block) => {
+                const fPath = block.path;
+                let fContent = normalizeFileBlockContent(block.content);
 
                 window.fileContentMap.set(fPath, fContent);
                 console.log(
@@ -6399,11 +6557,53 @@ ${result.summary || "Executed successfully."}`,
 
                 // CRITICAL: Update context so the planner knows the file state
                 context = upsertFileInContext(context, fPath, fContent);
-              }
+              });
 
               // Persistence check: read target files from disk and compare before/after.
               let writeRetryRequired = false;
               const writeRetryFiles = new Set();
+              const fileChangeSummaries = [];
+              const computeLineDiffCounts = (
+                beforeText = "",
+                afterText = "",
+              ) => {
+                const a = String(beforeText).split(/\r?\n/);
+                const b = String(afterText).split(/\r?\n/);
+                const n = a.length,
+                  m = b.length;
+                const MAX_CELLS = 2000000; // ~2M cells cap for DP
+                if (n * m > MAX_CELLS) {
+                  // Fallback approximate bag-of-lines
+                  const map = new Map();
+                  for (const line of a) map.set(line, (map.get(line) || 0) + 1);
+                  let common = 0;
+                  for (const line of b) {
+                    const c = map.get(line) || 0;
+                    if (c > 0) {
+                      map.set(line, c - 1);
+                      common++;
+                    }
+                  }
+                  const lcsApprox = common;
+                  return {
+                    added: Math.max(0, m - lcsApprox),
+                    removed: Math.max(0, n - lcsApprox),
+                  };
+                }
+                const dp = new Array(m + 1).fill(0);
+                for (let i = 1; i <= n; i++) {
+                  let prev = 0;
+                  for (let j = 1; j <= m; j++) {
+                    const tmp = dp[j];
+                    if (a[i - 1] === b[j - 1]) dp[j] = prev + 1;
+                    else dp[j] = Math.max(dp[j], dp[j - 1]);
+                    prev = tmp;
+                  }
+                }
+                const lcs = dp[m];
+                return { added: m - lcs, removed: n - lcs };
+              };
+
               for (const tPath of targetFiles) {
                 const afterContent = await readFileForWriteCheck(tPath, 6000);
                 if (typeof afterContent === "string") {
@@ -6505,6 +6705,15 @@ ${result.summary || "Executed successfully."}`,
                     }
                   }
                   const before = beforeSnapshot.get(tPath);
+                  // line diff summary
+                  try {
+                    const { added, removed } = computeLineDiffCounts(
+                      before || "",
+                      afterContent || "",
+                    );
+                    fileChangeSummaries.push({ path: tPath, added, removed });
+                  } catch (e) {}
+
                   const normalizeForPersistCompare = (s) =>
                     String(s || "").replace(/\r\n/g, "\n");
                   const unchangedAfterWrite =
@@ -6590,11 +6799,22 @@ ${result.summary || "Executed successfully."}`,
               }
               const writeTargets = Array.from(targetFiles);
               if (writeTargets.length > 0) {
+                recoveryStepExecuted = true;
                 planMarkdown += buildTerminalBlock(
                   "writeFile",
                   `targets:\n${writeTargets.map((f) => `- ${f}`).join("\n")}`,
                   "success",
                 );
+
+                // Append per-file change summary with open actions
+                if (fileChangeSummaries.length > 0) {
+                  planMarkdown += "\n  > File Changes:";
+                  for (const ch of fileChangeSummaries) {
+                    planMarkdown += `\n- ${ch.path} +${ch.added} -${ch.removed} [openFile path="${ch.path}"] [openDiff path="${ch.path}"]`;
+                  }
+                  planMarkdown += "\n";
+                }
+
                 updateMessagesAssistant({
                   uniqueId: `assistant-${uniqueId}`,
                   content: planMarkdown,
@@ -6699,21 +6919,13 @@ ${result.summary || "Executed successfully."}`,
                 });
 
                 // Request execution and wait for completion
-                const exitCode = await new Promise((resolve, reject) => {
-                  let handleMessage;
-                  let handleStop;
-
-                  handleStop = () => {
-                    window.removeEventListener("message", handleMessage);
-                    window.removeEventListener("agent-stop", handleStop);
-                    const err = new Error("Aborted by user");
-                    err.name = "AbortError";
-                    reject(err);
-                  };
-
-                  handleMessage = (event) => {
-                    if (event.data.command === "commandOutput") {
-                      terminalOutput += event.data.output;
+                const commandResult = await executeCommandWithStreaming(
+                  vscode,
+                  {
+                    command,
+                    initialOutput: terminalOutput,
+                    onOutput: (nextOutput) => {
+                      terminalOutput = nextOutput;
                       updateMessagesAssistant({
                         uniqueId: `assistant-${uniqueId}`,
                         content:
@@ -6724,38 +6936,14 @@ ${result.summary || "Executed successfully."}`,
                             "running",
                           ),
                       });
-                    }
-                    if (event.data.command === "commandFinished") {
-                      window.removeEventListener("message", handleMessage);
-                      window.removeEventListener("agent-stop", handleStop);
-
-                      // Add note about external terminal if we didn't capture much output
-                      if (terminalOutput.trim().length === 0) {
-                        terminalOutput += "(See VS Code Terminal for output)";
-                      }
-
-                      // Use output from event if available (from child_process workaround), otherwise fallback to captured terminal output
-                      if (event.data.output) {
-                        terminalOutput = event.data.output;
-                      }
-
-                      if (event.data.exitCode !== 0) {
+                    },
+                    onFinished: (finalOutput, finalExitCode) => {
+                      terminalOutput = finalOutput;
+                      if (finalExitCode !== 0) {
                         console.error(
-                          `Command failed with exit code ${event.data.exitCode}`,
+                          `Command failed with exit code ${finalExitCode}`,
                         );
-                        terminalOutput += `\n\n[Process exited with code ${event.data.exitCode}]`;
-                      } else {
-                        terminalOutput += `\n\n[Process completed successfully]`;
                       }
-
-                      // Safety truncation for large outputs to prevent context overflow
-                      if (terminalOutput.length > 500000) {
-                        terminalOutput =
-                          terminalOutput.slice(0, 500000) +
-                          "\n... [Output truncated (too large for context). Please refine command with exclusions.]";
-                      }
-
-                      // Final update with full output
                       updateMessagesAssistant({
                         uniqueId: `assistant-${uniqueId}`,
                         content:
@@ -6763,37 +6951,24 @@ ${result.summary || "Executed successfully."}`,
                           buildTerminalBlock(
                             command,
                             terminalOutput,
-                            event.data.exitCode === 0 ? "success" : "error",
+                            finalExitCode === 0 ? "success" : "error",
                           ),
                       });
-
-                      // CRITICAL: Update context so the planner knows the command result
-                      context += `\nCommand Output for "${command}":\n${terminalOutput}\n`;
-
-                      resolve(event.data.exitCode);
-                    }
-                    // Handle commandStopped event from SidebarProvider
-                    if (event.data.command === "commandStopped") {
-                      window.removeEventListener("message", handleMessage);
-                      window.removeEventListener("agent-stop", handleStop);
-                      terminalOutput += `\n\n[Process stopped by user]`;
-
+                    },
+                    onStopped: (stoppedOutput) => {
+                      terminalOutput = stoppedOutput;
                       updateMessagesAssistant({
                         uniqueId: `assistant-${uniqueId}`,
                         content:
                           planMarkdown +
                           buildTerminalBlock(command, terminalOutput, "error"),
                       });
-
-                      const err = new Error("Aborted by user");
-                      err.name = "AbortError";
-                      reject(err);
-                    }
-                  };
-                  window.addEventListener("message", handleMessage);
-                  window.addEventListener("agent-stop", handleStop);
-                  vscode.postMessage({ type: "executeCommand", command });
-                });
+                    },
+                  },
+                );
+                const exitCode = commandResult.exitCode;
+                terminalOutput = commandResult.output;
+                context += `\nCommand Output for "${command}":\n${terminalOutput}\n`;
 
                 planMarkdown += buildTerminalBlock(
                   command,
@@ -6803,6 +6978,9 @@ ${result.summary || "Executed successfully."}`,
                 if (verificationCommand && workflowMeta && exitCode === 0) {
                   workflowMeta.lastVerifiedVersion = workflowMeta.changeVersion;
                   workflowMeta.successfulVerificationCommands.add(command);
+                }
+                if (exitCode === 0) {
+                  recoveryStepExecuted = true;
                 }
                 if (
                   workflowMeta &&
@@ -6814,31 +6992,24 @@ ${result.summary || "Executed successfully."}`,
 
                 // Auto-Terminal-Fixing Logic
                 if (exitCode !== 0) {
-                  const isAlreadyScaffoldedError =
-                    /Blocked:\s*workspace already has dependency file/i.test(
-                      terminalOutput,
-                    ) || /already scaffolded/i.test(terminalOutput);
-                  const isScaffoldMissingError =
-                    /Blocked:\s*workspace has no dependency file yet/i.test(
-                      terminalOutput,
-                    );
-                  const isPackageJsonParseError =
-                    /EJSONPARSE|Invalid package\.json|package\.json must be actual JSON/i.test(
-                      terminalOutput,
-                    );
-                  const missingNameMatch =
-                    /Cannot find name '([A-Za-z0-9_]+)'/i.exec(terminalOutput);
-                  const missingSymbol = missingNameMatch
-                    ? missingNameMatch[1]
-                    : "";
-                  const isMissingImportError =
-                    !!missingSymbol && /^[A-Z]/.test(missingSymbol);
-
-                  // Database credential/connection error detection
-                  const isDbConnectionError =
-                    /P1001|P1012|ECONNREFUSED|Access denied for user|Unknown database/i.test(
-                      terminalOutput,
-                    );
+                  const failureAnalysis = analyzeCommandFailure({
+                    command,
+                    terminalOutput,
+                    exitCode,
+                    userRequestedVanillaNoFramework:
+                      userRequestedVanillaNoFrameworkLocal,
+                  });
+                  const {
+                    isAlreadyScaffoldedError,
+                    isScaffoldMissingError,
+                    isPackageJsonParseError,
+                    isMissingImportError,
+                    isDbConnectionError,
+                    missingSymbol,
+                    dbType,
+                    failureGuidance: analyzedFailureGuidance,
+                    planNote: analyzedPlanNote,
+                  } = failureAnalysis;
 
                   if (isAlreadyScaffoldedError) {
                     context += `\n[System Feedback] Scaffold command was attempted again but project is already initialized. Skip scaffold and continue implementation/build/test only.\n`;
@@ -6854,9 +7025,6 @@ ${result.summary || "Executed successfully."}`,
 
                   // Handle database connection errors with AskUserQuestion
                   if (isDbConnectionError) {
-                    const dbType = terminalOutput.includes("mysql")
-                      ? "MySQL"
-                      : "Database";
                     const answer = await askUserQuestion([
                       {
                         header: "DB Config",
@@ -6880,15 +7048,17 @@ ${result.summary || "Executed successfully."}`,
                     }
                   }
 
-                  const failureGuidance = isScaffoldMissingError
-                    ? userRequestedVanillaNoFrameworkLocal
-                      ? `\n[System Feedback] Command "${command}" was blocked because no dependency manifest exists.\n[System Feedback] User explicitly requested NO FRAMEWORK/vanilla web. Do NOT scaffold Next.js.\n[System Feedback] Continue with direct file edits (index.html/script.js/styles.css) and avoid npm build/dev unless explicitly required.\n`
-                      : `\n[System Feedback] Command "${command}" was blocked because workspace is not scaffolded yet.\n[System Feedback] NEXT PLAN MUST start with scaffold command:\n[System Feedback] [command] npx create-next-app . --yes --ts --eslint --tailwind --app --use-npm [/command]\n[System Feedback] Do not run npm install/build/test/dev before scaffold succeeds.\n`
-                    : isPackageJsonParseError
-                      ? `\n[System Feedback] Command "${command}" failed with JSON parse error in package.json.\n[System Feedback] Do not rerun build/test/install first. Read package.json, remove comments/trailing commas/invalid JSON syntax, then validate JSON and retry the original command.\n`
-                      : isMissingImportError
-                        ? `\n[System Feedback] Build failed with missing symbol '${missingSymbol}'. This usually means JSX/component is used without import.\n[System Feedback] Fix code FIRST: add/import '${missingSymbol}' in the relevant file (likely app/page.tsx) or use correct component name/export.\n[System Feedback] Do NOT rerun build until file_write fixes are applied.\n`
-                        : `\n[System Feedback] Command "${command}" failed (exit ${exitCode}). Analyze terminal output, apply concrete fix, then retry once and continue original request.\n`;
+                  const failureGuidance =
+                    analyzedFailureGuidance ||
+                    (isScaffoldMissingError
+                      ? userRequestedVanillaNoFrameworkLocal
+                        ? `\n[System Feedback] Command "${command}" was blocked because no dependency manifest exists.\n[System Feedback] User explicitly requested NO FRAMEWORK/vanilla web. Do NOT scaffold Next.js.\n[System Feedback] Continue with direct file edits (index.html/script.js/styles.css) and avoid npm build/dev unless explicitly required.\n`
+                        : `\n[System Feedback] Command "${command}" was blocked because workspace is not scaffolded yet.\n[System Feedback] NEXT PLAN MUST start with scaffold command:\n[System Feedback] [command] npx create-next-app . --yes --ts --eslint --tailwind --app --use-npm [/command]\n[System Feedback] Do not run npm install/build/test/dev before scaffold succeeds.\n`
+                      : isPackageJsonParseError
+                        ? `\n[System Feedback] Command "${command}" failed with JSON parse error in package.json.\n[System Feedback] Do not rerun build/test/install first. Read package.json, remove comments/trailing commas/invalid JSON syntax, then validate JSON and retry the original command.\n`
+                        : isMissingImportError
+                          ? `\n[System Feedback] Build failed with missing symbol '${missingSymbol}'. This usually means JSX/component is used without import.\n[System Feedback] Fix code FIRST: add/import '${missingSymbol}' in the relevant file (likely app/page.tsx) or use correct component name/export.\n[System Feedback] Do NOT rerun build until file_write fixes are applied.\n`
+                          : `\n[System Feedback] Command "${command}" failed (exit ${exitCode}). Analyze terminal output, apply concrete fix, then retry once and continue original request.\n`);
 
                   context += failureGuidance;
 
@@ -7221,7 +7391,10 @@ ${result.summary || "Executed successfully."}`,
                   userId,
                   token,
                   model: selectedModel,
+                  provider: selectedProvider,
                   userApiKey,
+                  customApiUrl:
+                    aiConfig.customApiUrl || currentAiSettings.customApiUrl,
                   context,
                   originalRequest,
                   sessionId: currentSessionId,
@@ -7281,6 +7454,7 @@ ${result.summary || "Executed successfully."}`,
           modifiedFiles,
           autoFixTriggered,
           hadStepError,
+          recoveryStepExecuted,
           summary: planMarkdown,
         };
       }
@@ -7288,18 +7462,6 @@ ${result.summary || "Executed successfully."}`,
       // Plan-related functions
       function togglePlanPopup() {
         const planPopup = document.getElementById("planPopup");
-        const planStatusContainer = document.getElementById(
-          "planStatusContainer",
-        );
-
-        // Hide inline container if it's visible (we are switching to floating)
-        if (
-          planStatusContainer &&
-          !planStatusContainer.classList.contains("hidden")
-        ) {
-          planStatusContainer.classList.add("hidden");
-        }
-
         if (planPopup) {
           if (planPopup.style.display === "flex") {
             planPopup.style.display = "none";
@@ -7445,7 +7607,6 @@ ${result.summary || "Executed successfully."}`,
       function updatePlanButtonTitle(planMarkdown) {
         console.log("updatePlanButtonTitle called");
         const planButton = document.getElementById("planButton");
-        const planStatusContent = document.getElementById("planStatusContent");
 
         if (!planButton) return;
 
@@ -7486,25 +7647,10 @@ ${result.summary || "Executed successfully."}`,
         if (totalTasks > 0) {
           const progressText = `${completedTasks}/${totalTasks}`;
           planButton.title = `Plan: ${progressText} completed`;
-          planButton.style.display = "flex"; // Make sure it's visible in the menu!
-
-          // Update the container above input
-          if (planStatusContent) {
-            planStatusContent.innerHTML = taskHtml;
-          }
-          const planStatusContainer = document.getElementById(
-            "planStatusContainer",
-          );
-          if (planStatusContainer) {
-            planStatusContainer.classList.remove("hidden");
-          }
+          planButton.style.display = "flex";
         } else if (planMarkdown && planMarkdown.trim().length > 0) {
-          // Fallback: If no structured tasks found, but plan exists, show generic button
           planButton.title = `Show Plan`;
           planButton.style.display = "flex";
-          if (planStatusContent) {
-            planStatusContent.innerHTML = `<div class="text-xs text-gray-400">${planMarkdown.substring(0, 100)}...</div>`;
-          }
         } else {
           planButton.style.display = "none";
         }
@@ -7945,7 +8091,8 @@ ${result.summary || "Executed successfully."}`,
 
       async function loadMessages(messages) {
         const content = document.getElementById("content");
-        content.innerHTML = "Loading...";
+        content.innerHTML =
+          '<div class="content-loading-state"><strong>Loading Conversation</strong>Restoring messages and rebuilding the agent workspace view.</div>';
         try {
           displayMessages(messages.messages);
 
@@ -7963,7 +8110,8 @@ ${result.summary || "Executed successfully."}`,
           messageInput.focus();
         } catch (error) {
           console.error("Error fetching messages:", error);
-          content.innerHTML = "Failed to load messages.";
+          content.innerHTML =
+            '<div class="content-empty-state"><strong>Unable To Load Messages</strong>The previous session could not be restored.</div>';
         }
       }
 
@@ -7997,10 +8145,37 @@ ${result.summary || "Executed successfully."}`,
         const messageDiv = document.createElement("div");
         messageDiv.className = `message-container ${msg.role === "user" ? "user" : "agent"}`;
 
+        const messageShell = document.createElement("div");
+        messageShell.className = "message-shell";
+
+        const messageAvatar = document.createElement("div");
+        messageAvatar.className = "message-avatar";
+        messageAvatar.textContent = msg.role === "user" ? "YU" : "AI";
+
+        const messageMain = document.createElement("div");
+        messageMain.className = "message-main";
+
+        const messageMeta = document.createElement("div");
+        messageMeta.className = "message-meta";
+        const roleLabel = document.createElement("span");
+        roleLabel.className = "message-role";
+        roleLabel.textContent = msg.role === "user" ? "You" : "Vico Agent";
+        const roleSubtle = document.createElement("span");
+        roleSubtle.className = "message-subtle";
+        roleSubtle.textContent = msg.role === "user" ? "Prompt" : "Response";
+        messageMeta.appendChild(roleLabel);
+        messageMeta.appendChild(roleSubtle);
+
         const messageContent = document.createElement("div");
         messageContent.id = msg.uniqueId;
         messageContent.className = `message-bubble ${msg.role === "user" ? "user-message" : "agent-message"}`;
         messageContent.style.whiteSpace = "pre-wrap";
+
+        const inlineLabel = document.createElement("div");
+        inlineLabel.className = "message-inline-label";
+        inlineLabel.textContent =
+          msg.role === "user" ? "User Request" : "Agent Output";
+        messageContent.appendChild(inlineLabel);
 
         const renderedContent =
           msg.role === "assistant"
@@ -8011,37 +8186,22 @@ ${result.summary || "Executed successfully."}`,
           forceCollapseAllDetails(messageContent);
         }
 
+        let footerDiv = null;
         if (msg.role === "user") {
-          const footerDiv = document.createElement("div");
-          footerDiv.style.display = "flex";
-          footerDiv.style.gap = "8px";
-          footerDiv.style.marginTop = "6px";
-          footerDiv.style.justifyContent = "flex-end";
-          footerDiv.style.opacity = "0.7";
+          footerDiv = document.createElement("div");
+          footerDiv.className = "message-actions";
 
           // Revert Button
           const revertBtn = document.createElement("button");
           revertBtn.title = "Revert to here";
-          revertBtn.style.background = "none";
-          revertBtn.style.border = "none";
-          revertBtn.style.color = "inherit";
-          revertBtn.style.cursor = "pointer";
-          revertBtn.style.padding = "2px";
-          revertBtn.style.display = "flex";
-          revertBtn.style.alignItems = "center";
+          revertBtn.className = "message-action-btn";
           revertBtn.innerHTML = `<svg style="width: 16px; height: 16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path></svg>`;
           revertBtn.onclick = () => revertToMessage(msg.uniqueId);
 
           // Copy Button
           const copyBtn = document.createElement("button");
           copyBtn.title = "Copy message";
-          copyBtn.style.background = "none";
-          copyBtn.style.border = "none";
-          copyBtn.style.color = "inherit";
-          copyBtn.style.cursor = "pointer";
-          copyBtn.style.padding = "2px";
-          copyBtn.style.display = "flex";
-          copyBtn.style.alignItems = "center";
+          copyBtn.className = "message-action-btn";
           copyBtn.innerHTML = `<svg style="width: 16px; height: 16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>`;
 
           copyBtn.onclick = () => {
@@ -8058,10 +8218,16 @@ ${result.summary || "Executed successfully."}`,
 
           footerDiv.appendChild(revertBtn);
           footerDiv.appendChild(copyBtn);
-          messageContent.appendChild(footerDiv);
         }
 
-        messageDiv.appendChild(messageContent);
+        messageMain.appendChild(messageMeta);
+        messageMain.appendChild(messageContent);
+        if (footerDiv) {
+          messageMain.appendChild(footerDiv);
+        }
+        messageShell.appendChild(messageAvatar);
+        messageShell.appendChild(messageMain);
+        messageDiv.appendChild(messageShell);
         chatContainer.appendChild(messageDiv);
         content.scrollTop = content.scrollHeight;
       }
@@ -8104,6 +8270,21 @@ ${result.summary || "Executed successfully."}`,
               }, 1000);
             };
           }
+        });
+
+        // Re-attach listeners for Continue/Resume buttons rendered from [resumeButton]
+        const resumeBtns = document.querySelectorAll(".btn-continue-workflow");
+        resumeBtns.forEach((btn) => {
+          btn.onclick = async () => {
+            if (btn.disabled) return;
+            btn.disabled = true;
+            btn.classList.add("opacity-50", "cursor-not-allowed");
+            btn.innerHTML = `
+              <div class="animate-spin rounded-full h-4 w-4 border-2 border-white/20 border-t-white"></div>
+              <span>Resuming...</span>
+            `;
+            await resumeLastWorkflowFromButton(btn);
+          };
         });
       }
 
@@ -8326,7 +8507,7 @@ ${result.summary || "Executed successfully."}`,
                 panel.appendChild(pre);
 
                 const details = document.createElement("details");
-                details.className = "step-history-details";
+                details.className = "step-history-details thinking-block";
                 const detailSummary = document.createElement("summary");
                 setSummaryWithIcon(detailSummary, "Show raw write payload");
                 details.appendChild(detailSummary);
@@ -8336,7 +8517,7 @@ ${result.summary || "Executed successfully."}`,
                 details.appendChild(raw);
                 panel.appendChild(details);
                 const wrapper = document.createElement("details");
-                wrapper.className = "step-history-details";
+                wrapper.className = "step-history-details terminal-block";
                 const wrapperSummary = document.createElement("summary");
                 setSummaryWithIcon(
                   wrapperSummary,
@@ -8382,6 +8563,15 @@ ${result.summary || "Executed successfully."}`,
                 btn.className = "btn-diff";
                 btn.innerHTML = `<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"></path></svg> Open Diff: ${match[1]}`;
                 btn.onclick = () => window.openDiff(match[1]);
+                container.appendChild(btn);
+              }
+            } else if (part.startsWith('[openFile path="')) {
+              const match = part.match(/\[openFile path="(.*?)"\]/);
+              if (match) {
+                const btn = document.createElement("button");
+                btn.className = "btn-diff";
+                btn.innerHTML = `<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7h6a2 2 0 012 2v10H5a2 2 0 01-2-2V7zm9 0h5l4 4v8a2 2 0 01-2 2h-7V7z"/></svg> Open File: ${match[1]}`;
+                btn.onclick = () => window.openFile(match[1]);
                 container.appendChild(btn);
               }
             } else if (part.startsWith("[att-img ")) {
@@ -8652,20 +8842,21 @@ ${result.summary || "Executed successfully."}`,
                   <div class="animate-spin rounded-full h-4 w-4 border-2 border-white/20 border-t-white"></div>
                   <span>Resuming...</span>
                 `;
-                if (window.lastWorkflowParams) {
-                  const params = window.lastWorkflowParams;
-                  handleAgentWorkflow(
-                    "Continue",
-                    params.uniqueId,
-                    params.attachments,
-                    params.isRetry,
-                    params.aiConfig,
-                    params.existingContext,
-                    params.existingWorkflowMeta,
-                  );
-                }
+                await resumeLastWorkflowFromButton(btn);
               };
               container.appendChild(btn);
+            } else if (/^\*Thought:\*/.test(part)) {
+              // Inline Thought line -> collapse
+              const body = part.replace(/^\*Thought:\*\s*/, "");
+              const details = document.createElement("details");
+              details.className = "step-history-details";
+              const summary = document.createElement("summary");
+              setSummaryWithIcon(summary, "Thought");
+              details.appendChild(summary);
+              const contentDiv = document.createElement("div");
+              renderMessageParts(body, contentDiv);
+              details.appendChild(contentDiv);
+              container.appendChild(details);
             } else if (part.startsWith("`") && part.endsWith("`")) {
               const inlineCode = part.slice(1, -1);
               const codeSpan = document.createElement("code");
@@ -8759,7 +8950,17 @@ ${result.summary || "Executed successfully."}`,
                       textLi.appendChild(text);
                     }
                   });
-                container.appendChild(textLi);
+                let listContainer = container.lastElementChild;
+                if (
+                  !listContainer ||
+                  listContainer.tagName !== "UL" ||
+                  !listContainer.classList.contains("message-list")
+                ) {
+                  listContainer = document.createElement("ul");
+                  listContainer.className = "message-list";
+                  container.appendChild(listContainer);
+                }
+                listContainer.appendChild(textLi);
               }
             } else if (part.startsWith("_") && part.endsWith("_")) {
               const italicText = part.slice(1, -1);
@@ -8774,12 +8975,25 @@ ${result.summary || "Executed successfully."}`,
               quote.textContent = quoteText;
               container.appendChild(quote);
             } else if (part.startsWith(">")) {
-              // Quote Style 2 (Standard Markdown)
+              // Quote Style 2 (Standard Markdown) or Thought inline
               const quoteText = part.slice(1).trim();
-              const quote = document.createElement("div");
-              quote.className = "modern-blockquote";
-              quote.textContent = quoteText;
-              container.appendChild(quote);
+              if (/^\*Thought:\*/.test(quoteText)) {
+                const body = quoteText.replace(/^\*Thought:\*\s*/, "");
+                const details = document.createElement("details");
+                details.className = "step-history-details";
+                const summary = document.createElement("summary");
+                setSummaryWithIcon(summary, "Thought");
+                details.appendChild(summary);
+                const contentDiv = document.createElement("div");
+                renderMessageParts(body, contentDiv);
+                details.appendChild(contentDiv);
+                container.appendChild(details);
+              } else {
+                const quote = document.createElement("div");
+                quote.className = "modern-blockquote";
+                quote.textContent = quoteText;
+                container.appendChild(quote);
+              }
             } else if (/\[.*?\]\(.*?\)/.test(part)) {
               const linkMatch = part.match(/\[(.*?)\]\((.*?)\)/);
               if (linkMatch) {
@@ -8860,6 +9074,15 @@ ${result.summary || "Executed successfully."}`,
           handleaApply(code, path);
         } else {
           console.log("Diff content not found for " + path);
+        }
+      };
+
+      window.openFile = function (path) {
+        try {
+          vscode.postMessage({ command: "openFile", path });
+        } catch (e) {
+          console.warn("openFile postMessage failed, falling back to diff", e);
+          window.openDiff(path);
         }
       };
 
