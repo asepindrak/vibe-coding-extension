@@ -189,6 +189,15 @@ MIT License
 
 ## 2.0.4
 
+- Add pending changes navigation and custom AI provider support
+- Introduce VicoChangesProvider for tree view of pending changes
+- Add navigation commands for diff hunks (previous/next, open full diff)
+- Implement custom AI provider settings and integration
+- Add helper modules for workflow completion, code search, inline diffs
+- Include test coverage for new functionality
+
+## 2.0.3
+
 - Coding Agent Improvements
 - UI Improvements
 
